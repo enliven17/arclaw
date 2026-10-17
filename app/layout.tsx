@@ -16,8 +16,9 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = { themeColor: "#0c0c0e", colorScheme: "dark", viewportFit: "cover" };
 
-// Before first paint: mark JS so reveal targets start hidden (no-JS keeps them visible).
-const HEAD = `document.documentElement.classList.add('js')`;
+// Before first paint: mark JS so reveal targets start hidden (no-JS keeps them visible), and decide the splash
+// (first visit per tab session, never under reduced motion) so it never flashes for a returning visitor.
+const HEAD = `(function(){var d=document.documentElement;d.classList.add('js');try{if(!sessionStorage.getItem('arclaw:splash')&&!matchMedia('(prefers-reduced-motion: reduce)').matches)d.classList.add('splashing')}catch(e){}})()`;
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (

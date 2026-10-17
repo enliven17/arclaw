@@ -37,6 +37,15 @@ await page.waitForTimeout(Number(flag("settle", 900)));
 
 const plan = flag("plan") ? JSON.parse(readFileSync(flag("plan"), "utf8")) : [{ out, scroll: flag("scroll"), eval: flag("eval"), wait: flag("wait"), selector: flag("selector"), full: has("full") }];
 for (const step of plan) {
+  if (step.to) {
+    // Scroll to a section top plus an offset (pins included: their spacer wraps them).
+    step.scroll = await page.evaluate(({ sel, off }) => {
+      const el = document.querySelector(sel);
+      if (!el) return null;
+      const spacer = el.parentElement?.classList.contains("pin-spacer") ? el.parentElement : el;
+      return Math.max(0, Math.round(spacer.getBoundingClientRect().top + scrollY + off));
+    }, { sel: step.to, off: step.offset ?? 0 });
+  }
   if (step.scroll !== undefined && step.scroll !== null) {
     const target = Number(step.scroll);
     // Wheel in small steps so Lenis and ScrollTrigger see real input; fall back to scrollTo on touch.

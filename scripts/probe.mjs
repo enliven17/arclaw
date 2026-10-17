@@ -6,7 +6,7 @@ const errs = [];
 p.on("console", (m) => m.type() !== "log" && errs.push(`${m.type()}: ${m.text()}`));
 p.on("pageerror", (e) => errs.push(String(e)));
 await p.goto(url, { waitUntil: "networkidle" });
-await p.waitForTimeout(2500);
+await p.waitForTimeout(4000);
 console.log(await p.evaluate(() => JSON.stringify({ total: document.documentElement.scrollHeight, sections: [...document.querySelectorAll("section,footer")].map((s) => [s.id || s.getAttribute("aria-labelledby"), Math.round(s.getBoundingClientRect().top + scrollY)]) })));
 console.log(errs.join("\n"));
 await b.close();

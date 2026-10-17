@@ -14,7 +14,7 @@
  * At rest it idles still; a fine pointer over it nudges the gantry, which then settles and stops. Reduced motion:
  * play() jumps to the final frame, no pointer nudge.
  */
-import { useEffect, useImperativeHandle, useRef, type Ref } from "react";
+import { useEffect, useId, useImperativeHandle, useRef, type Ref } from "react";
 import { gsap } from "@/lib/motion";
 import { translateAlong } from "@/components/iso/iso-kit";
 import type { ClawArt } from "./geometry";
@@ -37,16 +37,18 @@ type Props = {
   label?: string;
   className?: string;
   onPhase?: (phase: Phase, pose: Pose) => void;
+  /** Cabinet finish: "single" (default), "stack" or "vault" (claw.css). */
+  machine?: string;
 };
 
-const CLIP_ID = "claw-chute-clip";
 const PRONG_W = px(1.9);
 const CABLE_W = px(0.8);
 const SHAFT_W = px(1.6);
 const BALL_R = px(3.6);
 const PIN_R = px(0.9);
 
-export function ClawMachine({ art, ref, label = "A claw machine: a glass cabinet with a gantry, a three prong claw over a pile of sealed prize boxes, a chute, a coin slot and a joystick.", className, onPhase }: Props) {
+export function ClawMachine({ art, ref, label = "A claw machine: a glass cabinet with a gantry, a three prong claw over a pile of sealed prize boxes, a chute, a coin slot and a joystick.", className, onPhase, machine = "single" }: Props) {
+  const CLIP_ID = `chute-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
   const root = useRef<SVGSVGElement>(null);
   const farTruck = useRef<SVGGElement>(null);
   const bridge = useRef<SVGGElement>(null);
@@ -277,7 +279,7 @@ export function ClawMachine({ art, ref, label = "A claw machine: a glass cabinet
   );
 
   return (
-    <div className={className ? `claw-fig ${className}` : "claw-fig"}>
+    <div className={className ? `claw-fig ${className}` : "claw-fig"} data-machine={machine}>
       <svg ref={root} viewBox={`0 0 ${W} ${H}`} role="img" aria-label={label} focusable="false">
         <defs>
           <clipPath id={CLIP_ID}>

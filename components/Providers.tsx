@@ -6,7 +6,13 @@
  */
 import type { ReactNode } from "react";
 import { SmoothScroll } from "./motion/SmoothScroll";
+import { Splash } from "./motion/Splash";
 
 export function Providers({ children }: { children: ReactNode }) {
-  return <SmoothScroll>{children}</SmoothScroll>;
+  return (
+    <SmoothScroll>
+      <Splash />
+      {children}
+    </SmoothScroll>
+  );
 }

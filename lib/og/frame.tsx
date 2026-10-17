@@ -4,6 +4,8 @@
  *
  * Satori rules: every element with more than one child needs display: flex; no grid; fonts from ogFonts().
  */
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { ReactNode } from "react";
 import { LOCKUP_H, LOCKUP_W, logoSvg } from "@/lib/brand/logo";
 import { usdc, type PullCard } from "@/lib/stocks";
@@ -45,35 +47,53 @@ export function OgFrame({ eyebrow, children, footer }: { eyebrow: string; childr
   );
 }
 
-/** A stock card at 63:88, as Satori draws it. `foil` puts the prize hairline on it. */
-export function OgCard({ card, width = 250, foil = false, rotate = 0, index = 0 }: { card: PullCard; width?: number; foil?: boolean; rotate?: number; index?: number }) {
+/** A stock logo from public/logos as a data URI (read once per ticker), or null when there is none. */
+const logoCache = new Map<string, string | null>();
+function logoUri(ticker: string): string | null {
+  if (!logoCache.has(ticker)) {
+    const file = join(process.cwd(), "public/logos", `${ticker}.svg`);
+    logoCache.set(ticker, /^[A-Z]{1,6}$/.test(ticker) && existsSync(file) ? uri(readFileSync(file, "utf8")) : null);
+  }
+  return logoCache.get(ticker)!;
+}
+
+/**
+ * The stock card at 63:88, mirroring components/landing/StockCard.tsx: ticker and tier on top, a framed logo
+ * window in the centre, company and amount at the bottom. Sizes scale from the 210px reference.
+ */
+export function OgCard({ card, tier, width = 210, rotate = 0 }: { card: PullCard; tier: string; width?: number; rotate?: number }) {
+  const k = width / 210;
   const height = Math.round((width * 88) / 63);
-  const pad = Math.round(width * 0.09);
+  const logo = logoUri(card.ticker);
   return (
     <div
       style={{
         display: "flex",
         flexDirection: "column",
-        justifyContent: "space-between",
         width,
         height,
-        padding: pad,
+        padding: `${18 * k}px ${20 * k}px`,
         borderRadius: 14,
-        backgroundColor: PANEL_2,
-        border: `2px solid ${foil ? PRIZE : LINE}`,
+        backgroundColor: PANEL,
+        border: `1.5px solid ${LINE}`,
         ...(rotate ? { transform: `rotate(${rotate}deg)` } : {}),
       }}
     >
-      <div style={{ display: "flex", justifyContent: "space-between", fontFamily: "Geist Mono", fontSize: 15, letterSpacing: 1.5, color: MUTED }}>
-        <span>{foil ? "FOIL" : "CARD"}</span>
-        <span>{`0${index + 1}/03`}</span>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+        <span style={{ fontFamily: "Geist Mono", fontSize: 18 * k, color: CREAM }}>{card.ticker}</span>
+        <span style={{ fontSize: 13 * k, color: PRIZE }}>{tier}</span>
       </div>
-      <div style={{ display: "flex", flexDirection: "column" }}>
-        <span style={{ fontFamily: "Geist Mono", fontSize: Math.round(width * 0.24), letterSpacing: -3, lineHeight: 1, color: CREAM }}>{card.ticker}</span>
-        <span style={{ marginTop: 10, fontSize: 18, color: MUTED }}>{card.name}</span>
+      <div style={{ display: "flex", flexGrow: 1, alignItems: "center", justifyContent: "center", margin: `${10 * k}px 0`, borderRadius: 10, border: `1.5px solid ${LINE}` }}>
+        {logo ? (
+          // eslint-disable-next-line @next/next/no-img-element, jsx-a11y/alt-text
+          <img src={logo} width={96 * k} height={96 * k} />
+        ) : (
+          <span style={{ fontFamily: "Geist Mono", fontSize: 40 * k, color: CREAM }}>{card.ticker}</span>
+        )}
       </div>
-      <div style={{ display: "flex", paddingTop: 14, borderTop: `1px solid ${LINE}`, fontFamily: "Geist Mono", fontSize: 17, color: CREAM }}>
-        {`${usdc(card.amount)} USDC of ${card.ticker}`}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+        <span style={{ fontSize: 15 * k, color: MUTED, maxWidth: width * 0.42, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{card.name}</span>
+        <span style={{ fontFamily: "Geist Mono", fontSize: 16 * k, color: CREAM, whiteSpace: "nowrap" }}>{`${usdc(card.amount)} USDC`}</span>
       </div>
     </div>
   );

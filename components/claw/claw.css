@@ -175,3 +175,26 @@
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
+
+/* Machine finishes, all inside the palette: Single is the standard panel, Stack a lighter graphite body,
+   Vault a deeper body with cream trim on its edges. The accent stays on the claw. */
+.claw-fig[data-machine="stack"] {
+  --anatomy-paper: #222228;
+  --anatomy-top: #34343c;
+  --anatomy-shade-0: #18181d;
+  --anatomy-shade-1: #1e1e24;
+  --anatomy-shade-2: #25252c;
+  --anatomy-shade-3: #2c2c34;
+  --anatomy-lo: #625e56;
+}
+.claw-fig[data-machine="vault"] {
+  --anatomy-paper: #0f0f11;
+  --anatomy-top: #18181b;
+  --anatomy-shade-0: #09090b;
+  --anatomy-shade-1: #0c0c0e;
+  --anatomy-shade-2: #101013;
+  --anatomy-shade-3: #141417;
+  --anatomy-mid: #cfc8bb;
+  --anatomy-lo: #6c675e;
+  --anatomy-faint: #3a3833;
+}

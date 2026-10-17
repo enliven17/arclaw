@@ -86,17 +86,18 @@ html.lenis body {
 
   /* Display type: Geist 500, tight, never bold. */
   .h-display {
-    font-size: clamp(44px, 6.4vw, 96px);
+    font-size: clamp(52px, 7.6vw, 128px);
     font-weight: 500;
-    line-height: 0.94;
-    letter-spacing: -0.035em;
+    line-height: 0.92;
+    letter-spacing: -0.04em;
     text-wrap: balance;
   }
+  /* Section titles are display type too: large, tight, never bold. */
   .h-section {
-    font-size: clamp(36px, 4.8vw, 72px);
+    font-size: clamp(46px, 6.6vw, 112px);
     font-weight: 500;
-    line-height: 0.98;
-    letter-spacing: -0.03em;
+    line-height: 0.94;
+    letter-spacing: -0.04em;
     text-wrap: balance;
   }
   .h-card {
@@ -264,4 +265,12 @@ html.js [data-split] .split-line > span {
   html.js [data-split] .split-line > span {
     transform: none;
   }
+}
+
+/* Splash: shown only when the head script set html.splashing (first visit per tab session). */
+html.splashing .splash {
+  display: block;
+}
+html.splashing {
+  overflow: clip;
 }

@@ -1,0 +1,101 @@
+"use client";
+
+/**
+ * First visit per tab session. The claw drops on its cable with its prongs open, grips the wordmark, gives it a
+ * tug, then hauls the whole panel up off the page like a curtain. The head script in app/layout decides
+ * (html.splashing) before first paint, so a returning visitor never sees a flash of it.
+ */
+import { useEffect, useRef } from "react";
+import gsap from "gsap";
+import { MARK_BODY, MARK_PRONGS, MARK_SIZE, PRONG_W, WORD_H, WORD_PATH, WORD_W } from "@/lib/brand/logo";
+import { getLenis } from "@/lib/motion";
+
+export const SPLASH_KEY = "arclaw:splash";
+
+// The logo prongs split into separate paths so each can pivot on the hub. Order in MARK_PRONGS: left, right, middle.
+const [LEFT, RIGHT, MID] = MARK_PRONGS.split("M").filter(Boolean).map((d) => `M${d}`);
+
+export function Splash() {
+  const root = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const html = document.documentElement;
+    const el = root.current;
+    if (!el || !html.classList.contains("splashing")) return;
+    // html.splashing clips overflow, so scrolling is locked even before Lenis exists.
+    getLenis()?.stop();
+    const done = () => {
+      html.classList.remove("splashing");
+      try {
+        sessionStorage.setItem(SPLASH_KEY, "1");
+      } catch {}
+      getLenis()?.start();
+    };
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      done();
+      return;
+    }
+    const q = gsap.utils.selector(el);
+    const count = { v: 0 };
+    const num = q("[data-count]")[0] as HTMLElement;
+    gsap.set(q("[data-left]"), { svgOrigin: "9 10.5", rotation: 22 });
+    gsap.set(q("[data-right]"), { svgOrigin: "15 10.5", rotation: -22 });
+    gsap.set(q("[data-rig]"), { y: "-75vh" });
+
+    const tl = gsap.timeline({ onComplete: done });
+    tl.to(q("[data-rig]"), { y: 0, duration: 1, ease: "power3.inOut" }, 0)
+      // fromTo, not from: a StrictMode re-run would read the first run's opacity 0 as the end value.
+      .fromTo(q("[data-word]"), { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.6, ease: "power3.out" }, 0.35)
+      // Grip: the prongs swing shut a touch past closed, then settle.
+      .to(q("[data-left]"), { rotation: -4, duration: 0.22, ease: "power2.in" }, 0.95)
+      .to(q("[data-right]"), { rotation: 4, duration: 0.22, ease: "power2.in" }, 0.95)
+      .to(q("[data-left], [data-right]"), { rotation: 0, duration: 0.18, ease: "power2.out" }, 1.17)
+      // Tug: claw and wordmark lift together a few pixels, as if testing the weight.
+      .to(q("[data-rig], [data-word]"), { y: -10, duration: 0.22, ease: "power2.out" }, 1.3)
+      .to(count, { v: 100, duration: 1.5, ease: "power2.inOut", onUpdate: () => void (num.textContent = String(Math.round(count.v)).padStart(3, "0")) }, 0)
+      .to(q("[data-bar]"), { scaleX: 1, duration: 1.5, ease: "power2.inOut" }, 0)
+      // Haul: the claw pulls the panel up and off the page.
+      .to(q("[data-rig], [data-word]"), { y: "-100vh", duration: 0.85, ease: "power4.in" }, 1.55)
+      .to(el, { clipPath: "inset(0 0 100% 0)", duration: 0.85, ease: "power4.inOut" }, 1.65);
+    return () => {
+      tl.kill();
+    };
+  }, []);
+
+  const s = 6; // mark scale: 24 units to 144px
+  return (
+    <div ref={root} aria-hidden className="splash fixed inset-0 z-[100] hidden bg-ink text-cream [clip-path:inset(0_0_0_0)]">
+      <div className="absolute inset-0 grid place-items-center">
+        <div className="flex flex-col items-center">
+          <div data-rig className="relative flex flex-col items-center">
+            {/* The cable runs off the top of the screen whatever the claw's height. Out of flow, so only the claw
+                and the wordmark are centred; it meets the mark's own cable stub at the top of the svg. */}
+            <div className="absolute bottom-full left-1/2 -mb-px h-[150vh] -translate-x-1/2 bg-cream" style={{ width: 2 * s }} />
+            <svg viewBox={`0 1 ${MARK_SIZE} 23`} width={MARK_SIZE * s} height={23 * s} className="-mt-px block overflow-visible">
+              <path fill="var(--color-cream)" d={MARK_BODY} />
+              <g fill="none" stroke="var(--color-claw)" strokeWidth={PRONG_W} strokeLinecap="butt" strokeLinejoin="miter">
+                <path data-left d={LEFT} />
+                <path d={MID} />
+                <path data-right d={RIGHT} />
+              </g>
+            </svg>
+          </div>
+          <svg data-word viewBox={`0 0 ${WORD_W} ${WORD_H}`} className="mt-2 block h-[clamp(44px,7vw,88px)] w-auto">
+            <path fill="var(--color-cream)" d={WORD_PATH} />
+          </svg>
+        </div>
+      </div>
+      <div className="absolute inset-x-0 bottom-0 p-8 max-sm:p-4">
+        <div className="flex justify-end">
+          <span data-count className="font-mono text-[15px] tabular-nums text-muted">
+            000
+          </span>
+        </div>
+        <div className="mt-3 h-px bg-cream/10">
+          <div data-bar className="h-px origin-left scale-x-0 bg-cream/60" />
+        </div>
+      </div>
+    </div>
+  );
+}
+

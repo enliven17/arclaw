@@ -1,0 +1,98 @@
+[
+ {
+  "out": "shots/w1280-hero.png",
+  "to": "#main",
+  "offset": 0,
+  "wait": 1500
+ },
+ {
+  "out": "shots/w1280-hero-scrub.png",
+  "to": "#main",
+  "offset": 1100,
+  "wait": 1500
+ },
+ {
+  "out": "shots/w1280-machines.png",
+  "to": "#machines",
+  "offset": 0,
+  "wait": 1500
+ },
+ {
+  "out": "shots/w1280-machines-cards.png",
+  "to": "#machines",
+  "offset": 450,
+  "wait": 1500
+ },
+ {
+  "out": "shots/w1280-how.png",
+  "to": "#how",
+  "offset": 0,
+  "wait": 1500
+ },
+ {
+  "out": "shots/w1280-how-box.png",
+  "to": "#how",
+  "offset": 900,
+  "wait": 1500
+ },
+ {
+  "out": "shots/w1280-how-pack.png",
+  "to": "#how",
+  "offset": 1700,
+  "wait": 1500
+ },
+ {
+  "out": "shots/w1280-how-cards.png",
+  "to": "#how",
+  "offset": 2650,
+  "wait": 1500
+ },
+ {
+  "out": "shots/w1280-stocks.png",
+  "to": "#stocks",
+  "offset": 0,
+  "wait": 1500
+ },
+ {
+  "out": "shots/w1280-gift.png",
+  "to": "#gift",
+  "offset": 0,
+  "wait": 1500
+ },
+ {
+  "out": "shots/w1280-gift-form.png",
+  "to": "#gift",
+  "offset": 500,
+  "wait": 1500
+ },
+ {
+  "out": "shots/w1280-odds.png",
+  "to": "#odds",
+  "offset": 0,
+  "wait": 1500
+ },
+ {
+  "out": "shots/w1280-odds-table.png",
+  "to": "#odds",
+  "offset": 450,
+  "wait": 1500
+ },
+ {
+  "out": "shots/w1280-odds-sim.png",
+  "to": "#odds",
+  "offset": 1100,
+  "wait": 1500
+ },
+ {
+  "out": "shots/w1280-cta.png",
+  "to": "footer",
+  "offset": 0,
+  "wait": 1500
+ },
+ {
+  "out": "shots/w1280-footer.png",
+  "to": "footer",
+  "offset": 2000,
+  "wait": 1500
+ }
+]

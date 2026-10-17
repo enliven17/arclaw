@@ -64,7 +64,8 @@ export function Reveals() {
             duration: 1.1,
             ease: "power4.out",
             stagger: 0.08,
-            delay: onScroll ? 0 : 0.15,
+            // On a first visit the splash covers the page for about two seconds; rise as it lifts.
+            delay: onScroll ? 0 : document.documentElement.classList.contains("splashing") ? 1.9 : 0.15,
             scrollTrigger: onScroll ? { trigger: el, start: "top 88%", once: true } : undefined,
           },
         );

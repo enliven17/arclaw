@@ -5,24 +5,34 @@ import { Footer } from "@/components/landing/Footer";
 import { Gift } from "@/components/landing/Gift";
 import { Hero } from "@/components/landing/Hero";
 import { HowItWorks } from "@/components/landing/HowItWorks";
+import { Machines } from "@/components/landing/Machines";
 import { Odds } from "@/components/landing/Odds";
 import { StocksMarquee } from "@/components/landing/StocksMarquee";
+import { withResolved } from "@/lib/machines.server";
+import { getQuotes } from "@/lib/prices";
 
-// The cabinet's static art is built here, on the server, and handed to the live component as element props.
+// Prices refresh every five minutes (lib/prices.ts); the rest is static.
+export const revalidate = 300;
+
+// The cabinet's static art is built here, on the server, and handed to the live components as element props.
 const ART = clawArt();
 
-export default function Home() {
+export default async function Home() {
+  const machines = withResolved();
+  const quotes = await getQuotes();
+  const lite = machines.map(({ id, name, slug, priceUsdc }) => ({ id, name, slug, priceUsdc }));
   return (
     <>
       <SiteHeader />
       <main id="main">
-        <Hero art={ART} />
-        <HowItWorks />
-        <Gift />
-        <StocksMarquee />
-        <Odds />
+        <Hero art={ART} machines={machines} />
+        <Machines art={ART} machines={machines} />
+        <HowItWorks machines={machines} />
+        <StocksMarquee quotes={quotes} />
+        <Gift machines={lite} />
+        <Odds machines={machines} />
       </main>
-      <Footer />
+      <Footer art={ART} machines={machines} />
       <Reveals />
     </>
   );

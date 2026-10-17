@@ -31,7 +31,8 @@ import {
   type Plane,
   type Point3,
 } from "@/components/iso/iso-kit";
-import { Dots, FaceText, Line, Poly, Solid } from "@/components/iso/draw";
+import { Dots, Line, Poly, Solid } from "@/components/iso/draw";
+import { CLAW, CREAM, LOCKUP, LOCKUP_W, MARK_BODY, MARK_PRONGS, MARK_SIZE, PRONG_W, WORD_PATH } from "@/lib/brand/logo";
 import {
   BODY,
   BOX,
@@ -410,6 +411,22 @@ function NearFrame() {
   );
 }
 
+/** The arclaw lockup printed on the marquee sign, from lib/brand/logo (same paths as the site and brand kit). */
+const SIGN_SCALE = 12.6 / 40;
+function SignLockup({ at, top }: { at: Plane; top: number }) {
+  return (
+    <g transform={sideMatrix(at, top, P, "left")}>
+      <g transform={`scale(${SIGN_SCALE})`}>
+        <g transform={`scale(${LOCKUP.mark / MARK_SIZE})`}>
+          <path fill={CREAM} d={MARK_BODY} />
+          <path fill="none" stroke={CLAW} strokeWidth={PRONG_W} strokeLinejoin="miter" d={MARK_PRONGS} />
+        </g>
+        <path fill={CREAM} transform={`translate(${LOCKUP.mark + LOCKUP.gap} ${LOCKUP.wordY}) scale(${LOCKUP.wordScale})`} d={WORD_PATH} />
+      </g>
+    </g>
+  );
+}
+
 function Header() {
   const lip = { x: -1, y: -1, w: 122, d: 112, r: 1.4 };
   const head = { x: 0, y: 0, w: 120, d: 110, r: 1.2 };
@@ -435,9 +452,7 @@ function Header() {
       <Poly className="iso-sign" d={frontRect(yF, sign.x0, sign.x1, sign.z0, sign.z1)} />
       <Line d={frontRect(yF, sign.x0, sign.x1, sign.z0, sign.z1)} tone="mid" />
       <Dots points={dots([[sign.x0 + 1.6, yF, sign.z0 + 1.6], [sign.x1 - 1.6, yF, sign.z0 + 1.6], [sign.x0 + 1.6, yF, sign.z1 - 1.6], [sign.x1 - 1.6, yF, sign.z1 - 1.6]])} size={0.5} />
-      <FaceText transform={sideMatrix([24, yF], Z.header + 16.6, P, "left")} size={9} tone="hi">
-        ARCLAW
-      </FaceText>
+      <SignLockup at={[60 - (LOCKUP_W * SIGN_SCALE) / 2, yF]} top={sign.z1 - 2.2} />
       <Dots points={grille.map(at)} size={0.55} tone="lo" />
     </g>
   );
