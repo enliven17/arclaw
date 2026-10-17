@@ -7,6 +7,7 @@
  *
  * Control it through the ref:
  *   play()            runs the scripted play once (coin to prize), resolves when the box is down the chute
+ *   run(from, to)     plays part of it (the app starts on submit and finishes on confirm), respawn() resets
  *   seek(seconds)     shows the pose at a time; used by the landing's scroll scrub
  *   seekProgress(p)   the same, 0..1
  *   reset()           back to rest
@@ -21,10 +22,18 @@ import type { ClawArt } from "./geometry";
 import { DURATION, REST_POSE, poseAt, type Phase, type Pose } from "./model";
 import { CHUTE_CLIP, PRONG_ANGLES, boxShift, bridgeShift, cablePath, clawShift, coinShift, hubTop, joystick, prongPath, px, trolleyShift } from "./frame";
 import { H, P, W } from "./view";
+import { play, type Sfx } from "@/lib/sfx";
 import "./claw.css";
 
+const PHASE_SOUND: Partial<Record<Phase, Sfx>> = { coin: "coin", move: "motor", drop: "drop", grip: "grip", release: "box" };
+
 export type ClawHandle = {
+  /** The whole play, then a fresh box drops onto the pile. */
   play: () => Promise<void>;
+  /** Animate from one time to another (seconds); the app holds at the drop until the payment confirms. */
+  run: (from: number, to: number) => Promise<void>;
+  /** A fresh box drops back onto the pile and the claw is at rest. */
+  respawn: () => Promise<void>;
   seek: (seconds: number) => void;
   seekProgress: (progress: number) => void;
   reset: () => void;
@@ -37,6 +46,8 @@ type Props = {
   label?: string;
   className?: string;
   onPhase?: (phase: Phase, pose: Pose) => void;
+  /** Play sound effects on phase changes during run()/play() (the app; never the landing scrub). */
+  sound?: boolean;
   /** Cabinet finish: "single" (default), "stack" or "vault" (claw.css). */
   machine?: string;
 };
@@ -47,7 +58,7 @@ const SHAFT_W = px(1.6);
 const BALL_R = px(3.6);
 const PIN_R = px(0.9);
 
-export function ClawMachine({ art, ref, label = "A claw machine: a glass cabinet with a gantry, a three prong claw over a pile of sealed prize boxes, a chute, a coin slot and a joystick.", className, onPhase, machine = "single" }: Props) {
+export function ClawMachine({ art, ref, label = "A claw machine: a glass cabinet with a gantry, a three prong claw over a pile of sealed prize boxes, a chute, a coin slot and a joystick.", className, onPhase, machine = "single", sound = false }: Props) {
   const CLIP_ID = `chute-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
   const root = useRef<SVGSVGElement>(null);
   const farTruck = useRef<SVGGElement>(null);
@@ -69,6 +80,10 @@ export function ClawMachine({ art, ref, label = "A claw machine: a glass cabinet
   const playing = useRef<Promise<void> | null>(null);
   const nudge = useRef({ x: 0, y: 0, tx: 0, ty: 0, vx: 0, vy: 0, raf: 0, last: 0 });
   const onPhaseRef = useRef(onPhase);
+  const soundRef = useRef(sound);
+  useEffect(() => {
+    soundRef.current = sound;
+  }, [sound]);
   useEffect(() => {
     onPhaseRef.current = onPhase;
   }, [onPhase]);
@@ -111,6 +126,10 @@ export function ClawMachine({ art, ref, label = "A claw machine: a glass cabinet
     if (s.phase !== phase.current) {
       phase.current = s.phase;
       onPhaseRef.current?.(s.phase, s);
+      if (soundRef.current && playing.current) {
+        const cue = PHASE_SOUND[s.phase];
+        if (cue) play(cue);
+      }
     }
   };
 
@@ -125,7 +144,8 @@ export function ClawMachine({ art, ref, label = "A claw machine: a glass cabinet
 
   useImperativeHandle(
     ref,
-    () => ({
+    () => {
+      const handle: ClawHandle = {
       duration: DURATION,
       seek(seconds: number) {
         if (playing.current) return;
@@ -133,59 +153,71 @@ export function ClawMachine({ art, ref, label = "A claw machine: a glass cabinet
         render();
       },
       seekProgress(progress: number) {
-        this.seek(progress * DURATION);
+        handle.seek(progress * DURATION);
       },
       reset() {
         t.current = 0;
         render();
       },
-      play() {
-        if (playing.current) return playing.current;
+      run(from: number, to: number) {
         const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-        playing.current = new Promise<void>((resolve) => {
-          const finish = () => {
-            playing.current = null;
-            resolve();
-          };
-          if (still) {
-            t.current = DURATION;
+        const start = Math.max(0, Math.min(DURATION, from));
+        const end = Math.max(start, Math.min(DURATION, to));
+        const job = new Promise<void>((resolve) => {
+          if (still || end === start) {
+            t.current = end;
             render();
-            finish();
+            resolve();
             return;
           }
-          const proxy = { t: 0, lift: 0, alpha: 1 };
-          gsap
-            .timeline({ onComplete: finish })
-            .to(proxy, {
-              t: DURATION,
-              duration: DURATION,
-              ease: "none",
-              onUpdate: () => {
-                t.current = proxy.t;
-                render();
-              },
-            })
-            // A fresh box drops back onto the pile, so the machine is ready for the next play.
-            .fromTo(
-              proxy,
-              { lift: 36, alpha: 0 },
-              {
-                lift: 0,
-                alpha: 1,
-                duration: 0.7,
-                ease: "back.out(1.4)",
-                delay: 0.5,
-                onStart: () => {
-                  t.current = 0;
-                },
-                onUpdate: () => apply(REST_POSE, { boxLift: proxy.lift, boxAlpha: Math.min(1, proxy.alpha * 1.6) }),
-                onComplete: () => apply(REST_POSE),
-              },
-            );
+          const proxy = { t: start };
+          gsap.to(proxy, {
+            t: end,
+            duration: end - start,
+            ease: "none",
+            onUpdate: () => {
+              t.current = proxy.t;
+              render();
+            },
+            onComplete: () => resolve(),
+          });
+        });
+        playing.current = job.then(() => {
+          playing.current = null;
         });
         return playing.current;
       },
-    }),
+      respawn() {
+        const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        t.current = 0;
+        if (still) {
+          apply(REST_POSE);
+          return Promise.resolve();
+        }
+        // A fresh box drops back onto the pile, so the machine is ready for the next play.
+        return new Promise<void>((resolve) => {
+          const proxy = { lift: 36, alpha: 0 };
+          gsap.to(proxy, {
+            lift: 0,
+            alpha: 1,
+            duration: 0.7,
+            ease: "back.out(1.4)",
+            delay: 0.3,
+            onUpdate: () => apply(REST_POSE, { boxLift: proxy.lift, boxAlpha: Math.min(1, proxy.alpha * 1.6) }),
+            onComplete: () => {
+              apply(REST_POSE);
+              resolve();
+            },
+          });
+        });
+      },
+      play() {
+        if (playing.current) return playing.current;
+        return handle.run(0, DURATION).then(() => handle.respawn());
+      },
+      };
+      return handle;
+    },
     // render/apply only touch refs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
