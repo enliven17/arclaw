@@ -10,6 +10,7 @@
  */
 import { useRef } from "react";
 import { PINNED, REDUCED, ScrollTrigger, gsap, pinType, useGSAP } from "@/lib/motion";
+import { whenSplashDone } from "@/lib/splash";
 import { examplePack, type Machine } from "@/lib/machines";
 import { SplitHeading } from "@/components/motion/SmoothScroll";
 import { BoosterPack, PACK_SEAL_AT } from "@/components/pack/BoosterPack";
@@ -36,6 +37,10 @@ export function HowItWorks({ machines }: { machines: Machine[] }) {
       const el = root.current;
       if (!el) return;
       const mm = gsap.matchMedia();
+      // Scroll timelines and pins wait for the splash to lift, so they do not compete with it for frames.
+      let live = true;
+      void whenSplashDone().then(() => {
+        if (!live) return;
       // `any` always matches: with only pinned and reduced, phones and touch laptops (neither) never ran the callback.
       mm.add({ pinned: PINNED, reduced: REDUCED, any: "all" }, (ctx) => {
         const { pinned, reduced } = ctx.conditions as { pinned: boolean; reduced: boolean };
@@ -105,7 +110,12 @@ export function HowItWorks({ machines }: { machines: Machine[] }) {
         }
         return () => items.forEach((s) => s.removeAttribute("data-active"));
       });
-      return () => mm.revert();
+        ScrollTrigger.refresh();
+      });
+      return () => {
+        live = false;
+        mm.revert();
+      };
     },
     { scope: root },
   );

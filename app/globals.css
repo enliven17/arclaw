@@ -295,6 +295,14 @@ html.splashing .splash {
 html.splashing {
   overflow: clip;
 }
+/* First paint, before the splash timeline runs: the claw waits above the screen, the wordmark is hidden, the coin
+   is the first thing that appears. */
+html.splashing .splash [data-rig] {
+  transform: translateY(-75vh);
+}
+html.splashing .splash [data-word] {
+  opacity: 0;
+}
 
 /* Scrollbar: thin and quiet. A cream thumb at low opacity with rounded ends on a transparent track, brighter on
    hover. Firefox takes scrollbar-width and scrollbar-color; WebKit and Blink take the pseudo-elements. */
