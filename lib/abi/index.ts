@@ -1,6 +1,7 @@
 export { arclawAbi } from './arclaw'
 export { arclawLensAbi } from './arclawLens'
 export { arclawLinksAbi } from './arclawLinks'
+export { luckVaultAbi } from './luckVault'
 export { astockPriceSourceAbi } from './astockPriceSource'
 export { mockStockAbi } from './mockStock'
 export { mockPriceSourceAbi } from './mockPriceSource'

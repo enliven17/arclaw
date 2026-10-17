@@ -25,6 +25,7 @@ const items = [
   ['Arclaw', 'arclaw'],
   ['ArclawLens', 'arclawLens'],
   ['ArclawLinks', 'arclawLinks'],
+  ['LuckVault', 'luckVault'],
   ['AstockPriceSource', 'astockPriceSource'],
   ['MockStock', 'mockStock'],
   ['MockPriceSource', 'mockPriceSource'],

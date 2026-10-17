@@ -2,6 +2,30 @@
 export const arclawLensAbi = [
   {
     "type": "function",
+    "name": "luckyRtp",
+    "inputs": [
+      {
+        "name": "box",
+        "type": "address",
+        "internalType": "contract Arclaw"
+      },
+      {
+        "name": "machineId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "quoteVrfFee",
     "inputs": [
       {

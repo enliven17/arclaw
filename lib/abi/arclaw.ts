@@ -48,6 +48,19 @@ export const arclawAbi = [
   },
   {
     "type": "function",
+    "name": "MAX_BOOST_BPS",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "MAX_BOXES_PER_OPEN",
     "inputs": [],
     "outputs": [
@@ -391,6 +404,47 @@ export const arclawAbi = [
   },
   {
     "type": "function",
+    "name": "jit",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "desk",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "slippageBps",
+        "type": "uint16",
+        "internalType": "uint16"
+      },
+      {
+        "name": "maxBuys",
+        "type": "uint8",
+        "internalType": "uint8"
+      },
+      {
+        "name": "maxPerCard",
+        "type": "uint128",
+        "internalType": "uint128"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "luck",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "contract ILuck"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "machineIds",
     "inputs": [],
     "outputs": [
@@ -540,6 +594,25 @@ export const arclawAbi = [
       }
     ],
     "stateMutability": "payable"
+  },
+  {
+    "type": "function",
+    "name": "openingBoost",
+    "inputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
   },
   {
     "type": "function",
@@ -861,6 +934,19 @@ export const arclawAbi = [
   },
   {
     "type": "function",
+    "name": "reserveFloor",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "reservedCredit",
     "inputs": [],
     "outputs": [
@@ -996,6 +1082,52 @@ export const arclawAbi = [
         "name": "approved",
         "type": "bool",
         "internalType": "bool"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "setJit",
+    "inputs": [
+      {
+        "name": "desk",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "slippageBps",
+        "type": "uint16",
+        "internalType": "uint16"
+      },
+      {
+        "name": "maxBuys",
+        "type": "uint8",
+        "internalType": "uint8"
+      },
+      {
+        "name": "maxPerCard",
+        "type": "uint128",
+        "internalType": "uint128"
+      },
+      {
+        "name": "floor_",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "setLuck",
+    "inputs": [
+      {
+        "name": "vault",
+        "type": "address",
+        "internalType": "contract ILuck"
       }
     ],
     "outputs": [],
@@ -1720,6 +1852,87 @@ export const arclawAbi = [
   },
   {
     "type": "event",
+    "name": "JitBought",
+    "inputs": [
+      {
+        "name": "openingId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "token",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "cost",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "shares",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "JitConfigSet",
+    "inputs": [
+      {
+        "name": "desk",
+        "type": "address",
+        "indexed": false,
+        "internalType": "address"
+      },
+      {
+        "name": "slippageBps",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "maxBuys",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "maxPerCard",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "reserveFloor",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "LuckSet",
+    "inputs": [
+      {
+        "name": "vault",
+        "type": "address",
+        "indexed": false,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "MachineActive",
     "inputs": [
       {
@@ -1838,6 +2051,12 @@ export const arclawAbi = [
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"
+      },
+      {
+        "name": "boostBps",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
       }
     ],
     "anonymous": false
@@ -1866,15 +2085,21 @@ export const arclawAbi = [
         "internalType": "uint256"
       },
       {
-        "name": "boxIndex",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
+        "name": "opener",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
       },
       {
         "name": "machineId",
         "type": "uint256",
         "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "boxIndex",
+        "type": "uint256",
+        "indexed": false,
         "internalType": "uint256"
       },
       {
@@ -1894,6 +2119,12 @@ export const arclawAbi = [
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"
+      },
+      {
+        "name": "boosted",
+        "type": "bool",
+        "indexed": false,
+        "internalType": "bool"
       }
     ],
     "anonymous": false

@@ -7,6 +7,7 @@ import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IER
 import {Arclaw} from "../src/Arclaw.sol";
 import {ArclawLens} from "../src/ArclawLens.sol";
 import {ArclawLinks} from "../src/ArclawLinks.sol";
+import {LuckVault} from "../src/LuckVault.sol";
 import {IERC1155} from "@openzeppelin/contracts/token/ERC1155/IERC1155.sol";
 import {AstockPriceSource} from "../src/AstockPriceSource.sol";
 import {MockStock} from "../src/mocks/MockStock.sol";
@@ -205,7 +206,7 @@ abstract contract OddsWriter is ArcConfig {
         );
         s = string.concat(
             s,
-            ',\n      "rtpBps": ', vm.toString(rtp), ',\n      "minPackBps": ', vm.toString(minBps),
+            ',\n      "rtpBps": ', vm.toString(rtp), ',\n      "luckyRtpBps": ', vm.toString(lens.luckyRtp(box, id)), ',\n      "minPackBps": ', vm.toString(minBps),
             ',\n      "maxPackBps": ', vm.toString(maxBps), ',\n      "rules": { "floorBps": ', vm.toString(uint256(floorBps)),
             ', "capBps": ', vm.toString(uint256(capBps))
         );
@@ -286,6 +287,7 @@ contract Deploy is OddsWriter {
     Arclaw public box;
     ArclawLens public lens;
     ArclawLinks public links;
+    LuckVault public luck;
     address public priceSource;
     address public desk;
     address public operator;
@@ -383,6 +385,10 @@ contract Deploy is OddsWriter {
         box.setPolicy(IPriceSource(priceSource), vm.envOr("DAILY_CAP", uint256(50 ether)));
         box.setSink(desk, true);
         box.setOperator(operator);
+        // ARCLAW luck: the vault ships with no token and no tiers (boosts off) until ARCLAW exists on Arguspad.
+        luck = new LuckVault();
+        box.setLuck(luck);
+        if (owner != msg.sender) luck.transferOwnership(owner);
         // Short cards are bought on the desk at reveal from box revenue: 1% slippage, at most 20 buys per reveal,
         // 60 USDC per card (a Vault jackpot card is ~49.5). RESERVE_FLOOR keeps a float for Epic and better.
         box.setJit(desk, 100, 20, 60 ether, vm.envOr("RESERVE_FLOOR", uint256(0)));
@@ -421,6 +427,7 @@ contract Deploy is OddsWriter {
         vm.serializeAddress(o, "arclaw", address(box));
         vm.serializeAddress(o, "lens", address(lens));
         vm.serializeAddress(o, "links", address(links));
+        vm.serializeAddress(o, "luckVault", address(luck));
         vm.serializeAddress(o, "priceSource", priceSource);
         vm.serializeAddress(o, "desk", desk);
         vm.serializeAddress(o, "operator", operator);
