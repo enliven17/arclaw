@@ -452,3 +452,35 @@ html.has-cursor :is(input:not([type="range"]):not([type="checkbox"]):not([type="
   text-underline-offset: 3px;
   text-decoration-color: rgb(236 230 218 / 0.3);
 }
+
+/* How it works step row. Without JS or with reduced motion every step shows; with motion the row advances:
+   past steps dim, the active one slides up into place, the future ones wait below, hidden. */
+.how-step {
+  transition: transform 520ms var(--ease-out-quint), opacity 420ms ease-out;
+}
+@media (prefers-reduced-motion: no-preference) {
+  html.js .how-step[data-state="future"] {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  html.js .how-step[data-state="past"] {
+    opacity: 0.38;
+  }
+  html.js .how-step[data-state="active"] .money {
+    color: var(--color-claw);
+  }
+}
+@media (max-width: 767.98px) and (prefers-reduced-motion: no-preference) {
+  html.js .how-step[data-state="past"] {
+    opacity: 0;
+    transform: translateY(-16px);
+  }
+}
+@media (max-width: 767.98px) and (prefers-reduced-motion: reduce) {
+  .how-step {
+    grid-row: auto !important;
+  }
+}
+html:not(.js) .how-step {
+  grid-row: auto;
+}

@@ -47,7 +47,7 @@ export function HowItWorks({ machines }: { machines: Machine[] }) {
         if (reduced) return;
         const q = gsap.utils.selector(el);
         const items = q("[data-step]");
-        const setStep = (i: number) => items.forEach((s, k) => s.toggleAttribute("data-active", k === i));
+        const setStep = (i: number) => items.forEach((s, k) => (s.dataset.state = k < i ? "past" : k === i ? "active" : "future"));
 
         const coin = q("[data-coin]");
         const box = q("[data-box]");
@@ -90,7 +90,7 @@ export function HowItWorks({ machines }: { machines: Machine[] }) {
           .addLabel("cards", "tear+=0.5")
           .call(() => setStep(3), [], "cards")
           // Cards slide up out of the open top, staggered, still behind the pack's body.
-          .to(cards, { yPercent: -72, duration: 0.7, stagger: 0.12, ease: "power2.out" }, "cards")
+          .to(cards, { yPercent: -56, duration: 0.7, stagger: 0.12, ease: "power2.out" }, "cards")
           // Clear of the opening: the cards come in front of the wrapper, which drops away empty.
           .set(deck, { zIndex: 30, clipPath: "none" }, "cards+=1.05")
           .to(packEl, { yPercent: 75, opacity: 0, duration: 0.6, ease: "power2.in" }, "cards+=1.05")
@@ -108,7 +108,7 @@ export function HowItWorks({ machines }: { machines: Machine[] }) {
           tl.timeScale(1.2);
           ScrollTrigger.create({ trigger: q("[data-stage]")[0], start: "top 80%", once: true, onEnter: () => tl.play() });
         }
-        return () => items.forEach((s) => s.removeAttribute("data-active"));
+        return () => items.forEach((s, k) => (s.dataset.state = k === 0 ? "active" : "future"));
       });
         ScrollTrigger.refresh();
       });
@@ -122,60 +122,50 @@ export function HowItWorks({ machines }: { machines: Machine[] }) {
 
   return (
     <section ref={root} id="how" aria-labelledby="how-title" className="relative border-t border-line">
-      <div className="wrap grid min-h-dvh items-center gap-12 py-24 md:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] md:gap-12 md:py-16 lg:gap-16">
-        <div>
-          <SplitHeading as="h2" id="how-title" onScroll className="h-section !text-[clamp(44px,4.6vw,80px)]" lines={["One play.", "Three stocks."]} />
-          <ol className="mt-10 grid gap-1">
-            {steps.map((s) => (
-              <li
-                key={s.n}
-                data-step=""
-                className="group rounded-[14px] border border-transparent px-4 py-3 transition-colors duration-300 data-[active]:border-line data-[active]:bg-panel"
-              >
-                <div className="flex items-baseline gap-4">
-                  <span className="money text-[14px] text-muted transition-colors group-data-[active]:text-claw">{s.n}</span>
-                  <div>
-                    <h3 className="text-[20px] leading-tight tracking-[-0.01em] text-cream">{s.title}</h3>
-                    <p className="mt-1 text-[15px] leading-relaxed text-muted">{s.body}</p>
-                  </div>
+      <div className="wrap flex min-h-dvh flex-col justify-center gap-6 py-20 md:gap-8 md:py-10">
+        <SplitHeading as="h2" id="how-title" onScroll className="h-section !text-[clamp(40px,4.4vw,76px)]" lines={["One play. Three stocks."]} />
+
+        {/* One wide panel; the scene keeps its proportions in the middle of it. */}
+        <div data-stage="" className="relative w-full overflow-hidden rounded-[18px] border border-line bg-panel md:h-[min(56vh,580px)]">
+          <div className="relative mx-auto aspect-[5/6] w-full sm:aspect-[6/5] md:h-full md:w-auto">
+            {/* Payment. */}
+            <div data-coin="" data-how-hide="" aria-hidden="true" className="money absolute left-1/2 top-[9%] -translate-x-1/2 rounded-full border border-line-strong bg-panel-2 px-4 py-2 text-[15px] text-cream">
+              {machine.priceUsdc}.00 USDC
+            </div>
+
+            <div className="absolute inset-0 flex items-center justify-center">
+              {/* The sealed box, finished like the boxes in its machine. */}
+              <div data-how-hide="" className="absolute w-[56%] sm:w-[40%]">
+                <SealedBox variant={variantOf(machine.slug)} />
+              </div>
+
+              {/* The pack slot: the cards wait inside the wrapper (clipped at its bottom seal, behind its front), rise out
+                  through the torn top, then come forward and deal out. Face up without JS. */}
+              <div className="absolute aspect-[200/330] w-[44%] sm:w-[36%]">
+                <div data-deck="" className="absolute inset-0 z-10 grid place-items-center" style={{ clipPath: `inset(-300% -200% ${((1 - PACK_SEAL_AT) * 100).toFixed(1)}% -200%)` }}>
+                  {pack.map((card, i) => (
+                    <StockCard key={`${card.ticker}-${i}`} card={card} tier={tier.name} index={i} className="col-start-1 row-start-1 w-[68%] sm:w-[83%]" />
+                  ))}
                 </div>
-              </li>
-            ))}
-          </ol>
-        </div>
-
-        <div data-stage="" className="relative mx-auto aspect-[5/6] w-full max-w-[680px] overflow-hidden rounded-[18px] border border-line bg-panel sm:aspect-[6/5]">
-          {/* Payment. */}
-          <div data-coin="" data-how-hide="" aria-hidden="true" className="money absolute left-1/2 top-[9%] -translate-x-1/2 rounded-full border border-line-strong bg-panel-2 px-4 py-2 text-[15px] text-cream">
-            {machine.priceUsdc}.00 USDC
-          </div>
-
-          <div className="absolute inset-0 flex items-center justify-center">
-            {/* The sealed box, finished like the boxes in its machine. */}
-            <div data-how-hide="" className="absolute w-[56%] sm:w-[40%]">
-              <SealedBox variant={variantOf(machine.slug)} />
-            </div>
-
-            {/* The pack slot: the cards wait inside the wrapper (clipped at its bottom seal, behind its front), rise out
-                through the torn top, then come forward and deal out. Face up without JS. */}
-            <div className="absolute aspect-[200/330] w-[44%] sm:w-[36%]">
-              <div data-deck="" className="absolute inset-0 z-10 grid place-items-center" style={{ clipPath: `inset(-300% -200% ${((1 - PACK_SEAL_AT) * 100).toFixed(1)}% -200%)` }}>
-                {pack.map((card, i) => (
-                  <StockCard
-                    key={`${card.ticker}-${i}`}
-                    card={card}
-                    tier={tier.name}
-                    index={i}
-                    className="col-start-1 row-start-1 w-[68%] sm:w-[83%]"
-                  />
-                ))}
-              </div>
-              <div data-how-hide="" className="absolute inset-0 z-20">
-                <BoosterPack machine={machine.name} tiers={machine.tiers.length} uid="how-pack" />
+                <div data-how-hide="" className="absolute inset-0 z-20">
+                  <BoosterPack machine={machine.name} tiers={machine.tiers.length} uid="how-pack" />
+                </div>
               </div>
             </div>
           </div>
         </div>
+
+        {/* The steps: a row under the panel that advances with the scene. Past steps dim, the active one slides up
+            into place, the rest wait below (globals.css .how-step). Phones show the active step only. */}
+        <ol className="how-steps grid md:grid-cols-4 md:gap-6">
+          {steps.map((s, i) => (
+            <li key={s.n} data-step="" data-state={i === 0 ? "active" : "future"} className="how-step col-start-1 row-start-1 md:col-start-auto md:row-start-auto">
+              <span className="money text-[14px] text-muted">{s.n}</span>
+              <h3 className="mt-2 text-[20px] leading-tight tracking-[-0.01em] text-cream">{s.title}</h3>
+              <p className="mt-1 text-[15px] leading-relaxed text-muted">{s.body}</p>
+            </li>
+          ))}
+        </ol>
       </div>
     </section>
   );

@@ -8,7 +8,7 @@ await ctx.addInitScript(() => sessionStorage.setItem("arclaw:splash", "1"));
 const p = await ctx.newPage();
 await p.goto("http://localhost:3210", { waitUntil: "networkidle" });
 await p.waitForTimeout(2000);
-const stage = p.locator("#how [data-stage]");
+const stage = p.locator("#how > div");
 const out = [];
 if (!mobile) {
   await p.mouse.move(w / 2, h / 2);
