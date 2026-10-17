@@ -18,7 +18,8 @@ import {D20Randomness} from "./vrf/D20Randomness.sol";
 /// @notice Each machine is an ERC-1155 id with its own price. Pay the price in native USDC (18 dp) per play, get one
 ///         sealed box of that machine. Opening burns boxes and asks the VRF for one word; once it lands anyone can
 ///         `reveal`, which draws ONE weighted outcome per box (a pack of 3 cards) from the machine's table frozen at
-///         open time and pays the cards from inventory. A card the inventory cannot cover is refunded in USDC at
+///         open time and pays the cards from inventory. A card the inventory cannot cover is first bought just in
+///         time on the allow-listed desk with box revenue; only if that is off or fails is it refunded in USDC at
 ///         the lower of its value when the table was set and its current value.
 ///         Every table, whoever sets it, must satisfy the machine's rules: each outcome worth at least floorBps and
 ///         at most capBps of the price, and the weighted expected value inside [rtpMinBps, rtpMaxBps].
@@ -118,6 +119,20 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
     uint256 public reservedCredit;
     uint256 public pendingReserve;
 
+    /// Just-in-time restock at reveal: a short card is bought on `jit.desk` (must also be an allow-listed sink)
+    /// with box revenue, instead of being refunded. Bounded per card, per reveal and by the free balance.
+    struct Jit {
+        address desk; // 0 = off
+        uint16 slippageBps; // native sent = price-source value of the shortfall x (1 + slippage)
+        uint8 maxBuys; // per reveal
+        uint128 maxPerCard; // native wei
+    }
+
+    Jit public jit;
+    /// Float kept for big wins: withdraw and spend leave it alone, JIT buys may use it.
+    uint256 public reserveFloor;
+    uint256 internal transient _jitBuys;
+
     uint32 public callbackGasLimit = 100_000;
     uint256 public maxVrfSubsidy;
 
@@ -190,6 +205,8 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
     event SinkSet(address sink, bool allowed);
     event Spent(address indexed sink, address indexed stock, uint256 amount, uint256 sharesOut);
     event MaxTableAgeSet(uint256 maxAge);
+    event JitBought(uint256 indexed openingId, address indexed token, uint256 cost, uint256 shares);
+    event JitConfigSet(address desk, uint256 slippageBps, uint256 maxBuys, uint256 maxPerCard, uint256 reserveFloor);
     event VrfConfigSet(uint32 callbackGasLimit, uint256 maxVrfSubsidy);
 
     // ------------------------------------------------------------------ errors
@@ -316,6 +333,7 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
         Opening memory m = o;
         uint256 paid;
         uint256 refund;
+        _jitBuys = 0;
         for (uint256 b; b < m.boxes; ++b) {
             (uint256 p, uint256 r) = _payBox(openingId, m, b);
             paid += p;
@@ -394,10 +412,10 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
         return _tables.length;
     }
 
-    /// @notice Native balance above the reserved liabilities: what withdraw and spend may use.
+    /// @notice Native balance above owed credit, pending boxes and the reserve floor: what withdraw and spend may use.
     function freeBalance() public view returns (uint256) {
         uint256 bal = address(this).balance;
-        uint256 owed = reservedCredit + pendingReserve;
+        uint256 owed = reservedCredit + pendingReserve + reserveFloor;
         return bal > owed ? bal - owed : 0;
     }
 
@@ -495,6 +513,17 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
         emit SinkSet(sink, allowed);
     }
 
+    /// @notice Just-in-time restock at reveal. desk 0 turns it off. slippageBps <= 1000, maxBuys <= 60.
+    function setJit(address desk, uint16 slippageBps, uint8 maxBuys, uint128 maxPerCard, uint256 floor_)
+        external
+        onlyOwner
+    {
+        if (slippageBps > 1000 || maxBuys > MAX_BOXES_PER_OPEN * CARDS_PER_BOX) revert BadMachine();
+        jit = Jit(desk, slippageBps, maxBuys, maxPerCard);
+        reserveFloor = floor_;
+        emit JitConfigSet(desk, slippageBps, maxBuys, maxPerCard, floor_);
+    }
+
     function setVrfConfig(uint32 gasLimit, uint256 subsidy) external onlyOwner {
         if (gasLimit < MIN_CALLBACK_GAS || gasLimit > MAX_CALLBACK_GAS) revert BadGas();
         (callbackGasLimit, maxVrfSubsidy) = (gasLimit, subsidy);
@@ -583,8 +612,11 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
         emit OutcomeDrawn(openingId, b, m.machineId, tier, idx, out.value);
         for (uint256 c; c < CARDS_PER_BOX; ++c) {
             Card memory card = out.cards[c];
-            bool ok = _balanceOf(card.token) >= card.amount
-                && IERC20(card.token).trySafeTransfer(m.opener, card.amount);
+            uint256 have = _balanceOf(card.token);
+            if (have < card.amount && _jitBuy(openingId, card.token, card.amount - have)) {
+                have = _balanceOf(card.token);
+            }
+            bool ok = have >= card.amount && IERC20(card.token).trySafeTransfer(m.opener, card.amount);
             emit CardDrawn(openingId, m.opener, card.token, m.machineId, b, c, card.amount, tier, ok);
             if (ok) {
                 ++paid;
@@ -595,6 +627,31 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
                 emit Refunded(openingId, m.opener, b, c, r);
             }
         }
+    }
+
+    /// Buys `shares` of `token` on the JIT desk with native above owed credit and pending boxes (reserveFloor may
+    /// be used). Never reverts: any failure (off, cap hit, price unavailable, desk revert) returns false and the
+    /// caller refunds the card instead.
+    function _jitBuy(uint256 openingId, address token, uint256 shares) internal returns (bool) {
+        Jit memory j = jit;
+        if (j.desk == address(0) || !sinks[j.desk] || _jitBuys >= j.maxBuys) return false;
+        uint256 cost;
+        try this.valueOf(token, shares) returns (uint256 v) {
+            cost = v * (10_000 + j.slippageBps) / 10_000 + 1;
+        } catch {
+            return false;
+        }
+        uint256 owed = reservedCredit + pendingReserve;
+        if (cost > j.maxPerCard || address(this).balance < owed + cost) return false;
+        ++_jitBuys;
+        uint256 before = _balanceOf(token);
+        try IAstockDesk(j.desk).buy{value: cost}(token, shares, address(this)) {}
+        catch {
+            return false;
+        }
+        uint256 got = _balanceOf(token) - before;
+        emit JitBought(openingId, token, cost, got);
+        return got >= shares;
     }
 
     /// A short card refunds the lower of its value when the table was set and its value now, so a fall in the

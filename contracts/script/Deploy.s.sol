@@ -279,7 +279,7 @@ abstract contract OddsWriter is ArcConfig {
 /// Env:
 ///   OWNER         final owner (multisig). Mainnet: required. Ownable2Step: it must acceptOwnership().
 ///   OPERATOR      treasury agent (reprices, restocks). Mainnet: required and must differ from the deployer.
-///   BOX_URI, DAILY_CAP (wei, default 50 USDC), MAX_TABLE_AGE (seconds; testnet default 30 days, mainnet 24 h),
+///   RESERVE_FLOOR (wei, float for big wins, default 0), BOX_URI, DAILY_CAP (wei, default 50 USDC), MAX_TABLE_AGE (seconds; testnet default 30 days, mainnet 24 h),
 ///   POOL_USD (testnet seed per stock, USD 6 dp, default $2000), MOCK_PRICES=1 (testnet: fixed prices, no fork).
 /// Deployment files (lib/deployments/arc-<chain>.json, lib/machines.resolved*.json) are written only on --broadcast.
 contract Deploy is OddsWriter {
@@ -383,6 +383,9 @@ contract Deploy is OddsWriter {
         box.setPolicy(IPriceSource(priceSource), vm.envOr("DAILY_CAP", uint256(50 ether)));
         box.setSink(desk, true);
         box.setOperator(operator);
+        // Short cards are bought on the desk at reveal from box revenue: 1% slippage, at most 20 buys per reveal,
+        // 60 USDC per card (a Vault jackpot card is ~49.5). RESERVE_FLOOR keeps a float for Epic and better.
+        box.setJit(desk, 100, 20, 60 ether, vm.envOr("RESERVE_FLOOR", uint256(0)));
         for (uint256 i; i < ms.length; ++i) {
             box.setMachine(
                 ms[i].id,
