@@ -53,6 +53,7 @@ export function Splash() {
     // Compositor layers for the parts that move, only for the splash.
     moving().forEach((n) => (n.style.willChange = "transform, opacity"));
 
+    performance.mark("splash-start");
     const tl = gsap.timeline({ onComplete: done });
     // Coin: pops in, spins twice on its edge, drops through the slot. The claw act starts at C.
     const C = 1.05;
