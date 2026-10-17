@@ -11,8 +11,8 @@ Rebuild the images with `node brand/social/render.mjs`. They draw from `lib/bran
 ## Name and handle
 
 - Display name: `arclaw`
-- Handle: `@arclaw` (fallbacks: `@arclawfun`, `@playarclaw`)
-- Website: `arclaw.fun` (update when the domain is final)
+- Handle: `@arclawapp` (https://x.com/arclawapp)
+- Website: to be decided
 
 ## One-liners
 
