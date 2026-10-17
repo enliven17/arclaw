@@ -2,11 +2,11 @@
  * Writes public/logos/<TICKER>.svg in cream (#ECE6DA), one per stock in lib/stocks.ts. Brand marks come from
  * simple-icons (CC0 data; the marks remain their owners' trademarks, used here to identify the stock). Where
  * simple-icons has no mark (ETFs, and brands it does not carry) a monogram is traced from Geist Medium so it never
- * depends on a font. Run: `node scripts/logos.mjs`.
+ * depends on a font; scripts/fetch-logos.mjs then replaces those with official marks. Run: `node scripts/logos.mjs`.
  */
 import * as si from "simple-icons";
 import opentype from "opentype.js";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -28,6 +28,7 @@ const MARKS = {
   DELL: "siDell",
   AVGO: "siBroadcom",
   SPCX: "siSpacex",
+  CRCL: "siCircle",
 };
 
 const src = readFileSync(join(ROOT, "lib/stocks.ts"), "utf8");
@@ -72,6 +73,9 @@ for (const t of tickers) {
   else if (MARKS[t] && si[MARKS[t]]) {
     body = `<path fill="${CREAM}" d="${si[MARKS[t]].path}"/>`;
     marks++;
+  } else if (existsSync(join(OUT, `${t}.svg`)) && !readFileSync(join(OUT, `${t}.svg`), "utf8").includes("stroke-opacity=\"0.5\"")) {
+    // An official logo from scripts/fetch-logos.mjs is already there; keep it.
+    continue;
   } else body = monogram(t);
   writeFileSync(join(OUT, `${t}.svg`), `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">${body}</svg>\n`);
 }
