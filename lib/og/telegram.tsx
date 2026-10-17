@@ -48,13 +48,13 @@ export function TgOddsImage({ machine }: { machine: Machine }) {
     <OgFrame eyebrow={`${machine.name} odds`} footer={`${usdc(machine.priceUsdc)} USDC per play, ${fmtPct(machine.rtp)} expected return`}>
       <div style={{ display: "flex", flexDirection: "column", width: "100%", justifyContent: "center", gap: 12 }}>
         {machine.tiers.map((t) => (
-          <div key={t.name} style={{ display: "flex", alignItems: "center", gap: 24, fontSize: 26 }}>
-            <span style={{ width: 170, color: t.multiplier >= 2 ? PRIZE : CREAM }}>{t.name}</span>
-            <span style={{ width: 90, fontFamily: "Geist Mono", color: MUTED }}>{fmtMultiplier(t.multiplier)}</span>
-            <div style={{ display: "flex", flexGrow: 1, height: 14, borderRadius: 7, backgroundColor: PANEL }}>
+          <div key={t.name} style={{ display: "flex", width: "100%", alignItems: "center", gap: 24, fontSize: 26 }}>
+            <span style={{ display: "flex", width: 170, flexShrink: 0, color: t.multiplier >= 2 ? PRIZE : CREAM }}>{t.name}</span>
+            <span style={{ display: "flex", width: 90, flexShrink: 0, fontFamily: "Geist Mono", color: MUTED }}>{fmtMultiplier(t.multiplier)}</span>
+            <div style={{ display: "flex", flexGrow: 1, flexBasis: 0, minWidth: 0, height: 14, borderRadius: 7, backgroundColor: PANEL }}>
               <div style={{ width: `${Math.max(1.5, (t.probability / top) * 100)}%`, height: 14, borderRadius: 7, backgroundColor: CREAM }} />
             </div>
-            <span style={{ width: 120, textAlign: "right", fontFamily: "Geist Mono" }}>{fmtPct(t.probability, 2)}</span>
+            <span style={{ display: "flex", justifyContent: "flex-end", width: 130, flexShrink: 0, fontFamily: "Geist Mono" }}>{fmtPct(t.probability, 2)}</span>
           </div>
         ))}
       </div>
