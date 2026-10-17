@@ -330,7 +330,7 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, EIP712, D20
         o.requestedAt = uint64(block.timestamp);
 
         uint256 fee;
-        (requestId, fee) = _request(openingId);
+        (requestId, fee) = _request(openingId, true);
         o.requestId = requestId;
         openingOfRequest[requestId] = openingId + 1;
         emit Opened(openingId, requestId, msg.sender, machineId, boxes, t - 1, fee);
@@ -367,17 +367,18 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, EIP712, D20
         if (refund > 0) _sendNative(m.opener, refund);
     }
 
-    /// @notice The request expired unfulfilled (D20: 60 s). Ask again; the boxes stay committed. Anyone may call.
-    /// @dev The expired fee is refundable to this contract via coordinator.refundRequest(oldRequestId).
+    /// @notice The request expired unfulfilled (D20: 60 s). Ask again; the boxes stay committed. The expired fee is
+    ///         reclaimed first. The opener and the operator retry on the house subsidy; anyone else pays the full fee.
     function retry(uint256 openingId) external payable nonReentrant returns (uint256 requestId) {
         Opening storage o = openings[openingId];
         if (o.status != OpeningStatus.Pending) revert NotPending();
         uint256 old = o.requestId;
         _requireExpired(old);
         delete openingOfRequest[old];
+        _refundRandomness(old);
 
         uint256 fee;
-        (requestId, fee) = _request(openingId);
+        (requestId, fee) = _request(openingId, msg.sender == o.opener || msg.sender == operator);
         o.requestId = requestId;
         o.requestedAt = uint64(block.timestamp);
         openingOfRequest[requestId] = openingId + 1;
@@ -392,6 +393,7 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, EIP712, D20
         _requireExpired(o.requestId);
         o.status = OpeningStatus.Returned;
         delete openingOfRequest[o.requestId];
+        _refundRandomness(o.requestId);
         uint256 boxes = o.boxes;
         boxesOpened -= boxes;
         pendingReserve -= boxes * tablePrice[o.tableId];
@@ -674,10 +676,11 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, EIP712, D20
         emit Fulfilled(idPlusOne - 1, requestId, word);
     }
 
-    function _request(uint256 openingId) internal returns (uint256 requestId, uint256 fee) {
+    /// Pays the fee; with `subsidised` the house covers up to maxVrfSubsidy, otherwise the caller pays it all.
+    function _request(uint256 openingId, bool subsidised) internal returns (uint256 requestId, uint256 fee) {
         uint32 gasLimit = callbackGasLimit;
         fee = _quoteRandomness(gasLimit);
-        uint256 required = fee > maxVrfSubsidy ? fee - maxVrfSubsidy : 0;
+        uint256 required = !subsidised ? fee : fee > maxVrfSubsidy ? fee - maxVrfSubsidy : 0;
         if (msg.value < required) revert VrfFeeTopUp(required, msg.value);
         vrfFeesPaid += fee;
         bytes32 seed = keccak256(abi.encode(address(this), openingId, msg.sender, block.number));

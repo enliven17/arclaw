@@ -602,18 +602,47 @@ contract StuckVrfTest is Base {
         vm.expectRevert();
         vrf.fulfill(req, keccak256("late"));
 
+        uint256 bal = address(box).balance;
+        vm.prank(bob); // a stranger pays the whole fee
+        vm.expectRevert(abi.encodeWithSelector(Arclaw.VrfFeeTopUp.selector, 0.02 ether, 0));
+        box.retry(id);
         vm.prank(bob);
-        uint256 req2 = box.retry(id);
+        uint256 req2 = box.retry{value: 0.02 ether}(id);
         assertTrue(req2 != req);
         assertEq(box.openingOfRequest(req), 0);
-
-        uint256 bal = address(box).balance;
-        vrf.refundRequest(req);
+        // old fee reclaimed (+0.02) and the stranger paid the new one: the house is up 0.02
         assertEq(address(box).balance, bal + 0.02 ether);
+        vm.expectRevert(); // already refunded by retry
+        vrf.refundRequest(req);
 
         vrf.fulfill(req2, keccak256("w"));
         box.reveal(id);
         assertEq(box.cardsPaid(), 6);
+    }
+
+    function test_retry_openerFreeAndBalanceNeutral() public {
+        uint256 t0 = block.timestamp;
+        (uint256 id,) = _open(alice, M1, 1);
+        vm.warp(t0 + 61);
+        uint256 bal = address(box).balance;
+        vm.prank(alice);
+        box.retry(id); // old fee back in, new fee out
+        assertEq(address(box).balance, bal);
+        vm.warp(t0 + 122);
+        vm.prank(op);
+        box.retry(id); // the operator's keeper retries free too
+        assertEq(address(box).balance, bal);
+    }
+
+    function test_returnBoxes_reclaimsFee() public {
+        (uint256 id, uint256 req) = _open(alice, M1, 1);
+        vm.warp(block.timestamp + 61);
+        uint256 bal = address(box).balance;
+        vm.prank(alice);
+        box.returnBoxes(id);
+        assertEq(address(box).balance, bal + 0.02 ether);
+        vm.expectRevert();
+        vrf.refundRequest(req);
     }
 
     function test_retry_refusedOnceFulfilled() public {

@@ -2,7 +2,7 @@
 pragma solidity 0.8.28;
 
 /// @title RandomnessSource
-/// @notice The seam between the game and its randomness provider. The game only ever talks to these five
+/// @notice The seam between the game and its randomness provider. The game only ever talks to these
 ///         internal functions; swapping D20 for another VRF means writing another mixin, nothing else moves.
 abstract contract RandomnessSource {
     /// @dev Exact fee for a request sent in this transaction, native wei.
@@ -22,6 +22,9 @@ abstract contract RandomnessSource {
         view
         virtual
         returns (bool fulfilled, bool expired, bytes32 word);
+
+    /// @dev Best effort: reclaim the fee of an expired request into this contract. Must never revert.
+    function _refundRandomness(uint256 requestId) internal virtual;
 
     /// @dev Called by the mixin when the provider delivers. Must stay cheap.
     function _onRandomness(uint256 requestId, bytes32 word) internal virtual;

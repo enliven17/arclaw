@@ -28,6 +28,7 @@ interface ID20Coordinator {
     }
 
     function getRequest(uint256 requestId) external view returns (Request memory);
+    function refundRequest(uint256 requestId) external;
 }
 
 /// @title D20Randomness
@@ -59,6 +60,12 @@ abstract contract D20Randomness is RandomnessSource, D20VRFConsumer {
         word = r.randomness;
         // D20 accepts a proof at or before `deadline` only; after it the request can only be refunded.
         expired = !r.fulfilled && r.deadline != 0 && block.timestamp > r.deadline;
+    }
+
+    /// D20 pays the escrowed fee back to the refund address (this contract) once the deadline has passed.
+    /// Anyone may call it; a failure (already refunded, not enough gas) is ignored.
+    function _refundRandomness(uint256 requestId) internal override {
+        try ID20Coordinator(vrfCoordinator).refundRequest(requestId) {} catch {}
     }
 
     function _fulfillRandomness(uint256 requestId, bytes32 randomness) internal override {
