@@ -9,9 +9,10 @@
  * Native USDC is 18 dp everywhere here (what msg.value spends). Tickers come from the deployment's token map; tier
  * names from lib/machines.json (the contract emits the tier index).
  *
- * Compatibility: play, open, reveal, retry, returnBoxes, gift and the events are the same on the deployed testnet
- * contract and on the current source. Claim links live in ArclawLinks (one safeTransferFrom with the link data);
- * they are off until the deployment file has a `links` address.
+ * Compatibility: play, open, reveal, retry, returnBoxes and gift are the same on the deployed testnet contract and
+ * on the current source; Opened and OutcomeDrawn changed shape, so logs decode with either (legacyAbi). Claim links
+ * live in ArclawLinks (one safeTransferFrom with the link data); they are off until the deployment file has a
+ * `links` address. stats and quoteVrfFee moved to ArclawLens; the VRF top-up reads the coordinator directly.
  */
 import { decodeEventLog, encodeAbiParameters, encodeFunctionData, getAddress, parseAbi, type Address, type Hex, type Log, type PublicClient } from "viem";
 import { arclawAbi, arclawLinksAbi, d20CoordinatorAbi } from "@/lib/abi";
@@ -42,6 +43,15 @@ const deskAbi = parseAbi([
   "function sell(address stock, uint256 sharesIn, uint256 minUsdcOut, address to)",
 ]);
 const priceAbi = parseAbi(["function priceOf(address token) view returns (uint256)"]);
+/**
+ * Events of the contract currently deployed on testnet, before the audit redeploy: Opened had no boost field and
+ * OutcomeDrawn had no opener or boost. Logs are decoded with the current ABI first, then these, so the app works on
+ * both until lib/deployments points at the new contract.
+ */
+const legacyAbi = parseAbi([
+  "event Opened(uint256 indexed openingId, uint256 indexed requestId, address indexed opener, uint256 machineId, uint256 boxes, uint256 tableId, uint256 vrfFee)",
+  "event OutcomeDrawn(uint256 indexed openingId, uint256 boxIndex, uint256 indexed machineId, uint256 tier, uint256 outcomeIndex, uint256 valueUsdc)",
+]);
 
 const need = <T,>(v: T | null | undefined, what: string): T => {
   if (v == null) throw new Error(`${what} is not deployed on this network yet.`);
@@ -195,10 +205,13 @@ function decode(logs: readonly Log[], abi: readonly unknown[], address: string |
   const out: Decoded[] = [];
   for (const l of logs) {
     if (address && l.address.toLowerCase() !== address.toLowerCase()) continue;
-    try {
-      out.push(decodeEventLog({ abi: abi as never, data: l.data, topics: l.topics }) as unknown as Decoded);
-    } catch {
-      // Not one of ours (a token Transfer, a coordinator event).
+    for (const a of abi === arclawAbi ? [arclawAbi, legacyAbi] : [abi]) {
+      try {
+        out.push(decodeEventLog({ abi: a as never, data: l.data, topics: l.topics }) as unknown as Decoded);
+        break;
+      } catch {
+        // Not this shape, or not one of ours (a token Transfer, a coordinator event).
+      }
     }
   }
   return out;
@@ -218,7 +231,7 @@ export function linkFromLogs(logs: readonly Log[]): { linkId: bigint; expiresAt:
 }
 
 export type DrawnCard = { ticker: string; name: string; token: Address; amount: bigint; paid: boolean; valueWei: bigint };
-export type DrawnBox = { machineId: number; boxIndex: number; tier: number; tierName: string; valueWei: bigint; cards: DrawnCard[] };
+export type DrawnBox = { machineId: number; boxIndex: number; tier: number; tierName: string; valueWei: bigint; boosted: boolean; cards: DrawnCard[] };
 
 /** The boxes a reveal() paid, from its receipt: one OutcomeDrawn per box, three CardDrawn per box. */
 export async function boxesFromLogs(client: PublicClient, logs: readonly Log[]): Promise<DrawnBox[]> {
@@ -229,7 +242,7 @@ export async function boxesFromLogs(client: PublicClient, logs: readonly Log[]):
     const b = Number(e.args.boxIndex);
     const machineId = Number(e.args.machineId);
     const tier = Number(e.args.tier);
-    boxes.set(b, { machineId, boxIndex: b, tier, tierName: tierName(machineId, tier), valueWei: e.args.valueUsdc as bigint, cards: [] });
+    boxes.set(b, { machineId, boxIndex: b, tier, tierName: tierName(machineId, tier), valueWei: e.args.valueUsdc as bigint, boosted: Boolean(e.args.boosted), cards: [] });
   }
   const cards = events.filter((e) => e.eventName === "CardDrawn");
   await Promise.all(
@@ -267,4 +280,20 @@ export async function arclawLogs(client: PublicClient, eventName: "CardDrawn" | 
     batch.forEach((b) => out.push(...(b as Log[])));
   }
   return out;
+}
+
+/** The boxes of an opening that was revealed by someone else's transaction, read back from its logs. */
+export async function revealedBoxes(client: PublicClient, openingId: bigint, fromBlock: bigint): Promise<DrawnBox[]> {
+  const arclaw = need(ARCLAW, "arclaw");
+  const head = await client.getBlockNumber();
+  const events = [...arclawAbi, ...legacyAbi].filter((x) => x.type === "event" && (x.name === "OutcomeDrawn" || x.name === "CardDrawn"));
+  const logs: Log[] = [];
+  for (let from = fromBlock; from <= head; from += 1000n) {
+    const to = from + 999n > head ? head : from + 999n;
+    for (const event of events) {
+      const got = await client.getLogs({ address: arclaw, event: event as never, args: { openingId } as never, fromBlock: from, toBlock: to });
+      logs.push(...(got as Log[]));
+    }
+  }
+  return boxesFromLogs(client, logs);
 }
