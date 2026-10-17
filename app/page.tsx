@@ -14,8 +14,8 @@ import { getQuotes } from "@/lib/prices";
 // Prices refresh every five minutes (lib/prices.ts); the rest is static.
 export const revalidate = 300;
 
-// The cabinet's static art is built here, on the server, and handed to the live components as element props.
-const ART = clawArt();
+// Each cabinet's static art is built here, on the server, and handed to the live components as element props.
+const ART = { single: clawArt("single"), stack: clawArt("stack"), vault: clawArt("vault") };
 
 export default async function Home() {
   const machines = withResolved();

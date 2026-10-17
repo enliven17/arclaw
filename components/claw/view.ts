@@ -62,7 +62,15 @@ export const SLOT = { x: 86, z: 58 } as const;
 export const JOY = { x: 32, y: 116 } as const;
 export const BUTTON = { x: 86, y: 116 } as const;
 
-export const P = fitProjection([...boxCorners({ x: 0, y: 0, w: 120, d: 126, r: 0 }, Z.foot, Z.headerTop)], W, H, {
+/** Machine finishes. The play field, gantry and pile are shared; cabinets differ outside them (geometry.tsx). */
+export type Variant = "single" | "stack" | "vault";
+export const VARIANTS: readonly Variant[] = ["single", "stack", "vault"];
+export const variantOf = (slug: string | undefined): Variant => (slug === "stack" || slug === "vault" ? slug : "single");
+
+/** The tallest and widest cabinet (Vault) sets the camera, so every machine shares one scale and Single reads smaller. */
+export const BOUNDS = { zMin: -22, zMax: 306, x0: -4, x1: 124, y0: -4, y1: 128 } as const;
+
+export const P = fitProjection([...boxCorners({ x: BOUNDS.x0, y: BOUNDS.y0, w: BOUNDS.x1 - BOUNDS.x0, d: BOUNDS.y1 - BOUNDS.y0, r: 0 }, BOUNDS.zMin, BOUNDS.zMax)], W, H, {
   pad: 18,
   azimuth: AZIMUTH,
   elevation: ELEVATION,

@@ -1,0 +1,12 @@
+import { chromium } from "playwright-core";
+const b = await chromium.launch();
+const ctx = await b.newContext({ viewport: { width: 1440, height: 1000 }, deviceScaleFactor: 2 });
+await ctx.addInitScript(() => sessionStorage.setItem("arclaw:splash", "1"));
+const p = await ctx.newPage();
+await p.goto("http://localhost:3210", { waitUntil: "networkidle" });
+await p.waitForTimeout(1500);
+await p.evaluate(() => document.querySelector("#machines").scrollIntoView());
+await p.waitForTimeout(2500);
+const items = p.locator("#machines li");
+for (let i = 0; i < 3; i++) await items.nth(i).locator(".claw-fig").screenshot({ path: `shots/cabinet-${["single", "stack", "vault"][i]}.png` });
+await b.close();

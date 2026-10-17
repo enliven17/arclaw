@@ -4,11 +4,12 @@
  */
 import { ClawMachine } from "@/components/claw/ClawMachine";
 import type { ClawArt } from "@/components/claw/geometry";
+import { variantOf, type Variant } from "@/components/claw/view";
 import { SplitHeading } from "@/components/motion/SmoothScroll";
 import { fmtMultiplier, fmtPct, type Machine } from "@/lib/machines";
 import { usdc } from "@/lib/stocks";
 
-export function Machines({ art, machines }: { art: ClawArt; machines: Machine[] }) {
+export function Machines({ art, machines }: { art: Record<Variant, ClawArt>; machines: Machine[] }) {
   return (
     <section id="machines" aria-labelledby="machines-title" className="border-t border-line py-28 md:py-36">
       <div className="wrap">
@@ -27,7 +28,7 @@ export function Machines({ art, machines }: { art: ClawArt; machines: Machine[] 
             return (
               <li key={m.id} className="flex flex-col rounded-[18px] border border-line bg-panel md:flex-row lg:flex-col" data-reveal>
                 <div className="mx-auto w-full max-w-[300px] px-6 pt-6 md:w-[38%] md:pb-6 lg:w-full lg:pb-0">
-                  <ClawMachine art={art} machine={m.slug} label={`The ${m.name} machine, ${m.priceUsdc} USDC per play.`} />
+                  <ClawMachine art={art[variantOf(m.slug)]} machine={m.slug} label={`The ${m.name} machine, ${m.priceUsdc} USDC per play.`} />
                 </div>
                 <div className="flex flex-1 flex-col justify-center border-t border-line p-6 md:border-l md:border-t-0 lg:border-l-0 lg:border-t">
                   <div className="flex items-baseline justify-between gap-4">

@@ -194,7 +194,63 @@
   --anatomy-shade-1: #0c0c0e;
   --anatomy-shade-2: #101013;
   --anatomy-shade-3: #141417;
-  --anatomy-mid: #cfc8bb;
-  --anatomy-lo: #6c675e;
-  --anatomy-faint: #3a3833;
+  --anatomy-mid: #9d978c;
+  --anatomy-lo: #57534b;
+}
+
+/* Prize boxes per machine. Single: plain cardboard in warm greys. Stack: printed, cream band. Vault: rigid, deep,
+   cream metal caps and a round seal. Flat tones only. */
+.claw-fig [data-box-variant="single"] {
+  --anatomy-paper: #1f1c18;
+  --anatomy-top: #2c2822;
+  --anatomy-shade-0: #171512;
+  --anatomy-shade-1: #1b1915;
+  --anatomy-shade-2: #211e19;
+  --anatomy-shade-3: #26221d;
+}
+.claw-fig .iso-band {
+  fill: #ece6da;
+  fill-opacity: 0.22;
+  stroke: none;
+}
+.claw-fig [data-box-variant="vault"] {
+  --anatomy-paper: #111113;
+  --anatomy-top: #1b1b1f;
+  --anatomy-shade-0: #0b0b0d;
+  --anatomy-shade-1: #0e0e10;
+  --anatomy-shade-2: #121215;
+  --anatomy-shade-3: #16161a;
+}
+.claw-fig .box-caps {
+  stroke-width: 1.4px;
+}
+.claw-fig .iso-seal-round {
+  fill: #ece6da;
+  fill-opacity: 0.85;
+  stroke: none;
+}
+
+/* Cabinet trim. */
+.claw-fig .iso-dial {
+  fill: #0f0f12;
+  stroke: none;
+}
+.claw-fig .iso-screen {
+  fill: #08080a;
+  stroke: none;
+}
+.claw-fig .iso-light {
+  fill: #ece6da;
+  stroke: none;
+}
+.claw-fig .iso-lightbar {
+  --anatomy-top: #4a4740;
+  --anatomy-shade-0: #34322d;
+  --anatomy-shade-1: #3a3832;
+  --anatomy-shade-2: #403d37;
+  --anatomy-shade-3: #46433c;
+}
+.claw-fig .iso-gusset {
+  fill: #1d1d22;
+  stroke: none;
 }

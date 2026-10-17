@@ -4,6 +4,7 @@
  */
 import { ClawMachine } from "@/components/claw/ClawMachine";
 import type { ClawArt } from "@/components/claw/geometry";
+import { variantOf, type Variant } from "@/components/claw/view";
 import { Logo } from "@/components/Logo";
 import { SplitHeading } from "@/components/motion/SmoothScroll";
 import type { Machine } from "@/lib/machines";
@@ -15,7 +16,7 @@ const LINKS = [
   { href: "#odds", label: "Odds" },
 ];
 
-export function Footer({ art, machines }: { art: ClawArt; machines: Machine[] }) {
+export function Footer({ art, machines }: { art: Record<Variant, ClawArt>; machines: Machine[] }) {
   return (
     <footer className="border-t border-line">
       <section aria-labelledby="cta-title" className="wrap grid items-center gap-12 py-28 md:grid-cols-[minmax(0,7fr)_minmax(0,5fr)] md:py-36">
@@ -36,7 +37,7 @@ export function Footer({ art, machines }: { art: ClawArt; machines: Machine[] })
           </ul>
         </div>
         <div className="mx-auto w-full max-w-[360px]" data-reveal>
-          <ClawMachine art={art} machine={machines.at(-1)?.slug} label="The Vault machine at rest, a sealed box on top of the pile." />
+          <ClawMachine art={art[variantOf(machines.at(-1)?.slug)]} machine={machines.at(-1)?.slug} label="The Vault machine at rest, a sealed box on top of the pile." />
         </div>
       </section>
 

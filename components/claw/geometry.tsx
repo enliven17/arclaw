@@ -14,25 +14,21 @@ import type { ReactElement, ReactNode } from "react";
 import {
   corners,
   cylinder,
-  depthOf,
   extrude,
   haloOf,
   insetPlan,
   pathOf,
   planOutline,
   ring,
-  segment,
-  sideMatrix,
   sideRing,
+  ringSeam,
   sideSeam,
   sideTicks,
   slabOf,
   type Flat,
-  type Plane,
   type Point3,
 } from "@/components/iso/iso-kit";
 import { Dots, Line, Poly, Solid } from "@/components/iso/draw";
-import { CLAW, CREAM, LOCKUP, LOCKUP_W, MARK_BODY, MARK_PRONGS, MARK_SIZE, PRONG_W, WORD_PATH } from "@/lib/brand/logo";
 import {
   BODY,
   BOX,
@@ -55,92 +51,78 @@ import {
   TROLLEY_BOTTOM,
   Z,
   at,
+  type Variant,
 } from "./view";
 
-/* Small helpers in world space. */
-const box3 = (x0: number, y0: number, z0: number, x1: number, y1: number, z1: number, r = 0.4, bevel = 0) =>
-  slabOf({ x: x0, y: y0, w: x1 - x0, d: y1 - y0, r }, z0, z1 - z0, P, 2, bevel);
-const poly = (pts: Point3[]) => pathOf(pts.map(at), true);
-const line = (pts: Point3[]) => pathOf(pts.map(at));
-const seg = (a: Point3, b: Point3) => segment(a, b, P);
-const dots = (pts: Point3[]) => pts.map(at);
-const byDepth = <T,>(items: T[], c: (t: T) => Point3) => [...items].sort((a, b) => depthOf(c(a), P) - depthOf(c(b), P));
-
-/** Rectangle on the front face (y = const) from x0..x1, z0..z1. */
-const frontRect = (y: number, x0: number, x1: number, z0: number, z1: number) =>
-  poly([
-    [x0, y, z0],
-    [x1, y, z0],
-    [x1, y, z1],
-    [x0, y, z1],
-  ]);
-/** Rectangle on the side face (x = const) from y0..y1, z0..z1. */
-const sideRect = (x: number, y0: number, y1: number, z0: number, z1: number) =>
-  poly([
-    [x, y0, z0],
-    [x, y1, z0],
-    [x, y1, z1],
-    [x, y0, z1],
-  ]);
-
-/** A square ring turned by `yaw` radians about its centre. */
-function yawRing(cx: number, cy: number, half: number, yaw: number): Plane[] {
-  const c = Math.cos(yaw);
-  const s = Math.sin(yaw);
-  return [
-    [-half, -half],
-    [half, -half],
-    [half, half],
-    [-half, half],
-  ].map(([u, v]) => [cx + u! * c - v! * s, cy + u! * s + v! * c] as Plane);
-}
+import { Base, BodyTrim, DeckTrim, FrameTrim, ShelfLight, Topper, UsdcMark } from "./trim";
+import { box3, byDepth, dots, frontRect, line, poly, seg, sideRect, yawRing } from "./helpers";
 
 /* ---------- Prize box ---------- */
 
-/** A sealed prize box: a cube with a tape band over the top and down the two faces you can see, and a seal tab. */
-export function PrizeBox({ cx, cy, z, yaw = 0, k }: { cx: number; cy: number; z: number; yaw?: number; k: string }) {
+/**
+ * A sealed prize box, finished to match its machine:
+ *   single  plain cardboard: one strip of tape over the lid seam
+ *   stack   printed: a cream band over the top and down the front, a printed panel with the mark
+ *   vault   rigid: a lid line all round, metal corner caps top and bottom, a round seal on the front
+ */
+export function PrizeBox({ cx, cy, z, yaw = 0, k, variant = "single" }: { cx: number; cy: number; z: number; yaw?: number; k: string; variant?: Variant }) {
   const half = BOX / 2;
-  const solid = extrude(yawRing(cx, cy, half, yaw), z, BOX, P, { convex: true });
+  const ring = yawRing(cx, cy, half, yaw);
+  const solid = extrude(ring, z, BOX, P, { convex: true });
   const c = Math.cos(yaw);
   const s = Math.sin(yaw);
   const w = (u: number, v: number, zz: number): Point3 => [cx + u * c - v * s, cy + u * s + v * c, zz];
   const top = z + BOX;
-  const t = 2.2; // tape half width
-  // Tape runs along the box's local v axis: over the top and down the +v face, which faces the viewer.
-  const tape = [
-    line([w(-t, -half, top), w(-t, half, top), w(-t, half, z)]),
-    line([w(t, -half, top), w(t, half, top), w(t, half, z)]),
-  ].join("");
-  // Seam of the lid flaps across the tape, edge to edge on the top.
+  // The faces you can see: +v (front) and +u (side) for this camera.
+  if (variant === "vault") {
+    const lid = top - 4.5;
+    const cap = 2.6;
+    const capAt = (u: number, v: number) => [
+      line([w(u, v, top - cap), w(u, v, top)]),
+      line([w(u, v, z), w(u, v, z + cap)]),
+    ];
+    const caps = [capAt(half, half), capAt(-half, half), capAt(half, -half)].flat().join("");
+    return (
+      <g key={k} className="prize-box" data-box-variant="vault">
+        <Solid paths={solid} tone="mid" crease="lo" inner={<Line d={ringSeam(ring, lid, P)} tone="lo" />} />
+        <Line d={caps} tone="hi" className="box-caps" />
+        <Line d={planOutline({ x: cx - half + 2.5, y: cy - half + 2.5, w: BOX - 5, d: BOX - 5, r: 0.6 }, top, P, 2)} tone="faint" />
+        <path className="iso-seal-round" d={pathOf(Array.from({ length: 20 }, (_, i) => { const a = (i / 20) * Math.PI * 2; return at(w(Math.cos(a) * 2.6, half, z + BOX * 0.42 + Math.sin(a) * 2.6)); }), true)} />
+      </g>
+    );
+  }
+  if (variant === "stack") {
+    const t = 3; // band half width
+    const band = [
+      line([w(-t, -half, top), w(-t, half, top), w(-t, half, z)]),
+      line([w(t, -half, top), w(t, half, top), w(t, half, z)]),
+    ].join("");
+    const panel = poly([w(half, -half + 3, z + 4), w(half, half - 3, z + 4), w(half, half - 3, top - 4), w(half, -half + 3, top - 4)]);
+    return (
+      <g key={k} className="prize-box" data-box-variant="stack">
+        <Solid paths={solid} tone="mid" crease="lo" />
+        <Poly className="iso-band" d={poly([w(-t, -half, top), w(t, -half, top), w(t, half, top), w(-t, half, top)])} />
+        <Poly className="iso-band" d={poly([w(-t, half, top), w(t, half, top), w(t, half, z), w(-t, half, z)])} />
+        <Line d={band} tone="lo" />
+        <Line d={panel} tone="lo" />
+        <Line d={line([w(half, -half + 6, z + 8), w(half, half - 6, z + 8)]) + line([w(half, -half + 6, z + 10.5), w(half, half - 9, z + 10.5)])} tone="faint" />
+      </g>
+    );
+  }
+  const t = 1.6; // tape half width
   const seam = line([w(-half, 0, top), w(-t, 0, top)]) + line([w(t, 0, top), w(half, 0, top)]);
-  // Seal: a small square on the tape where it turns down the face.
-  const seal = poly([w(-t, half, z + BOX - 2.5), w(t, half, z + BOX - 2.5), w(t, half, z + BOX - 6.5), w(-t, half, z + BOX - 6.5)]);
   return (
-    <g key={k} className="prize-box">
+    <g key={k} className="prize-box" data-box-variant="single">
       <Solid paths={solid} tone="mid" crease="lo" />
       <Poly className="iso-tape" d={poly([w(-t, -half, top), w(t, -half, top), w(t, half, top), w(-t, half, top)])} />
-      <Poly className="iso-tape" d={poly([w(-t, half, top), w(t, half, top), w(t, half, z), w(-t, half, z)])} />
-      <Line d={tape} tone="lo" />
+      <Poly className="iso-tape" d={poly([w(-t, half, top), w(t, half, top), w(t, half, top - 5), w(-t, half, top - 5)])} />
       <Line d={seam} tone="faint" />
-      <Poly className="iso-seal" d={seal} />
+      <Line d={line([w(-t, -half, top), w(-t, half, top), w(-t, half, top - 5), w(t, half, top - 5), w(t, half, top), w(t, -half, top)])} tone="lo" />
     </g>
   );
 }
 
 /* ---------- Back layer: cabinet, deck, play field, pile ---------- */
-
-function Feet() {
-  return (
-    <g key="feet">
-      {byDepth(corners(PLINTH, 10), ([x, y]) => [x, y, 0]).map(([x, y], i) => (
-        <g key={i}>
-          <Solid paths={cylinder(x, y, 5, Z.foot, 1.6, P, 28)} tone="lo" />
-          <Solid paths={cylinder(x, y, 3.4, Z.foot + 1.6, -Z.foot - 1.6, P, 24)} tone="mid" />
-        </g>
-      ))}
-    </g>
-  );
-}
 
 function Body() {
   const yF = BODY.y + BODY.d; // front face
@@ -248,7 +230,7 @@ const PILE: { cx: number; cy: number; z: number; yaw: number }[] = (() => {
   return out;
 })();
 
-function ChuteAndPile() {
+function ChuteAndPile({ variant }: { variant: Variant }) {
   const { x, y, w, d } = CHUTE;
   const t = CHUTE_WALL;
   const z0 = Z.floor;
@@ -274,7 +256,7 @@ function ChuteAndPile() {
       ),
     },
   ];
-  const boxes: Item[] = PILE.map((b, i) => ({ c: [b.cx, b.cy, b.z], node: <PrizeBox key={`pb-${i}`} k={`pb-${i}`} cx={b.cx} cy={b.cy} z={b.z} yaw={b.yaw} /> }));
+  const boxes: Item[] = PILE.map((b, i) => ({ c: [b.cx, b.cy, b.z], node: <PrizeBox key={`pb-${i}`} k={`pb-${i}`} cx={b.cx} cy={b.cy} z={b.z} yaw={b.yaw} variant={variant} /> }));
   // Level 1 and the chute share the floor; level 2 always sits over level 1, so draw it after.
   const floorItems = byDepth([...walls, ...boxes.slice(0, 12)], (i) => i.c);
   const upper = byDepth(boxes.slice(12), (i) => i.c);
@@ -411,80 +393,37 @@ function NearFrame() {
   );
 }
 
-/** The arclaw lockup printed on the marquee sign, from lib/brand/logo (same paths as the site and brand kit). */
-const SIGN_SCALE = 12.6 / 40;
-function SignLockup({ at, top }: { at: Plane; top: number }) {
-  return (
-    <g transform={sideMatrix(at, top, P, "left")}>
-      <g transform={`scale(${SIGN_SCALE})`}>
-        <g transform={`scale(${LOCKUP.mark / MARK_SIZE})`}>
-          <path fill={CREAM} d={MARK_BODY} />
-          <path fill="none" stroke={CLAW} strokeWidth={PRONG_W} strokeLinejoin="miter" d={MARK_PRONGS} />
-        </g>
-        <path fill={CREAM} transform={`translate(${LOCKUP.mark + LOCKUP.gap} ${LOCKUP.wordY}) scale(${LOCKUP.wordScale})`} d={WORD_PATH} />
-      </g>
-    </g>
-  );
-}
-
-function Header() {
-  const lip = { x: -1, y: -1, w: 122, d: 112, r: 1.4 };
-  const head = { x: 0, y: 0, w: 120, d: 110, r: 1.2 };
-  const yF = 110;
-  const xR = 120;
-  const sign = { x0: 14, x1: 106, z0: Z.header + 5, z1: Z.header + 22 };
-  const grille: Point3[] = [];
-  for (let gy = 0; gy < 9; gy++) for (let gz = 0; gz < 3; gz++) grille.push([xR, 26 + gy * 6.5, Z.header + 7 + gz * 4.5]);
-  return (
-    <g key="header">
-      <Solid paths={slabOf(lip, Z.ceiling, Z.header - Z.ceiling, P, 6)} tone="mid" />
-      <Solid paths={slabOf(head, Z.header, Z.headerTop - Z.header, P, 6, 1)} tone="mid" crease="lo" />
-      <Line d={planOutline(insetPlan(head, 6), Z.headerTop, P, 4)} tone="faint" />
-      <Dots points={dots(corners(head, 3).map(([x, y]) => [x, y, Z.headerTop] as Point3))} size={0.5} />
-      {/* Service hatch with screws and a pull, a cable gland and a vent panel on the roof. */}
-      <Solid paths={box3(18, 16, Z.headerTop, 58, 44, Z.headerTop + 1.2, 0.8, 0.3)} tone="mid" />
-      <Dots points={dots(corners({ x: 18, y: 16, w: 40, d: 28, r: 0 }, 2.2).map(([x, y]) => [x, y, Z.headerTop + 1.2] as Point3))} size={0.5} />
-      <Solid paths={box3(34, 40, Z.headerTop + 1.2, 42, 42, Z.headerTop + 2.4, 0.3)} tone="lo" />
-      <Solid paths={cylinder(92, 22, 3.4, Z.headerTop, 2, P, 24, 0.3)} tone="mid" />
-      <Line d={ring(92, 22, 1.6, Z.headerTop + 2, P, 16)} tone="lo" />
-      <Line d={planOutline({ x: 66, y: 52, w: 40, d: 36, r: 1 }, Z.headerTop, P, 2)} tone="lo" />
-      <Line d={Array.from({ length: 6 }, (_, i) => seg([66, 56 + i * 5.6, Z.headerTop], [106, 56 + i * 5.6, Z.headerTop])).join("")} tone="faint" />
-      <Poly className="iso-sign" d={frontRect(yF, sign.x0, sign.x1, sign.z0, sign.z1)} />
-      <Line d={frontRect(yF, sign.x0, sign.x1, sign.z0, sign.z1)} tone="mid" />
-      <Dots points={dots([[sign.x0 + 1.6, yF, sign.z0 + 1.6], [sign.x1 - 1.6, yF, sign.z0 + 1.6], [sign.x0 + 1.6, yF, sign.z1 - 1.6], [sign.x1 - 1.6, yF, sign.z1 - 1.6]])} size={0.5} />
-      <SignLockup at={[60 - (LOCKUP_W * SIGN_SCALE) / 2, yF]} top={sign.z1 - 2.2} />
-      <Dots points={grille.map(at)} size={0.55} tone="lo" />
-    </g>
-  );
-}
-
 /* ---------- Moving parts drawn at rest ---------- */
 
 function ButtonCap() {
   return <Solid paths={cylinder(BUTTON.x, BUTTON.y, 4.2, Z.deckTop + 1.4, 2.6, P, 32, 0.5)} tone="hi" crease="lo" />;
 }
 
+/** The coin: a USDC (Circle's mark) on its edge, facing the slot. */
 function Coin() {
   const c: Point3 = [SLOT.x, 112, SLOT.z];
   return (
     <g>
       <path className="iso-coin" d={sideRing(c, 4.2, "y", P, 32)} />
-      <Line d={sideRing(c, 3.2, "y", P, 28)} tone="lo" />
+      <UsdcMark x={c[0]} y={c[1]} z={c[2]} r={4.2} />
     </g>
   );
 }
 
 /** Everything the live component needs, keyed (react.md: lazy element props need stable keys). */
-export function clawArt() {
+export function clawArt(variant: Variant = "single") {
   return {
     back: (
       <g key="back">
         <path className="iso-halo" d={haloOf(PLINTH, Z.foot, 6, P)} />
-        <Feet />
+        <Base variant={variant} />
         <Body />
+        <BodyTrim variant={variant} />
         <Deck />
+        <DeckTrim variant={variant} />
         <FarField />
-        <ChuteAndPile />
+        <ShelfLight variant={variant} />
+        <ChuteAndPile variant={variant} />
         <Rail ry={RAIL_Y[0]} near={false} />
       </g>
     ),
@@ -505,7 +444,7 @@ export function clawArt() {
     ),
     box: (
       <g key="box">
-        <PrizeBox k="target" cx={TARGET.x} cy={TARGET.y} z={TARGET.z} yaw={0} />
+        <PrizeBox k="target" cx={TARGET.x} cy={TARGET.y} z={TARGET.z} yaw={0} variant={variant} />
       </g>
     ),
     nearRail: <Rail key="near-rail" ry={RAIL_Y[1]} near />,
@@ -515,8 +454,13 @@ export function clawArt() {
         <Truck ry={RAIL_Y[1]} />
       </g>
     ),
-    near: <NearFrame key="near-frame" />,
-    header: <Header key="header" />,
+    near: (
+      <g key="near-frame">
+        <NearFrame />
+        <FrameTrim variant={variant} />
+      </g>
+    ),
+    header: <Topper key="header" variant={variant} />,
     buttonCap: (
       <g key="button-cap">
         <ButtonCap />

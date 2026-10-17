@@ -10,12 +10,13 @@
 import { useRef, useState } from "react";
 import { ClawMachine, type ClawHandle } from "@/components/claw/ClawMachine";
 import type { ClawArt } from "@/components/claw/geometry";
+import { variantOf, type Variant } from "@/components/claw/view";
 import { SplitHeading } from "@/components/motion/SmoothScroll";
 import { PINNED, REDUCED, ScrollTrigger, gsap, pinType, useGSAP } from "@/lib/motion";
 import type { Machine } from "@/lib/machines";
 import { MachineSwitch } from "./MachineSwitch";
 
-export function Hero({ art, machines }: { art: ClawArt; machines: Machine[] }) {
+export function Hero({ art, machines }: { art: Record<Variant, ClawArt>; machines: Machine[] }) {
   const root = useRef<HTMLElement>(null);
   const claw = useRef<ClawHandle>(null);
   const [id, setId] = useState(machines[0]!.id);
@@ -72,7 +73,7 @@ export function Hero({ art, machines }: { art: ClawArt; machines: Machine[] }) {
         </div>
 
         <figure data-cabinet="" className="mx-auto w-full max-w-[400px] md:max-w-[500px] md:justify-self-end">
-          <ClawMachine ref={claw} art={art} machine={machine.slug} />
+          <ClawMachine key={machine.slug} ref={claw} art={art[variantOf(machine.slug)]} machine={machine.slug} />
           <figcaption className="sr-only">
             The {machine.name} machine. The claw moves over the pile, drops, grips a sealed box, carries it to the chute
             and lets go.
