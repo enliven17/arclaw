@@ -69,7 +69,7 @@ contract A2PoCTest is Base {
         if (got < 1 ether) {
             assertLt(got * 10_000 / 2 ether, 5000, "pack worth < floorBps of the price paid");
         }
-        (uint256 rtpBps,,,) = box.tableStats(box.currentTable(M1) - 1);
+        (uint256 rtpBps,,,) = lens.stats(box, M1);
         assertLt(rtpBps, 6000, "table EV now under rtpMinBps of the current price");
     }
 

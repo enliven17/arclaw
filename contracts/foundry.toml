@@ -5,7 +5,7 @@ libs = ["lib"]
 solc = "0.8.28"          # D20 SDK sources pin 0.8.28
 evm_version = "cancun"   # D20 guidance for Arc
 optimizer = true
-optimizer_runs = 200
+optimizer_runs = 100
 via_ir = true             # keeps Arclaw under 24 KB (22.5 KB vs 25 KB legacy)
 fs_permissions = [{ access = "read-write", path = "../lib" }]
 

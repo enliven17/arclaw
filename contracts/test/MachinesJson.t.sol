@@ -3,6 +3,7 @@ pragma solidity 0.8.28;
 
 import {Test, console} from "forge-std/Test.sol";
 import {Arclaw} from "../src/Arclaw.sol";
+import {ArclawLens} from "../src/ArclawLens.sol";
 import {MockStock} from "../src/mocks/MockStock.sol";
 import {MockPriceSource} from "../src/mocks/MockPriceSource.sol";
 import {MockVRFCoordinator} from "../src/mocks/MockVRFCoordinator.sol";
@@ -64,7 +65,7 @@ contract MachinesJsonTest is Test {
             m.id, uint128(m.priceUsdc * 1e18), uint16(pol.floorBps), uint32(m.capBps), uint16(pol.rtpMinBps), uint16(pol.rtpMaxBps)
         );
         box.setPrizes(m.id, b.buildFor(m, tok, px));
-        (uint256 rtp, uint256 minBps, uint256 maxBps,) = box.tableStats(box.currentTable(m.id) - 1);
+        (uint256 rtp, uint256 minBps, uint256 maxBps,) = new ArclawLens().stats(box, m.id);
         console.log(m.name, "rtp bps", rtp);
         console.log("  min pack bps", minBps, "max pack bps", maxBps);
         assertGe(minBps, pol.floorBps);

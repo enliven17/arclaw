@@ -31,6 +31,7 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, EIP712, D20
 
     uint256 public constant CARDS_PER_BOX = 3;
     uint256 public constant MAX_BOXES_PER_OPEN = 20;
+    uint256 public constant MAX_OUTCOMES = 64; // bounds setPrizes gas and the reveal draw scan
     uint32 public constant MIN_CALLBACK_GAS = 30_000; // D20 bounds
     uint32 public constant MAX_CALLBACK_GAS = 1_000_000;
     /// Sanity bounds on the owner's per-machine rules.
@@ -232,6 +233,7 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, EIP712, D20
     error TooManyBoxes();
     error UnknownMachine();
     error NoPrizes();
+    error TooManyOutcomes();
     error BadPrize(uint256 index);
     error BelowFloor(uint256 index, uint256 valueBps);
     error AboveCap(uint256 index, uint256 valueBps);
@@ -492,38 +494,11 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, EIP712, D20
         return _tables.length;
     }
 
-    /// @notice Realised odds of a stored table: expected value, smallest and largest outcome, in bps of the
-    ///         machine's current price, plus the total weight.
-    function tableStats(uint256 tableId)
-        external
-        view
-        returns (uint256 rtpBps, uint256 minBps, uint256 maxBps, uint256 totalWeight)
-    {
-        Outcome[] storage t = _tables[tableId];
-        uint256 price = machines[tableMachine[tableId]].price;
-        uint256 ev;
-        minBps = type(uint256).max;
-        for (uint256 i; i < t.length; ++i) {
-            uint256 v = t[i].value;
-            totalWeight += t[i].weight;
-            ev += v * t[i].weight;
-            uint256 bps = v * 10_000 / price;
-            if (bps < minBps) minBps = bps;
-            if (bps > maxBps) maxBps = bps;
-        }
-        rtpBps = ev * 10_000 / totalWeight / price;
-    }
-
     /// @notice Native balance above the reserved liabilities: what withdraw and spend may use.
     function freeBalance() public view returns (uint256) {
         uint256 bal = address(this).balance;
         uint256 owed = reservedCredit + pendingReserve;
         return bal > owed ? bal - owed : 0;
-    }
-
-    /// @notice Current exact VRF fee for one open (valid inside a transaction; via eth_call the base fee may read 0).
-    function quoteVrfFee() external view returns (uint256) {
-        return _quoteRandomness(callbackGasLimit);
     }
 
     /// @notice Card value in native USDC (18 dp) at the price source's price.
@@ -761,6 +736,7 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, EIP712, D20
         Machine memory mc = machines[machineId];
         if (mc.price == 0) revert UnknownMachine();
         if (input.length == 0) revert NoPrizes();
+        if (input.length > MAX_OUTCOMES) revert TooManyOutcomes();
         values = new uint256[3][](input.length);
         uint256 w;
         uint256 ev;

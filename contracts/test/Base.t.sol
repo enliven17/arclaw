@@ -3,6 +3,7 @@ pragma solidity 0.8.28;
 
 import {Test} from "forge-std/Test.sol";
 import {Arclaw} from "../src/Arclaw.sol";
+import {ArclawLens} from "../src/ArclawLens.sol";
 import {MockStock} from "../src/mocks/MockStock.sol";
 import {MockPriceSource} from "../src/mocks/MockPriceSource.sol";
 import {MockAstockDesk} from "../src/mocks/MockAstockDesk.sol";
@@ -12,6 +13,7 @@ import {Vm} from "forge-std/Vm.sol";
 
 abstract contract Base is Test {
     Arclaw box;
+    ArclawLens lens = new ArclawLens();
     MockVRFCoordinator vrf;
     MockPriceSource prices;
     MockAstockDesk desk;

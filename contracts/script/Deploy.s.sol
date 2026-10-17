@@ -4,6 +4,7 @@ pragma solidity 0.8.28;
 import {Script, console} from "forge-std/Script.sol";
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {Arclaw} from "../src/Arclaw.sol";
+import {ArclawLens} from "../src/ArclawLens.sol";
 import {AstockPriceSource} from "../src/AstockPriceSource.sol";
 import {MockStock} from "../src/mocks/MockStock.sol";
 import {MockPriceSource} from "../src/mocks/MockPriceSource.sol";
@@ -152,7 +153,7 @@ abstract contract ArcConfig is Script {
 /// Reads the live tables back from the contract: prints realised RTP, floor and cap per machine and writes
 /// ../lib/machines.resolved.json for the site's odds section.
 abstract contract OddsWriter is ArcConfig {
-    function printAndWrite(Arclaw box, string memory path) internal {
+    function printAndWrite(Arclaw box, ArclawLens lens, string memory path) internal {
         uint256[] memory ids = box.machineIds();
         string memory out = string.concat(
             '{\n  "chainId": ', vm.toString(block.chainid), ',\n  "arclaw": "', vm.toString(address(box)),
@@ -161,7 +162,7 @@ abstract contract OddsWriter is ArcConfig {
         string memory json = vm.readFile(MACHINES);
         MachineCfg[] memory cfg = readMachines(json);
         for (uint256 i; i < ids.length; ++i) {
-            out = string.concat(out, i == 0 ? "\n" : ",\n", _machine(box, ids[i], _tiersOf(cfg, ids[i])));
+            out = string.concat(out, i == 0 ? "\n" : ",\n", _machine(box, lens, ids[i], _tiersOf(cfg, ids[i])));
         }
         out = string.concat(out, "\n  ]\n}\n");
         if (bytes(path).length > 0) vm.writeFile(path, out);
@@ -174,10 +175,14 @@ abstract contract OddsWriter is ArcConfig {
         revert("machine not in machines.json");
     }
 
-    function _machine(Arclaw box, uint256 id, Tier[] memory names) internal view returns (string memory s) {
+    function _machine(Arclaw box, ArclawLens lens, uint256 id, Tier[] memory names)
+        internal
+        view
+        returns (string memory s)
+    {
         (uint128 price, uint16 floorBps, uint32 capBps, uint16 rtpMin, uint16 rtpMax) = box.machines(id);
         uint256 tableId = box.currentTable(id) - 1;
-        (uint256 rtp, uint256 minBps, uint256 maxBps, uint256 total) = box.tableStats(tableId);
+        (uint256 rtp, uint256 minBps, uint256 maxBps, uint256 total) = lens.stats(box, id);
         console.log("machine", id, "price (USDC)", price / 1e18);
         console.log("  realised RTP bps", rtp, "band", string.concat(vm.toString(rtpMin), "..", vm.toString(rtpMax)));
         console.log("  smallest pack bps", minBps, "floor", floorBps);
@@ -257,6 +262,7 @@ abstract contract OddsWriter is ArcConfig {
 ///   USD 6 dp, default $2000), MOCK_PRICES=1 (testnet: skip the mainnet fork, use fixed prices).
 contract Deploy is OddsWriter {
     Arclaw public box;
+    ArclawLens public lens;
     address public priceSource;
     address public desk;
     address public operator;
@@ -283,6 +289,7 @@ contract Deploy is OddsWriter {
         priceSource = address(src);
         desk = address(new MockAstockDesk(IPriceSource(priceSource)));
         box = new Arclaw(vm.envOr("BOX_URI", string("")), D20_TESTNET, 0.1 ether);
+        lens = new ArclawLens();
 
         string[8] memory sym = symbols();
         address[] memory list = new address[](8);
@@ -299,7 +306,7 @@ contract Deploy is OddsWriter {
         _configure();
         vm.stopBroadcast();
 
-        printAndWrite(box, "../lib/machines.resolved.json");
+        printAndWrite(box, lens, "../lib/machines.resolved.json");
         _write("../lib/deployments/arc-testnet.json", D20_TESTNET);
     }
 
@@ -321,11 +328,12 @@ contract Deploy is OddsWriter {
             prices[i] = src.priceOf(tokens[i]);
         }
         box = new Arclaw(vm.envOr("BOX_URI", string("")), D20_MAINNET, 0.05 ether);
+        lens = new ArclawLens();
         box.pause(); // no inventory yet: every card would refund
         _configure();
         vm.stopBroadcast();
 
-        printAndWrite(box, ""); // print only; the resolved file tracks the testnet deployment
+        printAndWrite(box, lens, ""); // print only; the resolved file tracks the testnet deployment
         console.log("PAUSED. Fund inventory via spend(), then unpause().");
     }
 
@@ -377,6 +385,6 @@ contract Odds is OddsWriter {
     function run() external {
         string memory dep = vm.readFile("../lib/deployments/arc-testnet.json");
         Arclaw box = Arclaw(payable(vm.parseJsonAddress(dep, ".arclaw")));
-        printAndWrite(box, block.chainid == TESTNET ? "../lib/machines.resolved.json" : "");
+        printAndWrite(box, new ArclawLens(), block.chainid == TESTNET ? "../lib/machines.resolved.json" : "");
     }
 }

@@ -134,7 +134,7 @@ contract A2DeployForkTest is Test {
         vm.deal(p, 100 ether);
         vm.prank(p);
         box.play{value: 20 ether}(1, 20);
-        uint256 fee = box.quoteVrfFee();
+        uint256 fee = d.lens().quoteVrfFee(box);
         console.log("vrf fee in tx", fee);
         vm.prank(p);
         (uint256 id, uint256 req) = box.open(1, 20);

@@ -329,7 +329,7 @@ contract RulesTest is Base {
         vm.prank(op);
         box.operatorSetPrizes(M1, t);
         uint256 tid = box.currentTable(M1) - 1;
-        (uint256 rtp, uint256 minBps, uint256 maxBps, uint256 w) = box.tableStats(tid);
+        (uint256 rtp, uint256 minBps, uint256 maxBps, uint256 w) = lens.stats(box, M1);
         assertEq(rtp, 7500);
         assertEq(minBps, 5000);
         assertEq(maxBps, 15_000);
@@ -502,6 +502,17 @@ contract RulesTest is Base {
         vm.prank(alice);
         vm.expectRevert();
         box.setMaxTableAge(1 days);
+    }
+
+    function test_maxOutcomes() public {
+        box.setMachine(M1, uint128(P1), 5000, 100_000, 7500, 7500);
+        Arclaw.OutcomeInput[] memory t = new Arclaw.OutcomeInput[](65);
+        for (uint256 i; i < 65; ++i) t[i] = _pack(address(nvda), 1, 0, 0.75 ether);
+        vm.expectRevert(Arclaw.TooManyOutcomes.selector);
+        box.setPrizes(M1, t);
+        assembly { mstore(t, 64) } // the limit itself lands
+        box.setPrizes(M1, t);
+        assertEq(box.outcomes(M1).length, 64);
     }
 
     function test_operatorOnly() public {

@@ -33,7 +33,7 @@ contract Audit1Test is Base {
         // Owner reprices machine 2 to $1 (e.g. a promo), intending to call setPrizes next.
         box.setMachine(M2, uint128(P1), 5000, 100_000, 6000, 8500);
 
-        (uint256 rtpBps,,,) = box.tableStats(box.currentTable(M2) - 1);
+        (uint256 rtpBps,,,) = lens.stats(box, M2);
         assertEq(rtpBps, 37_500, "live table now pays 375% of the box price");
         assertGt(rtpBps, box.MAX_RTP_BPS());
 
