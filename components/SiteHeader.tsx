@@ -13,6 +13,8 @@ import { useEffect, useRef, useState } from "react";
 import { getLenis } from "@/lib/motion";
 import { cn } from "@/lib/cn";
 import { Logo } from "./Logo";
+import { SoundToggle } from "./SoundToggle";
+import { play } from "@/lib/sfx";
 
 const NAV = [
   { href: "/#machines", label: "Machines" },
@@ -52,10 +54,14 @@ export function SiteHeader() {
   }, []);
 
   const open = () => {
+    play("open");
     menu.current?.showModal();
     getLenis()?.stop();
   };
-  const close = () => menu.current?.close();
+  const close = () => {
+    play("close");
+    menu.current?.close();
+  };
 
   return (
     <>
@@ -82,6 +88,7 @@ export function SiteHeader() {
             </ul>
           </nav>
           <div className="flex items-center gap-2">
+            <SoundToggle />
             <Link href="/app" className="btn-ghost !min-h-[36px] !px-3.5 !py-2 text-[14px]">
               Open app
             </Link>

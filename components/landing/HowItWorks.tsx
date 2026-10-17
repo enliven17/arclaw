@@ -11,6 +11,7 @@
 import { useRef } from "react";
 import { PINNED, REDUCED, ScrollTrigger, gsap, pinType, useGSAP } from "@/lib/motion";
 import { whenSplashDone } from "@/lib/splash";
+import { play } from "@/lib/sfx";
 import { examplePack, type Machine } from "@/lib/machines";
 import { SplitHeading } from "@/components/motion/SmoothScroll";
 import { BoosterPack, PACK_SEAL_AT } from "@/components/pack/BoosterPack";
@@ -47,7 +48,14 @@ export function HowItWorks({ machines }: { machines: Machine[] }) {
         if (reduced) return;
         const q = gsap.utils.selector(el);
         const items = q("[data-step]");
-        const setStep = (i: number) => items.forEach((s, k) => (s.dataset.state = k < i ? "past" : k === i ? "active" : "future"));
+        let shown = 0;
+        const STEP_SOUND = ["coin", "drop", "tear", "flip"] as const;
+        const setStep = (i: number) => {
+          items.forEach((s, k) => (s.dataset.state = k < i ? "past" : k === i ? "active" : "future"));
+          // A quiet cue when the scene moves forward into a step, never when scrubbing back.
+          if (i > shown) play(STEP_SOUND[i]!);
+          shown = i;
+        };
 
         const coin = q("[data-coin]");
         const box = q("[data-box]");
