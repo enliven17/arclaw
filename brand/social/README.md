@@ -12,7 +12,7 @@ Rebuild the images with `node brand/social/render.mjs`. They draw from `lib/bran
 
 - Display name: `arclaw`
 - Handle: `@arclawapp` (https://x.com/arclawapp)
-- Website: to be decided
+- Website: `arclaw.app`
 
 ## One-liners
 
