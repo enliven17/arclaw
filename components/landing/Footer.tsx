@@ -28,7 +28,7 @@ export function Footer({ art, machines }: { art: Record<Variant, ClawArt>; machi
           <ul className="mt-10 grid max-w-[560px] gap-3 lg:grid-cols-3" data-reveal>
             {machines.map((m, i) => (
               <li key={m.id}>
-                <a href="#main" className={`${i === 0 ? "btn" : "btn-ghost"} w-full !justify-between`}>
+                <a href={`/app/play/${m.slug}`} className={`${i === 0 ? "btn" : "btn-ghost"} w-full !justify-between`}>
                   <span>{m.name}</span>
                   <span className="money">{m.priceUsdc} USDC</span>
                 </a>

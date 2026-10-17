@@ -51,9 +51,14 @@ export function Machines({ art, machines }: { art: Record<Variant, ClawArt>; mac
                       <dd className="money mt-1 text-[17px]">{usdc(top.valueUsdc)}</dd>
                     </div>
                   </dl>
-                  <a href="#odds" className="btn-ghost mt-6 w-full">
-                    {m.name} odds
-                  </a>
+                  <div className="mt-6 grid grid-cols-2 gap-2">
+                    <a href={`/app/play/${m.slug}`} className="btn-cream w-full">
+                      Play {m.name}
+                    </a>
+                    <a href="#odds" className="btn-ghost w-full">
+                      Odds
+                    </a>
+                  </div>
                 </div>
               </li>
             );

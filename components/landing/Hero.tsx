@@ -4,9 +4,10 @@
  * Hero: the slogan, one subline, a machine switcher and the play button, next to the cabinet.
  *
  * Wide screens with a fine pointer pin the hero and scrub the claw's play with the scroll. Touch and narrow
- * screens play it once when the cabinet is in view. The button plays it on demand; the app will wire payment
- * to the same play(). Reduced motion: the machine stays at rest and the button shows the final frame.
+ * screens play it once when the cabinet is in view. The landing is marketing only: the button opens the machine in
+ * the app (/app/play/<machine>). Reduced motion: the machine stays at rest.
  */
+import Link from "next/link";
 import { useRef, useState } from "react";
 import { ClawMachine, type ClawHandle } from "@/components/claw/ClawMachine";
 import type { ClawArt } from "@/components/claw/geometry";
@@ -63,9 +64,9 @@ export function Hero({ art, machines }: { art: Record<Variant, ClawArt>; machine
             <MachineSwitch machines={machines} value={id} onChange={setId} label="Machine" />
           </div>
           <div className="mt-4 flex flex-wrap items-center gap-3" data-reveal>
-            <button type="button" className="btn-cream" onClick={() => void claw.current?.play()}>
+            <Link href={`/app/play/${machine.slug}`} className="btn-cream">
               Play {machine.name} for <span className="money">{machine.priceUsdc} USDC</span>
-            </button>
+            </Link>
             <a href="#odds" className="btn-ghost">
               See the odds
             </a>
