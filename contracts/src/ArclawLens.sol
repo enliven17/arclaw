@@ -38,4 +38,27 @@ contract ArclawLens {
     function quoteVrfFee(Arclaw box) external view returns (uint256) {
         return ID20VRF(box.vrfCoordinator()).quoteFee(box.callbackGasLimit());
     }
+
+    /// @notice RTP of a machine's current table at the maximum luck boost (bps of the table price): with
+    ///         probability MAX_BOOST_BPS/10000 a box keeps the better of two draws. Arclaw keeps this inside the band.
+    function luckyRtp(Arclaw box, uint256 machineId) external view returns (uint256) {
+        uint256 t = box.currentTable(machineId);
+        if (t == 0) return 0;
+        uint256 price = box.tablePrice(t - 1);
+        Arclaw.Outcome[] memory o = box.outcomes(machineId);
+        uint256 w;
+        uint256 ev;
+        uint256 pairs;
+        for (uint256 i; i < o.length; ++i) {
+            w += o[i].weight;
+            ev += uint256(o[i].value) * o[i].weight;
+            for (uint256 j; j < o.length; ++j) {
+                uint256 hi = o[i].value > o[j].value ? o[i].value : o[j].value;
+                pairs += uint256(o[i].weight) * o[j].weight * hi;
+            }
+        }
+        if (w == 0 || price == 0) return 0;
+        uint256 q = box.MAX_BOOST_BPS();
+        return ((10_000 - q) * ev * w + q * pairs) / w / w / price;
+    }
 }

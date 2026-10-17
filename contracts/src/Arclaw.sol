@@ -13,6 +13,7 @@ import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import {IPriceSource} from "./interfaces/IPriceSource.sol";
 import {IAstockDesk} from "./interfaces/IAstock.sol";
 import {D20Randomness} from "./vrf/D20Randomness.sol";
+import {ILuck} from "./LuckVault.sol";
 
 /// @title Arclaw: claw machines that pay sealed packs of tokenized stock on Arc
 /// @notice Each machine is an ERC-1155 id with its own price. Pay the price in native USDC (18 dp) per play, get one
@@ -31,6 +32,9 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
     uint256 public constant CARDS_PER_BOX = 3;
     uint256 public constant MAX_BOXES_PER_OPEN = 20;
     uint256 public constant MAX_OUTCOMES = 64; // bounds setPrizes gas and the reveal draw scan
+    /// Luck boost ceiling: with probability boost/10000 a box draws twice and keeps the better pack. Every table's
+    /// RTP band is checked at this maximum, so no holder can push a machine past rtpMaxBps.
+    uint256 public constant MAX_BOOST_BPS = 100;
     uint32 public constant MIN_CALLBACK_GAS = 30_000; // D20 bounds
     uint32 public constant MAX_CALLBACK_GAS = 1_000_000;
     /// Sanity bounds on the owner's per-machine rules.
@@ -133,6 +137,11 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
     uint256 public reserveFloor;
     uint256 internal transient _jitBuys;
 
+    /// ARCLAW staking vault read at open (0 = boosts off).
+    ILuck public luck;
+    /// openingId => luck boost (bps) fixed at open
+    mapping(uint256 => uint256) public openingBoost;
+
     uint32 public callbackGasLimit = 100_000;
     uint256 public maxVrfSubsidy;
 
@@ -163,19 +172,23 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
         uint256 machineId,
         uint256 boxes,
         uint256 tableId,
-        uint256 vrfFee
+        uint256 vrfFee,
+        uint256 boostBps
     );
     event Rerequested(
         uint256 indexed openingId, uint256 indexed oldRequestId, uint256 indexed newRequestId, uint256 vrfFee
     );
     event Fulfilled(uint256 indexed openingId, uint256 indexed requestId, bytes32 word);
+    /// One per box: everything a leaderboard needs (player, machine, pack value in USDC 18 dp, luck used).
     event OutcomeDrawn(
         uint256 indexed openingId,
-        uint256 boxIndex,
+        address indexed opener,
         uint256 indexed machineId,
+        uint256 boxIndex,
         uint256 tier,
         uint256 outcomeIndex,
-        uint256 valueUsdc
+        uint256 valueUsdc,
+        bool boosted
     );
     event CardDrawn(
         uint256 indexed openingId,
@@ -205,6 +218,7 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
     event SinkSet(address sink, bool allowed);
     event Spent(address indexed sink, address indexed stock, uint256 amount, uint256 sharesOut);
     event MaxTableAgeSet(uint256 maxAge);
+    event LuckSet(address vault);
     event JitBought(uint256 indexed openingId, address indexed token, uint256 cost, uint256 shares);
     event JitConfigSet(address desk, uint256 slippageBps, uint256 maxBuys, uint256 maxPerCard, uint256 reserveFloor);
     event VrfConfigSet(uint32 callbackGasLimit, uint256 maxVrfSubsidy);
@@ -310,7 +324,9 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
         (requestId, fee) = _request(openingId, true);
         o.requestId = requestId;
         openingOfRequest[requestId] = openingId + 1;
-        emit Opened(openingId, requestId, msg.sender, machineId, boxes, t - 1, fee);
+        uint256 boost = _boostOf(msg.sender);
+        if (boost != 0) openingBoost[openingId] = boost;
+        emit Opened(openingId, requestId, msg.sender, machineId, boxes, t - 1, fee, boost);
     }
 
     /// @notice Pay out a fulfilled opening. Anyone may call; cards always go to the opener.
@@ -498,6 +514,12 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
         emit MachineActive(machineId, active);
     }
 
+    /// @notice The ARCLAW staking vault (LuckVault). Zero turns boosts off for new opens.
+    function setLuck(ILuck vault) external onlyOwner {
+        luck = vault;
+        emit LuckSet(address(vault));
+    }
+
     function setOperator(address op) external onlyOwner {
         operator = op;
         emit OperatorSet(op);
@@ -606,10 +628,19 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
 
     function _payBox(uint256 openingId, Opening memory m, uint256 b) internal returns (uint256 paid, uint256 refund) {
         Outcome[] storage t = _tables[m.tableId];
-        uint256 idx = _draw(t, tableWeight[m.tableId], uint256(keccak256(abi.encode(m.word, b))));
+        uint256 w = tableWeight[m.tableId];
+        uint256 idx = _draw(t, w, uint256(keccak256(abi.encode(m.word, b))));
+        // Luck: with probability boost/10000 draw a second pack from an independent stream and keep the better one.
+        uint256 boost = openingBoost[openingId];
+        bool boosted;
+        if (boost != 0 && uint256(keccak256(abi.encode(m.word, b, "luck"))) % 10_000 < boost) {
+            uint256 alt = _draw(t, w, uint256(keccak256(abi.encode(m.word, b, "luck", 1))));
+            boosted = true;
+            if (t[alt].value > t[idx].value) idx = alt;
+        }
         Outcome storage out = t[idx];
         uint256 tier = out.tier;
-        emit OutcomeDrawn(openingId, b, m.machineId, tier, idx, out.value);
+        emit OutcomeDrawn(openingId, m.opener, m.machineId, b, tier, idx, out.value, boosted);
         for (uint256 c; c < CARDS_PER_BOX; ++c) {
             Card memory card = out.cards[c];
             uint256 have = _balanceOf(card.token);
@@ -626,6 +657,17 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
                 refund += r;
                 emit Refunded(openingId, m.opener, b, c, r);
             }
+        }
+    }
+
+    /// Luck boost of `player`, capped at MAX_BOOST_BPS. A missing or failing vault means no boost, never a revert.
+    function _boostOf(address player) internal view returns (uint256 bps) {
+        ILuck l = luck;
+        if (address(l) == address(0)) return 0;
+        try l.boostOf(player) returns (uint256 b) {
+            return b > MAX_BOOST_BPS ? MAX_BOOST_BPS : b;
+        } catch {
+            return 0;
         }
     }
 
@@ -695,6 +737,7 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
         if (input.length == 0) revert NoPrizes();
         if (input.length > MAX_OUTCOMES) revert TooManyOutcomes();
         values = new uint256[3][](input.length);
+        uint256[] memory vs = new uint256[](input.length);
         uint256 w;
         uint256 ev;
         for (uint256 i; i < input.length; ++i) {
@@ -708,14 +751,23 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
             }
             if (v * 10_000 < uint256(mc.floorBps) * mc.price) revert BelowFloor(i, v * 10_000 / mc.price);
             if (v * 10_000 > uint256(mc.capBps) * mc.price) revert AboveCap(i, v * 10_000 / mc.price);
+            vs[i] = v;
             w += p.weight;
             ev += v * p.weight;
         }
         rtpBps = ev * 10_000 / w / mc.price;
-        if (ev * 10_000 < uint256(mc.rtpMinBps) * mc.price * w || ev * 10_000 > uint256(mc.rtpMaxBps) * mc.price * w)
-        {
-            revert RtpOutOfBand(rtpBps);
+        if (ev * 10_000 < uint256(mc.rtpMinBps) * mc.price * w) revert RtpOutOfBand(rtpBps);
+        // Max-boost EV = (1 - q) EV + q E[max of two draws], q = MAX_BOOST_BPS / 10000. Scaled by 10000 W^2:
+        // (10000 - MAX_BOOST_BPS) * ev * W + MAX_BOOST_BPS * sum_ij w_i w_j max(v_i, v_j)  <=  rtpMax * price * W^2
+        uint256 pairs;
+        for (uint256 i; i < vs.length; ++i) {
+            uint256 wi = input[i].weight;
+            for (uint256 j; j < vs.length; ++j) {
+                pairs += wi * input[j].weight * (vs[i] > vs[j] ? vs[i] : vs[j]);
+            }
         }
+        uint256 lucky = (10_000 - MAX_BOOST_BPS) * ev * w + MAX_BOOST_BPS * pairs;
+        if (lucky > uint256(mc.rtpMaxBps) * mc.price * w * w) revert RtpOutOfBand(lucky / w / w / mc.price);
     }
 
     function _setPrizes(uint256 machineId, OutcomeInput[] calldata input) internal {

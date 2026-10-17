@@ -66,7 +66,9 @@ contract MachinesJsonTest is Test {
         );
         box.setPrizes(m.id, b.buildFor(m, tok, px));
         (uint256 rtp, uint256 minBps, uint256 maxBps,) = new ArclawLens().stats(box, m.id);
-        console.log(m.name, "rtp bps", rtp);
+        uint256 lucky = new ArclawLens().luckyRtp(box, m.id);
+        console.log(m.name, "rtp bps", rtp, lucky);
+        assertLe(lucky, pol.rtpMaxBps, "max-boost RTP inside the band");
         console.log("  min pack bps", minBps, "max pack bps", maxBps);
         assertGe(minBps, pol.floorBps);
         assertLe(maxBps, m.capBps);

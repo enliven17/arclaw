@@ -117,7 +117,8 @@ contract OpenRevealTest is Base {
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics[0] != Arclaw.OutcomeDrawn.selector) continue;
             assertEq(uint256(logs[i].topics[1]), id);
-            assertEq(uint256(logs[i].topics[2]), M2);
+            assertEq(address(uint160(uint256(logs[i].topics[2]))), alice, "player, for the leaderboard");
+            assertEq(uint256(logs[i].topics[3]), M2);
             (uint256 boxIndex, uint256 tier,, uint256 value) = abi.decode(logs[i].data, (uint256, uint256, uint256, uint256));
             assertEq(boxIndex, 0);
             assertEq(value, tier == 0 ? P2 / 2 : P2 * 3 / 2);
@@ -369,9 +370,9 @@ contract RulesTest is Base {
         box.operatorSetPrizes(M1, t);
 
         t = _table(address(nvda), P1);
-        t[1].weight = 2; // (1.5 + 3) / 5 = 0.9 > 0.85
+        t[1].weight = 2; // (1.5 + 3) / 5 = 0.9 > 0.85; reported at max luck: 0.99 x 0.90 + 0.01 x E[max] 1.14
         vm.prank(op);
-        vm.expectRevert(abi.encodeWithSelector(Arclaw.RtpOutOfBand.selector, 9000));
+        vm.expectRevert(abi.encodeWithSelector(Arclaw.RtpOutOfBand.selector, 9024));
         box.operatorSetPrizes(M1, t);
     }
 
