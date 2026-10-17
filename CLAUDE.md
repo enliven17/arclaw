@@ -12,7 +12,7 @@ Pay USDC on Arc, play a 3D claw machine, win a sealed box. Box opens into a pack
   - expected return (RTP) within a band, default 75 to 85%, so the house edge is 15 to 25%,
   - weights are steeply unequal: small outcomes common, big ones rare.
 - Single source of truth for the tables: `lib/machines.json` (read by the deploy script and the site's odds section).
-- Prizes are paid from pre-bought `.arc` inventory held by the contract. Operator refills via the Astock desk (`buy(stock,minOut,to)`). Pool short for a card: refund that card's value in USDC.
+- Prizes are paid from pre-bought `.arc` inventory held by the contract. Operator refills via the Astock desk (`buy(stock,minOut,to)`). Pool short for a card: refund that card's value in USDC, the lower of its value when the table was set and its current price.
 - Randomness: D20DAO VRF behind a small interface so it can be swapped.
 - Boxes are giftable: to an address, or via claim link (ephemeral key signs the recipient, no front-running).
 - Wallets: Circle passkey smart wallet (mimir `lib/arc/*`) AND injected wallets via wagmi.

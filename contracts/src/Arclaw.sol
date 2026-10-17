@@ -20,8 +20,8 @@ import {D20Randomness} from "./vrf/D20Randomness.sol";
 /// @notice Each machine is an ERC-1155 id with its own price. Pay the price in native USDC (18 dp) per play, get one
 ///         sealed box of that machine. Opening burns boxes and asks the VRF for one word; once it lands anyone can
 ///         `reveal`, which draws ONE weighted outcome per box (a pack of 3 cards) from the machine's table frozen at
-///         open time and pays the cards from inventory. A card the inventory cannot cover is refunded at its value,
-///         fixed in USDC when the table was set.
+///         open time and pays the cards from inventory. A card the inventory cannot cover is refunded in USDC at
+///         the lower of its value when the table was set and its current value.
 ///         Every table, whoever sets it, must satisfy the machine's rules: each outcome worth at least floorBps and
 ///         at most capBps of the price, and the weighted expected value inside [rtpMinBps, rtpMaxBps].
 contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, EIP712, D20Randomness {
@@ -699,9 +699,21 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, EIP712, D20
                 ++paid;
                 paidOut[card.token] += card.amount;
             } else {
-                refund += card.value;
-                emit Refunded(openingId, m.opener, b, c, card.value);
+                uint256 r = _refundValue(card);
+                refund += r;
+                emit Refunded(openingId, m.opener, b, c, r);
             }
+        }
+    }
+
+    /// A short card refunds the lower of its value when the table was set and its value now, so a fall in the
+    /// stock between open and reveal cannot be cashed out at the old price. If the price source fails, the
+    /// table-time value is used: a reveal is never blocked by the oracle.
+    function _refundValue(Card memory card) internal view returns (uint256) {
+        try this.valueOf(card.token, card.amount) returns (uint256 v) {
+            return v < card.value ? v : card.value;
+        } catch {
+            return card.value;
         }
     }
 

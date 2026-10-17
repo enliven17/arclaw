@@ -260,18 +260,46 @@ contract ShortfallTest is Base {
         assertEq(box.cardsRefunded(), 2);
     }
 
-    function test_shortfall_valueFixedAtTableTime() public {
+    function _setNvda(uint256 px) internal {
+        address[] memory t = new address[](1);
+        uint256[] memory p = new uint256[](1);
+        (t[0], p[0]) = (address(nvda), px);
+        prices.setPrices(t, p);
+    }
+
+    function test_shortfall_refundCappedAtTableValue() public {
         _forceSingle(M1, address(nvda), 0.75 ether);
         box.sweep(address(nvda), address(1), 100 ether); // nothing left
         _play(alice, M1, 1);
         (uint256 id, uint256 req) = _open(alice, M1, 1);
-        address[] memory t = new address[](1);
-        uint256[] memory p = new uint256[](1);
-        (t[0], p[0]) = (address(nvda), 1e6); // NVDA crashes to $1 after the open
-        prices.setPrices(t, p);
+        _setNvda(400e6); // NVDA doubles after the open: refund stays at the table value
         vrf.fulfill(req, keccak256("w"));
         uint256 before = alice.balance;
         box.reveal(id);
+        assertEq(alice.balance, before + 0.75 ether);
+    }
+
+    function test_shortfall_refundFollowsPriceDown() public {
+        _forceSingle(M1, address(nvda), 0.75 ether);
+        box.sweep(address(nvda), address(1), 100 ether);
+        _play(alice, M1, 1);
+        (uint256 id, uint256 req) = _open(alice, M1, 1);
+        _setNvda(100e6); // NVDA halves: refund is the current value, 0.375
+        vrf.fulfill(req, keccak256("w"));
+        uint256 before = alice.balance;
+        box.reveal(id);
+        assertEq(alice.balance, before + 0.375 ether);
+    }
+
+    function test_shortfall_oracleDownFallsBackToTableValue() public {
+        _forceSingle(M1, address(nvda), 0.75 ether);
+        box.sweep(address(nvda), address(1), 100 ether);
+        _play(alice, M1, 1);
+        (uint256 id, uint256 req) = _open(alice, M1, 1);
+        _setNvda(0); // price source now reverts (Unpriced)
+        vrf.fulfill(req, keccak256("w"));
+        uint256 before = alice.balance;
+        box.reveal(id); // never blocked
         assertEq(alice.balance, before + 0.75 ether);
     }
 
