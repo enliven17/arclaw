@@ -31,6 +31,8 @@ export const LINKS = ((testnet as { links?: string }).links ?? null) as Address 
 export const STATUS = { None: 0, Pending: 1, Fulfilled: 2, Revealed: 3, Returned: 4 } as const;
 /** D20 requests expire 60 s after they are made; after that the opener can retry or take the boxes back. */
 export const VRF_EXPIRY_S = 60;
+/** Blocks per eth_getLogs request on the public RPC. */
+const LOG_SPAN = 9_999n;
 
 const erc20Abi = parseAbi([
   "function balanceOf(address) view returns (uint256)",
@@ -52,6 +54,20 @@ const legacyAbi = parseAbi([
   "event Opened(uint256 indexed openingId, uint256 indexed requestId, address indexed opener, uint256 machineId, uint256 boxes, uint256 tableId, uint256 vrfFee)",
   "event OutcomeDrawn(uint256 indexed openingId, uint256 boxIndex, uint256 indexed machineId, uint256 tier, uint256 outcomeIndex, uint256 valueUsdc)",
 ]);
+
+/** The public RPC rate-limits bursts: try a read a few times with a growing pause before giving up. */
+async function retry<T>(fn: () => Promise<T>, tries = 4): Promise<T> {
+  let last: unknown;
+  for (let i = 0; i < tries; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      last = e;
+      await new Promise((r) => setTimeout(r, 300 * 2 ** i));
+    }
+  }
+  throw last;
+}
 
 const need = <T,>(v: T | null | undefined, what: string): T => {
   if (v == null) throw new Error(`${what} is not deployed on this network yet.`);
@@ -116,7 +132,7 @@ export async function readOpening(client: PublicClient, openingId: bigint): Prom
 /** Live value of a card in 18 dp USDC at the price source's price. */
 export async function cardValue(client: PublicClient, token: Address, amount: bigint): Promise<bigint> {
   try {
-    return (await client.readContract({ address: need(ARCLAW, "arclaw"), abi: arclawAbi, functionName: "valueOf", args: [token, amount] })) as bigint;
+    return (await retry(() => client.readContract({ address: need(ARCLAW, "arclaw"), abi: arclawAbi, functionName: "valueOf", args: [token, amount] }))) as bigint;
   } catch {
     return 0n;
   }
@@ -259,7 +275,8 @@ export async function boxesFromLogs(client: PublicClient, logs: readonly Log[]):
 }
 
 /**
- * Logs of the arclaw contract since the deploy block, in 1000-block windows (the public RPC refuses larger ranges),
+ * Logs of the arclaw contract since the deploy block, in 10k-block windows read one after another (the public RPC
+ * refuses larger ranges and rate-limits bursts),
  * filtered by an event and indexed arguments. Fine while the chain is young; the leaderboard indexes in Convex.
  */
 export async function arclawLogs(client: PublicClient, eventName: "CardDrawn" | "OutcomeDrawn" | "Played" | "Opened", args: Record<string, unknown>, address: Address | null = ARCLAW) {
@@ -270,14 +287,10 @@ export async function arclawLogs(client: PublicClient, eventName: "CardDrawn" | 
   const head = await client.getBlockNumber();
   const out: Log[] = [];
   const windows: [bigint, bigint][] = [];
-  for (let from = c.deployBlock; from <= head; from += 1000n) windows.push([from, from + 999n > head ? head : from + 999n]);
-  for (let i = 0; i < windows.length; i += 6) {
-    const batch = await Promise.all(
-      windows.slice(i, i + 6).map(([fromBlock, toBlock]) =>
-        client.getLogs({ address: address ?? undefined, event: ev as never, args: args as never, fromBlock, toBlock }).catch(() => [] as Log[]),
-      ),
-    );
-    batch.forEach((b) => out.push(...(b as Log[])));
+  for (let from = c.deployBlock; from <= head; from += LOG_SPAN) windows.push([from, from + LOG_SPAN - 1n > head ? head : from + LOG_SPAN - 1n]);
+  // One window at a time: the public RPC answers a 10k-block range, but rate-limits bursts.
+  for (const [fromBlock, toBlock] of windows) {
+    out.push(...((await retry(() => client.getLogs({ address: address ?? undefined, event: ev as never, args: args as never, fromBlock, toBlock }))) as Log[]));
   }
   return out;
 }
@@ -288,12 +301,38 @@ export async function revealedBoxes(client: PublicClient, openingId: bigint, fro
   const head = await client.getBlockNumber();
   const events = [...arclawAbi, ...legacyAbi].filter((x) => x.type === "event" && (x.name === "OutcomeDrawn" || x.name === "CardDrawn"));
   const logs: Log[] = [];
-  for (let from = fromBlock; from <= head; from += 1000n) {
-    const to = from + 999n > head ? head : from + 999n;
+  for (let from = fromBlock; from <= head; from += LOG_SPAN) {
+    const to = from + LOG_SPAN - 1n > head ? head : from + LOG_SPAN - 1n;
     for (const event of events) {
-      const got = await client.getLogs({ address: arclaw, event: event as never, args: { openingId } as never, fromBlock: from, toBlock: to });
+      const got = await retry(() => client.getLogs({ address: arclaw, event: event as never, args: { openingId } as never, fromBlock: from, toBlock: to }));
       logs.push(...(got as Log[]));
     }
   }
   return boxesFromLogs(client, logs);
 }
+
+export type Pull = { key: string; openingId: bigint; boxIndex: number; machineId: number; tier: number; tierName: string; blockNumber: bigint; cards: DrawnCard[] };
+
+/** Every pack the address opened, newest first, from CardDrawn logs (opener is indexed). Card values are live. */
+export async function pullsOf(client: PublicClient, owner: Address): Promise<Pull[]> {
+  const logs = await arclawLogs(client, "CardDrawn", { opener: owner });
+  const packs = new Map<string, Pull>();
+  for (const e of decode(logs, arclawAbi, ARCLAW)) {
+    if (e.eventName !== "CardDrawn") continue;
+    const l = logs.find((x) => x.topics[1] && BigInt(x.topics[1]) === (e.args.openingId as bigint));
+    const key = `${e.args.openingId}-${e.args.boxIndex}`;
+    const machineId = Number(e.args.machineId);
+    const tier = Number(e.args.tier);
+    const p = packs.get(key) ?? { key, openingId: e.args.openingId as bigint, boxIndex: Number(e.args.boxIndex), machineId, tier, tierName: tierName(machineId, tier), blockNumber: l?.blockNumber ?? 0n, cards: [] };
+    const token = e.args.token as Address;
+    const ticker = tickerOf(token);
+    p.cards[Number(e.args.cardIndex)] = { ticker, name: stockOf(ticker).name, token, amount: e.args.amount as bigint, paid: Boolean(e.args.paid), valueWei: 0n };
+    packs.set(key, p);
+  }
+  const list = [...packs.values()].sort((a, b) => (a.openingId === b.openingId ? a.boxIndex - b.boxIndex : a.openingId > b.openingId ? -1 : 1));
+  for (const p of list) await Promise.all(p.cards.map(async (c) => (c.valueWei = await cardValue(client, c.token, c.amount))));
+  return list;
+}
+
+export const allowance = (client: PublicClient, token: Address, owner: Address, spender: Address) =>
+  client.readContract({ address: token, abi: erc20Abi, functionName: "allowance", args: [owner, spender] }) as Promise<bigint>;
