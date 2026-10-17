@@ -15,8 +15,9 @@ export function Machines({ art, machines }: { art: ClawArt; machines: Machine[] 
         <div className="grid gap-8 md:grid-cols-[minmax(0,8fr)_minmax(0,4fr)] md:items-end">
           <SplitHeading as="h2" id="machines-title" onScroll className="h-section" lines={["Three machines.", "Pick your stake."]} />
           <p className="lede max-w-[26em] md:justify-self-end" data-reveal>
-            Same claw, bigger boxes. Every machine pays at least {fmtPct(Math.min(...machines.map((m) => m.floor)), 0)} back on every box and up to{" "}
-            {fmtMultiplier(Math.max(...machines.map((m) => m.cap)))} on a lucky one.
+            Bigger machine, better odds: the expected return climbs from {fmtPct(machines[0]!.rtp, 0)} on {machines[0]!.name} to{" "}
+            {fmtPct(machines.at(-1)!.rtp, 0)} on {machines.at(-1)!.name}. Every box pays at least {fmtPct(Math.min(...machines.map((m) => m.floor)), 0)} back
+            and up to {fmtMultiplier(Math.max(...machines.map((m) => m.cap)))}.
           </p>
         </div>
 

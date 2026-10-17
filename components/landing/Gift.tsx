@@ -190,7 +190,7 @@ export function Gift({ machines }: { machines: Pick<Machine, "id" | "name" | "sl
               </div>
             </div>
             <p className="mt-auto pt-6 text-[14px] leading-relaxed text-muted">
-              A gifted box has the same odds as one you play yourself, and it stays sealed until your friend opens it.
+              A gifted box has the odds of its machine, the same as one you play yourself, and it stays sealed until your friend opens it.
             </p>
           </div>
         </div>
