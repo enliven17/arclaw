@@ -1,0 +1,12 @@
+import { chromium } from "playwright-core";
+const [url, w, h] = [process.argv[2], Number(process.argv[3] ?? 1440), Number(process.argv[4] ?? 900)];
+const b = await chromium.launch();
+const p = await b.newPage({ viewport: { width: w, height: h } });
+const errs = [];
+p.on("console", (m) => m.type() !== "log" && errs.push(`${m.type()}: ${m.text()}`));
+p.on("pageerror", (e) => errs.push(String(e)));
+await p.goto(url, { waitUntil: "networkidle" });
+await p.waitForTimeout(2500);
+console.log(await p.evaluate(() => JSON.stringify({ total: document.documentElement.scrollHeight, sections: [...document.querySelectorAll("section,footer")].map((s) => [s.id || s.getAttribute("aria-labelledby"), Math.round(s.getBoundingClientRect().top + scrollY)]) })));
+console.log(errs.join("\n"));
+await b.close();

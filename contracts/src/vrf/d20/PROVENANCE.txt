@@ -1,0 +1,3 @@
+Vendored verbatim from npm @d20dao/vrf-sdk@0.6.2 (MIT, see LICENSE).
+Source: https://registry.npmjs.org/@d20dao/vrf-sdk/-/vrf-sdk-0.6.2.tgz contracts/
+Do not edit; re-vendor on SDK upgrades.

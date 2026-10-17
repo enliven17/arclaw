@@ -1,0 +1,177 @@
+/* The claw machine figure. Anatomy kit classes, re-toned to arclaw (DESIGN.md): matte, one accent (the prongs),
+   hairlines only, no glow, no gradients. Scoped to .claw-fig so nothing leaks onto the page. */
+.claw-fig {
+  --anatomy-paper: #141417;
+  --anatomy-top: #202026;
+  --anatomy-shade-0: #0d0d10;
+  --anatomy-shade-1: #111114;
+  --anatomy-shade-2: #16161a;
+  --anatomy-shade-3: #1b1b20;
+  --anatomy-lit-top: #26262c;
+  --anatomy-lit-shade: #1e1e23;
+  --anatomy-hi: #ece6da;
+  --anatomy-mid: #8b867d;
+  --anatomy-lo: #4b4842;
+  --anatomy-faint: #2d2c2a;
+  --anatomy-dot: #ece6da;
+  --anatomy-weight: 0.6px;
+  position: relative;
+}
+.claw-fig svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+.claw-fig path,
+.claw-fig circle {
+  vector-effect: non-scaling-stroke;
+}
+.claw-fig .iso-fill {
+  fill: var(--anatomy-paper);
+  stroke: none;
+}
+.claw-fig .iso-shade,
+.claw-fig .iso-top {
+  stroke: none;
+}
+.claw-fig .iso-shade[data-shade="0"] {
+  fill: var(--anatomy-shade-0);
+}
+.claw-fig .iso-shade[data-shade="1"] {
+  fill: var(--anatomy-shade-1);
+}
+.claw-fig .iso-shade[data-shade="2"] {
+  fill: var(--anatomy-shade-2);
+}
+.claw-fig .iso-shade[data-shade="3"] {
+  fill: var(--anatomy-shade-3);
+}
+.claw-fig .iso-top {
+  fill: var(--anatomy-top);
+}
+/* Ground shadow under the plinth (a shadow, not a glow). */
+.claw-fig .iso-halo {
+  fill: #000;
+  stroke: none;
+  filter: blur(10px);
+  opacity: 0.55;
+  transform: translateY(4px);
+}
+.claw-fig .iso-line {
+  fill: none;
+  stroke: var(--anatomy-lo);
+  stroke-width: var(--anatomy-weight);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.claw-fig .iso-line[data-tone="hi"] {
+  stroke: var(--anatomy-hi);
+}
+.claw-fig .iso-line[data-tone="mid"] {
+  stroke: var(--anatomy-mid);
+}
+.claw-fig .iso-line[data-tone="lo"] {
+  stroke: var(--anatomy-lo);
+}
+.claw-fig .iso-line[data-tone="faint"] {
+  stroke: var(--anatomy-faint);
+}
+.claw-fig .iso-dots circle {
+  fill: var(--anatomy-dot);
+  stroke: none;
+  opacity: 0.32;
+}
+.claw-fig .iso-dots[data-tone="hi"] circle {
+  opacity: 0.85;
+}
+.claw-fig .iso-dots[data-tone="mid"] circle {
+  opacity: 0.45;
+}
+.claw-fig .iso-dots[data-tone="lo"] circle {
+  opacity: 0.2;
+}
+.claw-fig .iso-face-text {
+  fill: var(--anatomy-hi);
+  font-family: var(--font-geist-pixel), ui-monospace, monospace;
+  letter-spacing: 0.12em;
+}
+.claw-fig .iso-void {
+  fill: #08080a;
+  stroke: none;
+}
+.claw-fig .iso-glass {
+  fill: #ece6da;
+  fill-opacity: 0.025;
+  stroke: none;
+}
+.claw-fig .glint {
+  opacity: 0.8;
+}
+.claw-fig .iso-tape {
+  fill: #2a2926;
+  stroke: none;
+}
+.claw-fig .iso-seal {
+  fill: #8b867d;
+  fill-opacity: 0.55;
+  stroke: none;
+}
+.claw-fig .iso-sign {
+  fill: #0f0f12;
+  stroke: none;
+}
+.claw-fig .iso-coin {
+  fill: #cfc8bb;
+  stroke: var(--anatomy-hi);
+  stroke-width: var(--anatomy-weight);
+}
+
+/* Moving parts. */
+.claw-fig .claw-cable {
+  fill: none;
+  stroke: var(--anatomy-mid);
+  stroke-linecap: round;
+  vector-effect: none;
+}
+.claw-fig .claw-prong {
+  fill: none;
+  stroke: var(--color-claw);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: none;
+}
+.claw-fig .claw-prong[data-far] {
+  stroke: #b9461c;
+}
+.claw-fig .claw-pin {
+  fill: #0c0c0e;
+  stroke: none;
+}
+.claw-fig .claw-shaft {
+  fill: none;
+  stroke: var(--anatomy-mid);
+  stroke-linecap: round;
+  vector-effect: none;
+}
+.claw-fig .claw-ball {
+  fill: #232328;
+  stroke: var(--anatomy-hi);
+  stroke-width: var(--anatomy-weight);
+}
+
+/* The plate around the figure: hairline, labels in the pixel face. */
+.claw-plate {
+  position: relative;
+}
+.claw-corner {
+  position: absolute;
+  font-family: var(--font-geist-pixel), ui-monospace, monospace;
+  font-size: 11px;
+  line-height: 1;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
