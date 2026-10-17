@@ -319,3 +319,89 @@ html {
 ::-webkit-scrollbar-corner {
   background: transparent;
 }
+
+/* Custom cursor (components/motion/Cursor.tsx). Only once the component has switched it on (html.has-cursor). */
+html.has-cursor,
+html.has-cursor * {
+  cursor: none !important;
+}
+html.has-cursor :is(input:not([type="range"]):not([type="checkbox"]):not([type="radio"]), textarea, [contenteditable="true"]) {
+  cursor: text !important;
+}
+/* Difference blend on the root (a fixed element is its own stacking context): the dot and ring invert what is under
+   them, so they read on cream buttons too. The claw only shows over the dark machines, where it keeps its colours. */
+.site-cursor {
+  mix-blend-mode: difference;
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 300;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 160ms ease-out;
+}
+.site-cursor[data-on] {
+  opacity: 1;
+}
+.site-cursor[data-mode="hidden"] {
+  opacity: 0;
+}
+.site-cursor > * {
+  position: absolute;
+  left: 0;
+  top: 0;
+  translate: -50% -50%;
+  transition: transform 220ms var(--ease-out-quint), opacity 160ms ease-out;
+}
+.site-cursor-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--color-cream);
+}
+.site-cursor-ring {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  border: 1px solid rgb(236 230 218 / 0.6);
+  transform: scale(0.2);
+  opacity: 0;
+}
+.site-cursor-claw {
+  opacity: 0;
+  transform: scale(0.6);
+}
+.site-cursor-claw .prong-l,
+.site-cursor-claw .prong-r {
+  transition: transform 140ms var(--ease-out-quint);
+}
+.site-cursor-claw .prong-l {
+  transform-origin: 9px 10.5px;
+  transform: rotate(16deg);
+}
+.site-cursor-claw .prong-r {
+  transform-origin: 15px 10.5px;
+  transform: rotate(-16deg);
+}
+.site-cursor[data-grab] .site-cursor-claw .prong-l,
+.site-cursor[data-grab] .site-cursor-claw .prong-r {
+  transform: rotate(0deg);
+}
+.site-cursor[data-mode="ring"] .site-cursor-dot {
+  transform: scale(0.6);
+}
+.site-cursor[data-mode="ring"] .site-cursor-ring {
+  transform: scale(1);
+  opacity: 1;
+}
+.site-cursor[data-mode="claw"] .site-cursor-dot {
+  opacity: 0;
+}
+.site-cursor[data-mode="claw"] .site-cursor-claw {
+  opacity: 1;
+  transform: scale(1);
+}
+.site-cursor[data-grab][data-mode="dot"] .site-cursor-dot,
+.site-cursor[data-grab][data-mode="ring"] .site-cursor-ring {
+  transform: scale(0.85);
+}

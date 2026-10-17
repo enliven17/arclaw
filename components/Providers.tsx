@@ -6,11 +6,13 @@
  */
 import type { ReactNode } from "react";
 import { SmoothScroll } from "./motion/SmoothScroll";
+import { Cursor } from "./motion/Cursor";
 import { Splash } from "./motion/Splash";
 
 export function Providers({ children }: { children: ReactNode }) {
   return (
     <SmoothScroll>
+      <Cursor />
       <Splash />
       {children}
     </SmoothScroll>
