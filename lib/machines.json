@@ -2,7 +2,7 @@
   "policy": {
     "floorBps": 5000,
     "rtpMinBps": 6000,
-    "rtpMaxBps": 8500,
+    "rtpMaxBps": 8800,
     "cardsPerBox": 3
   },
   "machines": [
@@ -15,17 +15,17 @@
         {
           "name": "Common",
           "multiplierBps": 5000,
-          "weight": 5055
+          "weight": 5310
         },
         {
           "name": "Uncommon",
           "multiplierBps": 8000,
-          "weight": 3000
+          "weight": 2345
         },
         {
           "name": "Rare",
-          "multiplierBps": 12000,
-          "weight": 1600
+          "multiplierBps": 10000,
+          "weight": 2000
         },
         {
           "name": "Epic",
@@ -53,27 +53,27 @@
         {
           "name": "Common",
           "multiplierBps": 5000,
-          "weight": 5000
+          "weight": 3980
         },
         {
           "name": "Uncommon",
           "multiplierBps": 8000,
-          "weight": 3000
+          "weight": 3175
         },
         {
           "name": "Rare",
-          "multiplierBps": 12000,
-          "weight": 1650
+          "multiplierBps": 10000,
+          "weight": 2500
         },
         {
           "name": "Epic",
           "multiplierBps": 20000,
-          "weight": 260
+          "weight": 250
         },
         {
           "name": "Legendary",
           "multiplierBps": 40000,
-          "weight": 75
+          "weight": 80
         },
         {
           "name": "Jackpot",
@@ -91,27 +91,27 @@
         {
           "name": "Common",
           "multiplierBps": 5000,
-          "weight": 4950
+          "weight": 2647
         },
         {
           "name": "Uncommon",
           "multiplierBps": 8000,
-          "weight": 3000
+          "weight": 4008
         },
         {
           "name": "Rare",
-          "multiplierBps": 12000,
-          "weight": 1700
+          "multiplierBps": 10000,
+          "weight": 3000
         },
         {
           "name": "Epic",
           "multiplierBps": 20000,
-          "weight": 260
+          "weight": 250
         },
         {
           "name": "Legendary",
           "multiplierBps": 40000,
-          "weight": 75
+          "weight": 80
         },
         {
           "name": "Jackpot",
