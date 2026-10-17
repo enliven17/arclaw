@@ -280,7 +280,7 @@ contract ShortfallTest is Base {
         box.sweep(address(nvda), address(1), 100 ether);
         _play(alice, M1, 1);
         (uint256 id, uint256 req) = _open(alice, M1, 1);
-        box.withdraw(address(this), address(box).balance - 0.5 ether); // pool holds less than the refund
+        vm.deal(address(box), 0.5 ether); // pool holds less than the refund (withdraw cannot do this any more)
         vrf.fulfill(req, keccak256("w"));
         box.reveal(id); // never blocked
         assertEq(box.credit(alice), 0.75 ether);
@@ -400,6 +400,52 @@ contract RulesTest is Base {
         box.setPrizes(M2, _table(address(tsla), P2));
         assertEq(box.tablePrice(box.currentTable(M2) - 1), P2);
     }
+
+    function test_reserve_creditAndPendingAreUntouchable() public {
+        _forceSingle(M1, address(nvda), 0.75 ether);
+        box.sweep(address(nvda), address(1), 100 ether); // every card refunds
+        _play(alice, M1, 2);
+        (uint256 id, uint256 req) = _open(alice, M1, 2);
+        assertEq(box.pendingReserve(), 2 * P1);
+        // 2 USDC in, 0.02 fee out: 1.98 held against 2.00 pending -> nothing free
+        assertEq(box.freeBalance(), 0);
+        vm.expectRevert(abi.encodeWithSelector(Arclaw.Reserved.selector, 0));
+        box.withdraw(address(this), 1);
+        vm.prank(op);
+        vm.expectRevert(abi.encodeWithSelector(Arclaw.Reserved.selector, 0));
+        box.spend(address(desk), address(tsla), 1 ether, 1);
+
+        vm.deal(address(box), 1 ether); // pool smaller than the 1.5 refund owed: it becomes credit
+        vrf.fulfill(req, keccak256("w"));
+        box.reveal(id);
+        assertEq(box.pendingReserve(), 0);
+        assertEq(box.credit(alice), 1.5 ether);
+        assertEq(box.reservedCredit(), 1.5 ether);
+        vm.deal(address(box), 4 ether); // treasury top-up
+        assertEq(box.freeBalance(), 2.5 ether);
+        vm.expectRevert(abi.encodeWithSelector(Arclaw.Reserved.selector, 2.5 ether));
+        box.withdraw(address(this), 2.5 ether + 1);
+        box.withdraw(address(this), 2.5 ether);
+
+        address to = makeAddr("alice-eoa");
+        vm.prank(alice);
+        box.claimCredit(to); // pay elsewhere
+        assertEq(to.balance, 1.5 ether);
+        assertEq(box.reservedCredit(), 0);
+    }
+
+    function test_reserve_releasedOnReturn() public {
+        box.setPrizes(M1, _table(address(nvda), P1));
+        _play(alice, M1, 3);
+        (uint256 id,) = _open(alice, M1, 3);
+        assertEq(box.pendingReserve(), 3 * P1);
+        vm.warp(block.timestamp + 61);
+        vm.prank(alice);
+        box.returnBoxes(id);
+        assertEq(box.pendingReserve(), 0);
+    }
+
+    receive() external payable {}
 
     function test_operatorOnly() public {
         Arclaw.OutcomeInput[] memory t = _table(address(nvda), P1);

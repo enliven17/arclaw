@@ -133,6 +133,10 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, EIP712, D20
     mapping(uint256 => uint256) public escrowed;
 
     mapping(address => uint256) public credit;
+    /// Liabilities the owner and operator cannot touch (see freeBalance):
+    /// owed credit, plus the price paid for every box still waiting to be revealed or returned.
+    uint256 public reservedCredit;
+    uint256 public pendingReserve;
 
     uint32 public callbackGasLimit = 100_000;
     uint256 public maxVrfSubsidy;
@@ -254,6 +258,7 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, EIP712, D20
     error BadSignature();
     error NotSender();
     error NoCredit();
+    error Reserved(uint256 free);
     error RenounceDisabled();
 
     // ------------------------------------------------------------------ constructor
@@ -308,6 +313,7 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, EIP712, D20
         _burn(msg.sender, machineId, boxes);
         openingId = nextOpeningId++;
         boxesOpened += boxes;
+        pendingReserve += boxes * tablePrice[t - 1];
         Opening storage o = openings[openingId];
         o.opener = msg.sender;
         // forge-lint: disable-next-line(unsafe-typecast)
@@ -339,6 +345,7 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, EIP712, D20
         o.status = OpeningStatus.Revealed;
         o.word = word;
         delete openingOfRequest[o.requestId];
+        pendingReserve -= uint256(o.boxes) * tablePrice[o.tableId];
 
         Opening memory m = o;
         uint256 paid;
@@ -381,17 +388,24 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, EIP712, D20
         delete openingOfRequest[o.requestId];
         uint256 boxes = o.boxes;
         boxesOpened -= boxes;
+        pendingReserve -= boxes * tablePrice[o.tableId];
         emit BoxesReturned(openingId, msg.sender, o.machineId, boxes);
         _mint(msg.sender, o.machineId, boxes, "");
     }
 
     /// @notice Pull native USDC that could not be pushed (the receiver rejected it, or the pool was short).
-    function claimCredit() external nonReentrant {
+    function claimCredit() external {
+        claimCredit(msg.sender);
+    }
+
+    /// @notice Same, paid to `to` (for smart accounts that cannot receive native USDC themselves).
+    function claimCredit(address to) public nonReentrant {
         uint256 amount = credit[msg.sender];
         if (amount == 0) revert NoCredit();
         credit[msg.sender] = 0;
+        reservedCredit -= amount;
         emit CreditClaimed(msg.sender, amount);
-        (bool ok,) = msg.sender.call{value: amount}("");
+        (bool ok,) = to.call{value: amount}("");
         if (!ok) revert TransferFailed();
     }
 
@@ -492,6 +506,13 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, EIP712, D20
         rtpBps = ev * 10_000 / totalWeight / price;
     }
 
+    /// @notice Native balance above the reserved liabilities: what withdraw and spend may use.
+    function freeBalance() public view returns (uint256) {
+        uint256 bal = address(this).balance;
+        uint256 owed = reservedCredit + pendingReserve;
+        return bal > owed ? bal - owed : 0;
+    }
+
     /// @notice Current exact VRF fee for one open (valid inside a transaction; via eth_call the base fee may read 0).
     function quoteVrfFee() external view returns (uint256) {
         return _quoteRandomness(callbackGasLimit);
@@ -525,6 +546,7 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, EIP712, D20
     {
         if (!sinks[sink]) revert NotSink();
         if (amount == 0 || minSharesOut == 0) revert ZeroAmount();
+        _requireFree(amount);
         uint256 day = block.timestamp / 1 days;
         if (day != spentDay) (spentDay, spentToday) = (day, 0);
         if (spentToday + amount > dailyCap) revert OverDailyCap();
@@ -608,7 +630,9 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, EIP712, D20
         _unpause();
     }
 
+    /// @notice Only the free balance: owed credit and pending openings stay backed.
     function withdraw(address to, uint256 amount) external onlyOwner nonReentrant {
+        _requireFree(amount);
         (bool ok,) = to.call{value: amount}("");
         if (!ok) revert TransferFailed();
     }
@@ -647,6 +671,11 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, EIP712, D20
         requestId = _requestRandomness(seed, gasLimit, fee);
         uint256 change = msg.value - required;
         if (change > 0) _sendNative(msg.sender, change);
+    }
+
+    function _requireFree(uint256 amount) internal view {
+        uint256 free = freeBalance();
+        if (amount > free) revert Reserved(free);
     }
 
     function _requireExpired(uint256 requestId) internal view {
@@ -757,6 +786,7 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, EIP712, D20
         (bool ok,) = to.call{value: amount}("");
         if (!ok) {
             credit[to] += amount;
+            reservedCredit += amount;
             emit CreditAdded(to, amount);
         }
     }

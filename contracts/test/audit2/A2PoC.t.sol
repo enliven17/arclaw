@@ -138,7 +138,7 @@ contract A2PoCTest is Base {
         box.reveal(id);
         assertEq(box.credit(address(w)), 0.75 ether);
         vm.expectRevert(Arclaw.TransferFailed.selector);
-        w.call(address(box), 0, abi.encodeCall(Arclaw.claimCredit, ()));
+        w.call(address(box), 0, abi.encodeWithSignature("claimCredit()"));
         assertEq(box.credit(address(w)), 0.75 ether, "credit permanently stuck");
     }
 
