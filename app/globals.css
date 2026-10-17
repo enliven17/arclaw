@@ -405,3 +405,42 @@ html.has-cursor :is(input:not([type="range"]):not([type="checkbox"]):not([type="
 .site-cursor[data-grab][data-mode="ring"] .site-cursor-ring {
   transform: scale(0.85);
 }
+
+/* Legal pages: one readable column. */
+.legal h1 {
+  font-size: clamp(44px, 6vw, 72px);
+  font-weight: 500;
+  letter-spacing: -0.035em;
+  line-height: 1;
+}
+.legal .lede {
+  margin-top: 16px;
+  color: var(--color-muted);
+}
+.legal h2 {
+  margin-top: 48px;
+  font-size: 24px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+}
+.legal p,
+.legal li {
+  margin-top: 14px;
+  font-size: 17px;
+  line-height: 1.65;
+  color: rgb(236 230 218 / 0.82);
+}
+.legal ul {
+  padding-left: 20px;
+  list-style: disc;
+}
+.legal strong {
+  font-weight: 500;
+  color: var(--color-cream);
+}
+.legal a {
+  color: var(--color-cream);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: rgb(236 230 218 / 0.3);
+}
