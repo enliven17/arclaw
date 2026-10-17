@@ -116,6 +116,10 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, EIP712, D20
     Outcome[][] internal _tables;
     uint256[] public tableWeight;
     uint256[] public tableMachine;
+    /// Machine price each table was validated against; open() refuses a mismatch.
+    uint256[] public tablePrice;
+    /// machineId => no new plays or opens (owner switch); reveals, returns and links keep working.
+    mapping(uint256 => bool) public machineOff;
 
     mapping(uint256 => Opening) public openings;
     /// requestId => openingId + 1 (0 = unknown or superseded)
@@ -202,6 +206,7 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, EIP712, D20
     event LinkReclaimed(uint256 indexed linkId, address indexed sender, uint256 boxes);
     event CreditAdded(address indexed to, uint256 amount);
     event CreditClaimed(address indexed to, uint256 amount);
+    event MachineActive(uint256 indexed machineId, bool active);
     event MachineSet(
         uint256 indexed machineId, uint256 price, uint256 floorBps, uint256 capBps, uint256 rtpMinBps, uint256 rtpMaxBps
     );
@@ -237,6 +242,9 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, EIP712, D20
     error OverDailyCap();
     error Slippage(uint256 got, uint256 minOut);
     error BadMachine();
+    error PriceImmutable();
+    error MachineOff();
+    error TablePriceMismatch();
     error BadGas();
     error BadLink();
     error LinkKeyUsed();
@@ -265,6 +273,7 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, EIP712, D20
     function play(uint256 machineId, uint256 boxes) external payable whenNotPaused nonReentrant {
         uint256 price = machines[machineId].price;
         if (price == 0) revert UnknownMachine();
+        if (machineOff[machineId]) revert MachineOff();
         if (boxes == 0) revert ZeroAmount();
         if (msg.value != boxes * price) revert WrongPayment();
         boxesSold[machineId] += boxes;
@@ -293,6 +302,8 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, EIP712, D20
         if (boxes > MAX_BOXES_PER_OPEN) revert TooManyBoxes();
         uint256 t = currentTable[machineId];
         if (t == 0) revert NoPrizes();
+        if (machineOff[machineId]) revert MachineOff();
+        if (tablePrice[t - 1] != machines[machineId].price) revert TablePriceMismatch();
 
         _burn(msg.sender, machineId, boxes);
         openingId = nextOpeningId++;
@@ -533,7 +544,8 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, EIP712, D20
         _setPrizes(machineId, input);
     }
 
-    /// @notice Create or update a machine and its rules. price 0 stops new plays (opens and reveals continue).
+    /// @notice Create a machine, or update the rules of an existing one. The price is fixed at creation: boxes are
+    ///         fungible per id, so a price change would re-rate boxes already sold. A new price is a new machine id.
     ///         Rules apply to tables set from now on; the current table keeps serving until replaced.
     ///         Bounds: floor >= MIN_FLOOR_BPS, floor <= rtpMin <= rtpMax <= min(MAX_RTP_BPS, cap), cap <= MAX_CAP_BPS.
     function setMachine(
@@ -544,15 +556,23 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, EIP712, D20
         uint16 rtpMinBps,
         uint16 rtpMaxBps
     ) external onlyOwner {
-        if (machineId == 0 || machineId > type(uint16).max) revert BadMachine();
+        if (machineId == 0 || machineId > type(uint16).max || price == 0) revert BadMachine();
         if (
             floorBps < MIN_FLOOR_BPS || floorBps > rtpMinBps || rtpMinBps > rtpMaxBps || rtpMaxBps > MAX_RTP_BPS
                 || rtpMaxBps > capBps || capBps > MAX_CAP_BPS
         ) revert BadMachine();
         Machine storage m = machines[machineId];
-        if (m.capBps == 0) _machineIds.push(machineId);
+        if (m.price == 0) _machineIds.push(machineId);
+        else if (m.price != price) revert PriceImmutable(); // a new price is a new machine id
         (m.price, m.floorBps, m.capBps, m.rtpMinBps, m.rtpMaxBps) = (price, floorBps, capBps, rtpMinBps, rtpMaxBps);
         emit MachineSet(machineId, price, floorBps, capBps, rtpMinBps, rtpMaxBps);
+    }
+
+    /// @notice Stop or resume new plays and opens on a machine (reveals, returns and links continue).
+    function setMachineActive(uint256 machineId, bool active) external onlyOwner {
+        if (machines[machineId].price == 0) revert UnknownMachine();
+        machineOff[machineId] = !active;
+        emit MachineActive(machineId, active);
     }
 
     function setOperator(address op) external onlyOwner {
@@ -726,6 +746,7 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, EIP712, D20
         }
         tableWeight.push(w);
         tableMachine.push(machineId);
+        tablePrice.push(machines[machineId].price);
         currentTable[machineId] = tableId + 1;
         emit PrizesSet(machineId, tableId, input.length, rtpBps, msg.sender);
     }

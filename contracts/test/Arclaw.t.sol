@@ -367,6 +367,40 @@ contract RulesTest is Base {
         assertEq(box.machineIds().length, 2);
     }
 
+    function test_priceImmutable_newPriceIsNewMachine() public {
+        vm.expectRevert(Arclaw.PriceImmutable.selector);
+        box.setMachine(M1, uint128(2 ether), 5000, 100_000, 6000, 8500);
+        vm.expectRevert(Arclaw.BadMachine.selector);
+        box.setMachine(4, 0, 5000, 100_000, 6000, 8500); // no free machines
+        box.setMachine(M1, uint128(P1), 5000, 50_000, 6500, 8000); // rules still tunable
+        box.setMachine(4, uint128(2 ether), 5000, 100_000, 6000, 8500); // the new price lives on a new id
+        assertEq(box.machineIds().length, 3);
+    }
+
+    function test_machineToggle() public {
+        box.setPrizes(M1, _table(address(nvda), P1));
+        _play(alice, M1, 2);
+        (uint256 id, uint256 req) = _open(alice, M1, 1);
+        box.setMachineActive(M1, false);
+        vm.prank(alice);
+        vm.expectRevert(Arclaw.MachineOff.selector);
+        box.play{value: P1}(M1, 1);
+        vm.prank(alice);
+        vm.expectRevert(Arclaw.MachineOff.selector);
+        box.open(M1, 1);
+        vrf.fulfill(req, keccak256("w"));
+        box.reveal(id); // pending openings still pay
+        box.setMachineActive(M1, true);
+        _open(alice, M1, 1);
+        vm.expectRevert(Arclaw.UnknownMachine.selector);
+        box.setMachineActive(9, true);
+    }
+
+    function test_tablePriceRecorded() public {
+        box.setPrizes(M2, _table(address(tsla), P2));
+        assertEq(box.tablePrice(box.currentTable(M2) - 1), P2);
+    }
+
     function test_operatorOnly() public {
         Arclaw.OutcomeInput[] memory t = _table(address(nvda), P1);
         vm.prank(alice);
