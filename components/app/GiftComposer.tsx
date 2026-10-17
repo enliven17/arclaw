@@ -12,7 +12,7 @@ import { SplitHeading } from "@/components/motion/SmoothScroll";
 import type { Machine } from "@/lib/machines";
 import { usdc } from "@/lib/stocks";
 import { cn } from "@/lib/cn";
-import { MachineSwitch } from "./MachineSwitch";
+import { MachineSwitch } from "@/components/landing/MachineSwitch";
 
 type Mode = "link" | "address";
 const MAX_BOXES = 10;
@@ -27,7 +27,7 @@ function useDebounced<T>(value: T, ms: number): T {
   return v;
 }
 
-export function Gift({ machines }: { machines: Pick<Machine, "id" | "name" | "slug" | "priceUsdc">[] }) {
+export function GiftComposer({ machines }: { machines: Pick<Machine, "id" | "name" | "slug" | "priceUsdc">[] }) {
   const ids = useId();
   const [machineId, setMachineId] = useState(machines[0]!.id);
   const [count, setCount] = useState(1);

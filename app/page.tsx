@@ -2,7 +2,7 @@ import { clawArt } from "@/components/claw/geometry";
 import { Reveals } from "@/components/motion/SmoothScroll";
 import { SiteHeader } from "@/components/SiteHeader";
 import { Footer } from "@/components/landing/Footer";
-import { Gift } from "@/components/landing/Gift";
+import { GiftShowcase } from "@/components/landing/GiftShowcase";
 import { Hero } from "@/components/landing/Hero";
 import { HowItWorks } from "@/components/landing/HowItWorks";
 import { Machines } from "@/components/landing/Machines";
@@ -20,7 +20,6 @@ const ART = { single: clawArt("single"), stack: clawArt("stack"), vault: clawArt
 export default async function Home() {
   const machines = withResolved();
   const quotes = await getQuotes();
-  const lite = machines.map(({ id, name, slug, priceUsdc }) => ({ id, name, slug, priceUsdc }));
   return (
     <>
       <SiteHeader />
@@ -29,7 +28,7 @@ export default async function Home() {
         <Machines art={ART} machines={machines} />
         <HowItWorks machines={machines} />
         <StocksMarquee quotes={quotes} />
-        <Gift machines={lite} />
+        <GiftShowcase />
         <Odds machines={machines} />
       </main>
       <Footer art={ART} machines={machines} />
