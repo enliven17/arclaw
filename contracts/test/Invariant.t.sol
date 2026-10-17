@@ -3,6 +3,8 @@ pragma solidity 0.8.28;
 
 import {Test} from "forge-std/Test.sol";
 import {Arclaw} from "../src/Arclaw.sol";
+import {ArclawLinks} from "../src/ArclawLinks.sol";
+import {IERC1155} from "@openzeppelin/contracts/token/ERC1155/IERC1155.sol";
 import {MockStock} from "../src/mocks/MockStock.sol";
 import {MockVRFCoordinator} from "../src/mocks/MockVRFCoordinator.sol";
 import {MockPriceSource} from "../src/mocks/MockPriceSource.sol";
@@ -11,6 +13,7 @@ import {IPriceSource} from "../src/interfaces/IPriceSource.sol";
 /// Drives random plays, opens, fulfills, reveals, retries, links and warps.
 contract Handler is Test {
     Arclaw public box;
+    ArclawLinks public links;
     MockVRFCoordinator public vrf;
     address[3] actors;
     uint256[] public openings;
@@ -18,8 +21,8 @@ contract Handler is Test {
     mapping(uint256 => uint256) public linkPk;
     uint256 nonce;
 
-    constructor(Arclaw b, MockVRFCoordinator v) {
-        (box, vrf) = (b, v);
+    constructor(Arclaw b, ArclawLinks l, MockVRFCoordinator v) {
+        (box, links, vrf) = (b, l, v);
         actors = [makeAddr("a0"), makeAddr("a1"), makeAddr("a2")];
         for (uint256 i; i < 3; ++i) vm.deal(actors[i], 1e30);
     }
@@ -71,8 +74,9 @@ contract Handler is Test {
         if (bal == 0) return;
         n = bound(n, 1, bal);
         uint256 pk = uint256(keccak256(abi.encode("link", ++nonce))) % 1e70 + 1;
+        uint256 id = links.nextLinkId();
         vm.prank(a);
-        uint256 id = box.createLink(vm.addr(pk), _m(s), uint32(n), uint40(block.timestamp + 1 hours));
+        box.safeTransferFrom(a, address(links), _m(s), n, abi.encode(vm.addr(pk), block.timestamp + 1 hours));
         linkIds.push(id);
         linkPk[id] = pk;
     }
@@ -81,22 +85,23 @@ contract Handler is Test {
         if (linkIds.length == 0) return;
         uint256 id = linkIds[i % linkIds.length];
         address to = _actor(s);
-        (uint8 v, bytes32 r, bytes32 ss) = vm.sign(linkPk[id], box.claimDigest(id, to));
-        try box.claimLink(id, to, abi.encodePacked(r, ss, v)) {} catch {}
+        (uint8 v, bytes32 r, bytes32 ss) = vm.sign(linkPk[id], links.claimDigest(id, to));
+        try links.claimLink(id, to, abi.encodePacked(r, ss, v)) {} catch {}
     }
 
     function reclaimLink(uint256 i) external {
         if (linkIds.length == 0) return;
         uint256 id = linkIds[i % linkIds.length];
-        (address sender,,,,,) = box.links(id);
+        (address sender,,,,,) = links.links(id);
         vm.warp(block.timestamp + 1 hours + 1);
         vm.prank(sender);
-        try box.reclaimLink(id) {} catch {}
+        try links.reclaimLink(id) {} catch {}
     }
 }
 
 contract ArclawInvariants is Test {
     Arclaw box;
+    ArclawLinks links;
     MockVRFCoordinator vrf;
     MockStock nvda;
     Handler handler;
@@ -128,14 +133,16 @@ contract ArclawInvariants is Test {
             }
             box.setPrizes(m, t);
         }
-        handler = new Handler(box, vrf);
+        links = new ArclawLinks(IERC1155(address(box)));
+        handler = new Handler(box, links, vrf);
         targetContract(address(handler));
     }
 
     /// Escrowed link boxes are exactly the contract's own box balance.
     function invariant_escrowMatchesBalance() public view {
-        assertEq(box.balanceOf(address(box), 1), box.escrowed(1));
-        assertEq(box.balanceOf(address(box), 2), box.escrowed(2));
+        assertEq(box.balanceOf(address(links), 1), links.escrowed(1));
+        assertEq(box.balanceOf(address(links), 2), links.escrowed(2));
+        assertEq(box.balanceOf(address(box), 1) + box.balanceOf(address(box), 2), 0, "arclaw never holds boxes");
     }
 
     /// Every card revealed was either paid or refunded, never more than 3 per opened box.

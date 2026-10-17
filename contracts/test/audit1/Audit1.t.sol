@@ -3,6 +3,8 @@ pragma solidity 0.8.28;
 
 import {Base} from "../Base.t.sol";
 import {Arclaw} from "../../src/Arclaw.sol";
+import {ArclawLinks} from "../../src/ArclawLinks.sol";
+import {IERC1155} from "@openzeppelin/contracts/token/ERC1155/IERC1155.sol";
 import {MockStock} from "../../src/mocks/MockStock.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
@@ -206,20 +208,19 @@ contract Audit1Test is Base {
     // ------------------------------------------------------------------ SAFE: claim link domain binding
 
     function test_SAFE_linkSignatureBoundToContract() public {
-        Arclaw other = new Arclaw("x", address(vrf), SUBSIDY);
+        ArclawLinks other = new ArclawLinks(IERC1155(address(box)));
         (address key, uint256 pk) = makeAddrAndKey("linkkey");
         _play(alice, M1, 1);
-        vm.prank(alice);
-        uint256 linkId = box.createLink(key, M1, 1, uint40(block.timestamp + 1 days));
+        uint256 linkId = _link(alice, key, M1, 1, block.timestamp + 1 days);
         // signature made for the other deployment (same linkId) must not work here
         (uint8 v, bytes32 r, bytes32 s_) = vm.sign(pk, other.claimDigest(linkId, bob));
-        vm.expectRevert(Arclaw.BadSignature.selector);
-        box.claimLink(linkId, bob, abi.encodePacked(r, s_, v));
+        vm.expectRevert(ArclawLinks.BadSignature.selector);
+        links.claimLink(linkId, bob, abi.encodePacked(r, s_, v));
         // and a signature for bob cannot be redirected to the relayer
-        (v, r, s_) = vm.sign(pk, box.claimDigest(linkId, bob));
-        vm.expectRevert(Arclaw.BadSignature.selector);
-        box.claimLink(linkId, address(this), abi.encodePacked(r, s_, v));
-        box.claimLink(linkId, bob, abi.encodePacked(r, s_, v));
+        (v, r, s_) = vm.sign(pk, links.claimDigest(linkId, bob));
+        vm.expectRevert(ArclawLinks.BadSignature.selector);
+        links.claimLink(linkId, address(this), abi.encodePacked(r, s_, v));
+        links.claimLink(linkId, bob, abi.encodePacked(r, s_, v));
         assertEq(box.balanceOf(bob, M1), 1);
     }
 

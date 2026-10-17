@@ -4,6 +4,8 @@ pragma solidity 0.8.28;
 import {Test} from "forge-std/Test.sol";
 import {Arclaw} from "../src/Arclaw.sol";
 import {ArclawLens} from "../src/ArclawLens.sol";
+import {ArclawLinks} from "../src/ArclawLinks.sol";
+import {IERC1155} from "@openzeppelin/contracts/token/ERC1155/IERC1155.sol";
 import {MockStock} from "../src/mocks/MockStock.sol";
 import {MockPriceSource} from "../src/mocks/MockPriceSource.sol";
 import {MockAstockDesk} from "../src/mocks/MockAstockDesk.sol";
@@ -14,6 +16,7 @@ import {Vm} from "forge-std/Vm.sol";
 abstract contract Base is Test {
     Arclaw box;
     ArclawLens lens = new ArclawLens();
+    ArclawLinks links;
     MockVRFCoordinator vrf;
     MockPriceSource prices;
     MockAstockDesk desk;
@@ -34,6 +37,7 @@ abstract contract Base is Test {
         vm.warp(1_800_000_000);
         vrf = new MockVRFCoordinator();
         box = new Arclaw("ipfs://box/{id}", address(vrf), SUBSIDY);
+        links = new ArclawLinks(IERC1155(address(box)));
         prices = new MockPriceSource();
         desk = new MockAstockDesk(IPriceSource(address(prices)));
         nvda = new MockStock("NVDA.arc");
@@ -105,6 +109,16 @@ abstract contract Base is Test {
     function _open(address who, uint256 machineId, uint256 n) internal returns (uint256 openingId, uint256 requestId) {
         vm.prank(who);
         (openingId, requestId) = box.open(machineId, n);
+    }
+
+    /// Creates a gift link the way a wallet does: one transfer to the escrow with (linkKey, expiresAt) as data.
+    function _link(address who, address key, uint256 machineId, uint256 n, uint256 expiresAt)
+        internal
+        returns (uint256 id)
+    {
+        id = links.nextLinkId();
+        vm.prank(who);
+        box.safeTransferFrom(who, address(links), machineId, n, abi.encode(key, expiresAt));
     }
 
     function _status(uint256 id) internal view returns (Arclaw.OpeningStatus s) {

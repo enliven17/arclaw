@@ -4,6 +4,8 @@ pragma solidity 0.8.28;
 import {Test, console} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {Arclaw} from "../../src/Arclaw.sol";
+import {ArclawLinks} from "../../src/ArclawLinks.sol";
+import {IERC1155} from "@openzeppelin/contracts/token/ERC1155/IERC1155.sol";
 import {MockStock} from "../../src/mocks/MockStock.sol";
 import {MockPriceSource} from "../../src/mocks/MockPriceSource.sol";
 import {MockAstockDesk} from "../../src/mocks/MockAstockDesk.sol";
@@ -17,6 +19,7 @@ import {RejectingWallet, A2Draw} from "./A2Utils.sol";
 /// callbacks, late words after retry, refunds) and fee level.
 contract A2Handler is Test {
     Arclaw public box;
+    ArclawLinks public links;
     MockVRFCoordinator public vrf;
     MockPriceSource public ps;
     MockAstockDesk public desk;
@@ -73,6 +76,7 @@ contract A2Handler is Test {
         vm.warp(1_800_000_000);
         vrf = new MockVRFCoordinator();
         box = new Arclaw("", address(vrf), 0.05 ether);
+        links = new ArclawLinks(IERC1155(address(box)));
         ps = new MockPriceSource();
         desk = new MockAstockDesk(IPriceSource(address(ps)));
         address[] memory t = new address[](3);
@@ -385,10 +389,9 @@ contract A2Handler is Test {
         if (bal == 0) return;
         n = bound(n, 1, bal);
         uint256 pk = uint256(keccak256(abi.encode("a2link", ++nonce))) % 1e70 + 1;
+        uint256 id = links.nextLinkId();
         vm.prank(a);
-        try box.createLink(vm.addr(pk), m, uint32(n), uint40(block.timestamp + bound(ttl, 1, 600))) returns (
-            uint256 id
-        ) {
+        try box.safeTransferFrom(a, address(links), m, n, abi.encode(vm.addr(pk), block.timestamp + bound(ttl, 1, 600))) {
             linkIds.push(id);
             lg[id] = LinkGhost(pk, a);
         } catch {}
@@ -399,24 +402,24 @@ contract A2Handler is Test {
         _countCall("claimLink");
         if (linkIds.length == 0) return;
         uint256 id = linkIds[i % linkIds.length];
-        (, uint32 boxes, uint16 m,,,) = box.links(id);
+        (, uint32 boxes, uint16 m,,,) = links.links(id);
         address to = _a(rs);
         address attacker = _a(atk);
         bytes memory sig = _sig(lg[id].pk, id, to);
         // Front-runner replays the signature for a different recipient.
         if (attacker != to) {
-            try box.claimLink(id, attacker, sig) {
+            try links.claimLink(id, attacker, sig) {
                 _flag(V_LINK);
             } catch {}
         }
         // Wrong key.
-        try box.claimLink(id, to, _sig(lg[id].pk + 1, id, to)) {
+        try links.claimLink(id, to, _sig(lg[id].pk + 1, id, to)) {
             _flag(V_LINK);
         } catch {}
         uint256 before = box.balanceOf(to, m);
-        try box.claimLink(id, to, sig) {
+        try links.claimLink(id, to, sig) {
             if (box.balanceOf(to, m) - before != boxes) _flag(V_LINK);
-            try box.claimLink(id, to, sig) {
+            try links.claimLink(id, to, sig) {
                 _flag(V_LINK);
             } catch {}
         } catch {}
@@ -429,14 +432,14 @@ contract A2Handler is Test {
         uint256 id = linkIds[i % linkIds.length];
         address caller = _a(callerSeed);
         vm.prank(caller);
-        try box.reclaimLink(id) {
+        try links.reclaimLink(id) {
             if (caller != lg[id].sender) _flag(V_ACCESS);
         } catch {}
         _post();
     }
 
     function _sig(uint256 pk, uint256 id, address to) internal view returns (bytes memory) {
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, box.claimDigest(id, to));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, links.claimDigest(id, to));
         return abi.encodePacked(r, s, v);
     }
 
@@ -601,11 +604,13 @@ contract A2Handler is Test {
 contract A2InvariantTest is Test {
     A2Handler h;
     Arclaw box;
+    ArclawLinks links;
     MockVRFCoordinator vrf;
 
     function setUp() public {
         h = new A2Handler();
         box = h.box();
+        links = h.links();
         vrf = h.vrf();
         targetContract(address(h));
     }
@@ -616,12 +621,13 @@ contract A2InvariantTest is Test {
     /// forge-config: default.invariant.depth = 64
     function invariant_A2_boxesConserved() public view {
         for (uint256 m = 1; m <= 2; ++m) {
-            uint256 esc = box.escrowed(m);
-            assertEq(box.balanceOf(address(box), m), esc, "escrow == own balance");
+            uint256 esc = links.escrowed(m);
+            assertEq(box.balanceOf(address(links), m), esc, "escrow == escrow contract balance");
+            assertEq(box.balanceOf(address(box), m), 0, "arclaw never holds boxes");
             uint256 open_;
             for (uint256 i; i < h.linkCount(); ++i) {
-                (, uint32 boxes, uint16 mid,, Arclaw.LinkStatus st,) = box.links(h.linkIds(i));
-                if (mid == m && st == Arclaw.LinkStatus.Open) open_ += boxes;
+                (, uint32 boxes, uint16 mid,, ArclawLinks.LinkStatus st,) = links.links(h.linkIds(i));
+                if (mid == m && st == ArclawLinks.LinkStatus.Open) open_ += boxes;
             }
             assertEq(open_, esc, "escrow == open links");
             uint256 held;
@@ -710,11 +716,11 @@ contract A2InvariantTest is Test {
         }
         for (uint256 i; i < h.linkCount(); ++i) {
             uint256 id = h.linkIds(i);
-            (address sender,,, uint40 exp, Arclaw.LinkStatus st,) = box.links(id);
-            if (st != Arclaw.LinkStatus.Open) continue;
+            (address sender,,, uint40 exp, ArclawLinks.LinkStatus st,) = links.links(id);
+            if (st != ArclawLinks.LinkStatus.Open) continue;
             if (block.timestamp <= exp) vm.warp(uint256(exp) + 1);
             vm.prank(sender);
-            box.reclaimLink(id);
+            links.reclaimLink(id);
         }
         vm.revertToState(snap);
     }

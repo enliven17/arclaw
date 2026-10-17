@@ -11,9 +11,10 @@ const artifacts = join(here, '..', 'out')
 const notes = {
   Arclaw: [
     'Frontend rules:',
-    '- Claim links: share the link URL only AFTER the createLink transaction is confirmed. A front-runner can',
-    '  reuse a pending linkKey (audit #2 L-3); the honest createLink then reverts with LinkKeyUsed and the',
-    '  link must not be shared. Generate a fresh key and retry.',
+    '- Claim links live in ArclawLinks (lib/abi/arclawLinks.ts). Create one with a single transfer:',
+    '  arclaw.safeTransferFrom(user, links, machineId, boxes, abi.encode(linkKey, expiresAt)). Share the URL only',
+    '  AFTER that transfer is confirmed: a front-run reusing the pending linkKey (audit #2 L-3) makes it revert',
+    '  with LinkKeyUsed, and that link must not be shared. Generate a fresh key and retry.',
     '- VRF fee: quote with coordinator.quoteFeeAt(callbackGasLimit, latest baseFee) plus a buffer (never',
     '  quoteFee via eth_call). open() is subsidised; retry() is free only for the opener or operator.',
     '- Reads that moved off-chain for size: stats and quoteVrfFee live in ArclawLens (lib/abi/arclawLens.ts).',
@@ -23,6 +24,7 @@ const notes = {
 const items = [
   ['Arclaw', 'arclaw'],
   ['ArclawLens', 'arclawLens'],
+  ['ArclawLinks', 'arclawLinks'],
   ['AstockPriceSource', 'astockPriceSource'],
   ['MockStock', 'mockStock'],
   ['MockPriceSource', 'mockPriceSource'],

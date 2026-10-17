@@ -3,6 +3,7 @@ pragma solidity 0.8.28;
 
 import {Base} from "../Base.t.sol";
 import {Arclaw} from "../../src/Arclaw.sol";
+import {ArclawLinks} from "../../src/ArclawLinks.sol";
 import {MockStock} from "../../src/mocks/MockStock.sol";
 import {MockPriceSource} from "../../src/mocks/MockPriceSource.sol";
 import {MockVRFCoordinator} from "../../src/mocks/MockVRFCoordinator.sol";
@@ -138,11 +139,10 @@ contract A2PoCTest is Base {
         _play(alice, M1, 5);
         _play(bob, M1, 1);
         address key = vm.addr(0xA11CE);
-        vm.prank(bob); // front-runner
-        box.createLink(key, M1, 1, uint40(block.timestamp + 1 days));
+        _link(bob, key, M1, 1, block.timestamp + 1 days); // front-runner
         vm.prank(alice);
-        vm.expectRevert(Arclaw.LinkKeyUsed.selector);
-        box.createLink(key, M1, 5, uint40(block.timestamp + 1 days));
+        vm.expectRevert(ArclawLinks.LinkKeyUsed.selector);
+        box.safeTransferFrom(alice, address(links), M1, 5, abi.encode(key, block.timestamp + 1 days));
         assertEq(box.balanceOf(alice, M1), 5, "honest sender keeps every box");
     }
 

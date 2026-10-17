@@ -6,8 +6,6 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
-import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
@@ -24,7 +22,7 @@ import {D20Randomness} from "./vrf/D20Randomness.sol";
 ///         the lower of its value when the table was set and its current value.
 ///         Every table, whoever sets it, must satisfy the machine's rules: each outcome worth at least floorBps and
 ///         at most capBps of the price, and the weighted expected value inside [rtpMinBps, rtpMaxBps].
-contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, EIP712, D20Randomness {
+contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomness {
     using SafeERC20 for IERC20;
 
     // ------------------------------------------------------------------ constants
@@ -38,7 +36,6 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, EIP712, D20
     uint16 public constant MIN_FLOOR_BPS = 3000; // never less than 30% back
     uint16 public constant MAX_RTP_BPS = 9500; // house edge never under 5%
     uint32 public constant MAX_CAP_BPS = 1_000_000; // 100x
-    bytes32 public constant CLAIM_TYPEHASH = keccak256("Claim(uint256 linkId,address recipient)");
 
     // ------------------------------------------------------------------ types
 
@@ -90,22 +87,6 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, EIP712, D20
         bytes32 word;
     }
 
-    enum LinkStatus {
-        None,
-        Open,
-        Claimed,
-        Reclaimed
-    }
-
-    struct Link {
-        address sender;
-        uint32 boxes;
-        uint16 machineId;
-        uint40 expiresAt;
-        LinkStatus status;
-        address linkKey;
-    }
-
     // ------------------------------------------------------------------ storage
 
     mapping(uint256 => Machine) public machines;
@@ -130,11 +111,6 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, EIP712, D20
     mapping(uint256 => uint256) public openingOfRequest;
     uint256 public nextOpeningId;
 
-    mapping(uint256 => Link) public links;
-    mapping(address => bool) public linkKeyUsed;
-    uint256 public nextLinkId;
-    /// machineId => boxes held in link escrow (== balanceOf(this, machineId))
-    mapping(uint256 => uint256) public escrowed;
 
     mapping(address => uint256) public credit;
     /// Liabilities the owner and operator cannot touch (see freeBalance):
@@ -202,16 +178,6 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, EIP712, D20
     );
     event Revealed(uint256 indexed openingId, address indexed opener, uint256 cardsPaid, uint256 refund);
     event BoxesReturned(uint256 indexed openingId, address indexed opener, uint256 machineId, uint256 boxes);
-    event LinkCreated(
-        uint256 indexed linkId,
-        address indexed sender,
-        address indexed linkKey,
-        uint256 machineId,
-        uint256 boxes,
-        uint256 expiresAt
-    );
-    event LinkClaimed(uint256 indexed linkId, address indexed sender, address indexed recipient, uint256 boxes);
-    event LinkReclaimed(uint256 indexed linkId, address indexed sender, uint256 boxes);
     event CreditAdded(address indexed to, uint256 amount);
     event CreditClaimed(address indexed to, uint256 amount);
     event MachineActive(uint256 indexed machineId, bool active);
@@ -257,13 +223,6 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, EIP712, D20
     error TablePriceMismatch();
     error TableStale();
     error BadGas();
-    error BadLink();
-    error LinkKeyUsed();
-    error LinkNotOpen();
-    error LinkExpired();
-    error LinkNotExpired();
-    error BadSignature();
-    error NotSender();
     error NoCredit();
     error Reserved(uint256 free);
     error RenounceDisabled();
@@ -273,7 +232,6 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, EIP712, D20
     constructor(string memory uri_, address coordinator_, uint256 maxVrfSubsidy_)
         ERC1155(uri_)
         Ownable(msg.sender)
-        EIP712("arclaw", "1")
         D20Randomness(coordinator_)
     {
         maxVrfSubsidy = maxVrfSubsidy_;
@@ -417,64 +375,6 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, EIP712, D20
         emit CreditClaimed(msg.sender, amount);
         (bool ok,) = to.call{value: amount}("");
         if (!ok) revert TransferFailed();
-    }
-
-    // ================================================================== claim links
-
-    /// @notice Escrow `boxes` of `machineId` under an ephemeral public key shared off-chain in the link.
-    function createLink(address linkKey, uint256 machineId, uint32 boxes, uint40 expiresAt)
-        external
-        whenNotPaused
-        nonReentrant
-        returns (uint256 linkId)
-    {
-        if (linkKey == address(0) || boxes == 0 || expiresAt <= block.timestamp) revert BadLink();
-        if (linkKeyUsed[linkKey]) revert LinkKeyUsed();
-        linkKeyUsed[linkKey] = true;
-        linkId = nextLinkId++;
-        links[linkId] =
-            Link(msg.sender, boxes, SafeCast.toUint16(machineId), expiresAt, LinkStatus.Open, linkKey);
-        escrowed[machineId] += boxes;
-        // Plain move into this contract's balance, no receiver hook. This contract is not an ERC1155Receiver, so
-        // nobody else can push boxes in: balanceOf(this, id) == escrowed[id].
-        _update(msg.sender, address(this), _one(machineId), _one(boxes));
-        emit LinkCreated(linkId, msg.sender, linkKey, machineId, boxes, expiresAt);
-    }
-
-    /// @notice Claim a link for `recipient`. `signature` is the link key's EIP-712 signature over
-    ///         Claim(linkId, recipient) in this contract's domain (name "arclaw", version "1", chainId, address).
-    ///         Anyone may relay it; a front-runner can only deliver the boxes to the same recipient.
-    function claimLink(uint256 linkId, address recipient, bytes calldata signature) external nonReentrant {
-        Link storage l = links[linkId];
-        if (l.status != LinkStatus.Open) revert LinkNotOpen();
-        if (block.timestamp > l.expiresAt) revert LinkExpired();
-        if (recipient == address(0)) revert BadLink();
-        (address signer, ECDSA.RecoverError err,) = ECDSA.tryRecover(claimDigest(linkId, recipient), signature);
-        if (err != ECDSA.RecoverError.NoError || signer != l.linkKey) revert BadSignature();
-
-        l.status = LinkStatus.Claimed;
-        (uint256 id, uint256 boxes) = (l.machineId, l.boxes);
-        escrowed[id] -= boxes;
-        emit LinkClaimed(linkId, l.sender, recipient, boxes);
-        _safeTransferFrom(address(this), recipient, id, boxes, "");
-    }
-
-    /// @notice After expiry the sender takes unclaimed boxes back.
-    function reclaimLink(uint256 linkId) external nonReentrant {
-        Link storage l = links[linkId];
-        if (l.status != LinkStatus.Open) revert LinkNotOpen();
-        if (msg.sender != l.sender) revert NotSender();
-        if (block.timestamp <= l.expiresAt) revert LinkNotExpired();
-        l.status = LinkStatus.Reclaimed;
-        (uint256 id, uint256 boxes) = (l.machineId, l.boxes);
-        escrowed[id] -= boxes;
-        emit LinkReclaimed(linkId, msg.sender, boxes);
-        _safeTransferFrom(address(this), msg.sender, id, boxes, "");
-    }
-
-    /// @notice The EIP-712 digest a link key signs.
-    function claimDigest(uint256 linkId, address recipient) public view returns (bytes32) {
-        return _hashTypedDataV4(keccak256(abi.encode(CLAIM_TYPEHASH, linkId, recipient)));
     }
 
     // ================================================================== views
@@ -794,10 +694,5 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, EIP712, D20
             reservedCredit += amount;
             emit CreditAdded(to, amount);
         }
-    }
-
-    function _one(uint256 x) private pure returns (uint256[] memory a) {
-        a = new uint256[](1);
-        a[0] = x;
     }
 }

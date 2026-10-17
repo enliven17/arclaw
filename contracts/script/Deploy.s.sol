@@ -6,6 +6,8 @@ import {VmSafe} from "forge-std/Vm.sol";
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {Arclaw} from "../src/Arclaw.sol";
 import {ArclawLens} from "../src/ArclawLens.sol";
+import {ArclawLinks} from "../src/ArclawLinks.sol";
+import {IERC1155} from "@openzeppelin/contracts/token/ERC1155/IERC1155.sol";
 import {AstockPriceSource} from "../src/AstockPriceSource.sol";
 import {MockStock} from "../src/mocks/MockStock.sol";
 import {MockPriceSource} from "../src/mocks/MockPriceSource.sol";
@@ -283,6 +285,7 @@ abstract contract OddsWriter is ArcConfig {
 contract Deploy is OddsWriter {
     Arclaw public box;
     ArclawLens public lens;
+    ArclawLinks public links;
     address public priceSource;
     address public desk;
     address public operator;
@@ -312,6 +315,7 @@ contract Deploy is OddsWriter {
         desk = address(new MockAstockDesk(IPriceSource(priceSource)));
         box = new Arclaw(vm.envOr("BOX_URI", string("")), D20_TESTNET, 0.1 ether);
         lens = new ArclawLens();
+        links = new ArclawLinks(IERC1155(address(box)));
 
         string[8] memory sym = symbols();
         address[] memory list = new address[](8);
@@ -356,6 +360,7 @@ contract Deploy is OddsWriter {
         }
         box = new Arclaw(vm.envOr("BOX_URI", string("")), D20_MAINNET, 0.05 ether);
         lens = new ArclawLens();
+        links = new ArclawLinks(IERC1155(address(box)));
         box.pause(); // no inventory yet: every card would refund
         uint256 age = vm.envOr("MAX_TABLE_AGE", uint256(0));
         if (age != 0) box.setMaxTableAge(age);
@@ -412,6 +417,7 @@ contract Deploy is OddsWriter {
         vm.serializeUint(o, "deployBlock", block.number); // lower bound for indexers
         vm.serializeAddress(o, "arclaw", address(box));
         vm.serializeAddress(o, "lens", address(lens));
+        vm.serializeAddress(o, "links", address(links));
         vm.serializeAddress(o, "priceSource", priceSource);
         vm.serializeAddress(o, "desk", desk);
         vm.serializeAddress(o, "operator", operator);

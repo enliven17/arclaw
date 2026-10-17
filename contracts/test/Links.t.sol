@@ -2,7 +2,7 @@
 pragma solidity 0.8.28;
 
 import {Base} from "./Base.t.sol";
-import {Arclaw} from "../src/Arclaw.sol";
+import {ArclawLinks} from "../src/ArclawLinks.sol";
 
 contract LinksTest is Base {
     uint256 linkPk = 0xA11CE;
@@ -15,27 +15,42 @@ contract LinksTest is Base {
     }
 
     function _create(uint32 n, uint256 ttl) internal returns (uint256 id) {
-        vm.prank(alice);
-        id = box.createLink(linkKey, M2, n, uint40(block.timestamp + ttl));
+        id = _link(alice, linkKey, M2, n, block.timestamp + ttl);
     }
 
     function _sign(uint256 pk, uint256 linkId, address recipient) internal view returns (bytes memory) {
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, box.claimDigest(linkId, recipient));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, links.claimDigest(linkId, recipient));
         return abi.encodePacked(r, s, v);
     }
 
     function test_claimLink_happyPath() public {
         uint256 id = _create(3, 1 days);
         assertEq(box.balanceOf(alice, M2), 2);
-        assertEq(box.balanceOf(address(box), M2), 3);
-        assertEq(box.escrowed(M2), 3);
+        assertEq(box.balanceOf(address(links), M2), 3);
+        assertEq(links.escrowed(M2), 3);
+        (address sender, uint32 boxes, uint16 m,, ArclawLinks.LinkStatus st, address key) = links.links(id);
+        assertEq(sender, alice);
+        assertEq(boxes, 3);
+        assertEq(m, M2);
+        assertEq(uint8(st), uint8(ArclawLinks.LinkStatus.Open));
+        assertEq(key, linkKey);
 
         bytes memory sig = _sign(linkPk, id, bob);
         vm.prank(makeAddr("relayer")); // anyone may relay
-        box.claimLink(id, bob, sig);
+        links.claimLink(id, bob, sig);
         assertEq(box.balanceOf(bob, M2), 3);
-        assertEq(box.escrowed(M2), 0);
-        assertEq(box.balanceOf(address(box), M2), 0);
+        assertEq(links.escrowed(M2), 0);
+        assertEq(box.balanceOf(address(links), M2), 0);
+    }
+
+    function test_createLink_byApprovedOperatorCreditsTheOwner() public {
+        address agent = makeAddr("agent");
+        vm.prank(alice);
+        box.setApprovalForAll(agent, true);
+        vm.prank(agent);
+        box.safeTransferFrom(alice, address(links), M2, 2, abi.encode(linkKey, block.timestamp + 1 hours));
+        (address sender,,,,,) = links.links(0);
+        assertEq(sender, alice, "the box owner, not the operator, can reclaim");
     }
 
     function test_claimLink_digestMatchesEip712() public view {
@@ -45,18 +60,18 @@ contract LinksTest is Base {
                 keccak256("arclaw"),
                 keccak256("1"),
                 block.chainid,
-                address(box)
+                address(links)
             )
         );
         bytes32 structHash = keccak256(abi.encode(keccak256("Claim(uint256 linkId,address recipient)"), 7, bob));
-        assertEq(box.claimDigest(7, bob), keccak256(abi.encodePacked("\x19\x01", domain, structHash)));
+        assertEq(links.claimDigest(7, bob), keccak256(abi.encodePacked("\x19\x01", domain, structHash)));
     }
 
     function test_claimLink_wrongSigner() public {
         uint256 id = _create(1, 1 days);
         bytes memory sig = _sign(0xBAD, id, bob);
-        vm.expectRevert(Arclaw.BadSignature.selector);
-        box.claimLink(id, bob, sig);
+        vm.expectRevert(ArclawLinks.BadSignature.selector);
+        links.claimLink(id, bob, sig);
     }
 
     function test_claimLink_frontRunCannotRedirect() public {
@@ -64,73 +79,83 @@ contract LinksTest is Base {
         bytes memory sig = _sign(linkPk, id, bob);
         address mallory = makeAddr("mallory");
         vm.prank(mallory);
-        vm.expectRevert(Arclaw.BadSignature.selector);
-        box.claimLink(id, mallory, sig); // copied from the mempool, different recipient
+        vm.expectRevert(ArclawLinks.BadSignature.selector);
+        links.claimLink(id, mallory, sig); // copied from the mempool, different recipient
     }
 
     function test_claimLink_replay() public {
         uint256 id = _create(1, 1 days);
         bytes memory sig = _sign(linkPk, id, bob);
-        box.claimLink(id, bob, sig);
-        vm.expectRevert(Arclaw.LinkNotOpen.selector);
-        box.claimLink(id, bob, sig);
+        links.claimLink(id, bob, sig);
+        vm.expectRevert(ArclawLinks.LinkNotOpen.selector);
+        links.claimLink(id, bob, sig);
     }
 
     function test_claimLink_signatureBoundToLinkId() public {
         uint256 id0 = _create(1, 1 days);
         bytes memory sig = _sign(linkPk, id0, bob);
-        uint256 otherPk = 0xB0B;
-        vm.prank(alice);
-        uint256 id1 = box.createLink(vm.addr(otherPk), M2, 1, uint40(block.timestamp + 1 days));
-        vm.expectRevert(Arclaw.BadSignature.selector);
-        box.claimLink(id1, bob, sig);
+        uint256 id1 = _link(alice, vm.addr(0xB0B), M2, 1, block.timestamp + 1 days);
+        vm.expectRevert(ArclawLinks.BadSignature.selector);
+        links.claimLink(id1, bob, sig);
     }
 
     function test_linkKeyReuseRejected() public {
         _create(1, 1 days);
         vm.prank(alice);
-        vm.expectRevert(Arclaw.LinkKeyUsed.selector);
-        box.createLink(linkKey, M2, 1, uint40(block.timestamp + 1 days));
+        vm.expectRevert(ArclawLinks.LinkKeyUsed.selector);
+        box.safeTransferFrom(alice, address(links), M2, 1, abi.encode(linkKey, block.timestamp + 1 days));
     }
 
     function test_reclaimAfterExpiry() public {
+        uint256 t0 = block.timestamp;
         uint256 id = _create(2, 1 hours);
         vm.prank(alice);
-        vm.expectRevert(Arclaw.LinkNotExpired.selector);
-        box.reclaimLink(id);
+        vm.expectRevert(ArclawLinks.LinkNotExpired.selector);
+        links.reclaimLink(id);
 
-        vm.warp(block.timestamp + 1 hours + 1);
+        vm.warp(t0 + 1 hours + 1);
         bytes memory sig = _sign(linkPk, id, bob);
-        vm.expectRevert(Arclaw.LinkExpired.selector);
-        box.claimLink(id, bob, sig);
+        vm.expectRevert(ArclawLinks.LinkExpired.selector);
+        links.claimLink(id, bob, sig);
 
         vm.prank(bob);
-        vm.expectRevert(Arclaw.NotSender.selector);
-        box.reclaimLink(id);
+        vm.expectRevert(ArclawLinks.NotSender.selector);
+        links.reclaimLink(id);
 
         vm.prank(alice);
-        box.reclaimLink(id);
+        links.reclaimLink(id);
         assertEq(box.balanceOf(alice, M2), 5);
-        assertEq(box.escrowed(M2), 0);
+        assertEq(links.escrowed(M2), 0);
 
         vm.prank(alice);
-        vm.expectRevert(Arclaw.LinkNotOpen.selector);
-        box.reclaimLink(id);
+        vm.expectRevert(ArclawLinks.LinkNotOpen.selector);
+        links.reclaimLink(id);
     }
 
     function test_createLink_validation() public {
         vm.startPrank(alice);
-        vm.expectRevert(Arclaw.BadLink.selector);
-        box.createLink(address(0), M2, 1, uint40(block.timestamp + 1));
-        vm.expectRevert(Arclaw.BadLink.selector);
-        box.createLink(linkKey, M2, 0, uint40(block.timestamp + 1));
-        vm.expectRevert(Arclaw.BadLink.selector);
-        box.createLink(linkKey, M2, 1, uint40(block.timestamp));
-        vm.expectRevert(); // insufficient balance
-        box.createLink(linkKey, M2, 6, uint40(block.timestamp + 1));
+        vm.expectRevert(ArclawLinks.BadLink.selector);
+        box.safeTransferFrom(alice, address(links), M2, 1, abi.encode(address(0), block.timestamp + 1));
+        vm.expectRevert(ArclawLinks.BadLink.selector);
+        box.safeTransferFrom(alice, address(links), M2, 0, abi.encode(linkKey, block.timestamp + 1));
+        vm.expectRevert(ArclawLinks.BadLink.selector);
+        box.safeTransferFrom(alice, address(links), M2, 1, abi.encode(linkKey, block.timestamp));
+        vm.expectRevert(ArclawLinks.BadLink.selector); // a plain transfer with no link data
+        box.safeTransferFrom(alice, address(links), M2, 1, "");
+        vm.expectRevert(); // more boxes than held
+        box.safeTransferFrom(alice, address(links), M2, 6, abi.encode(linkKey, block.timestamp + 1));
         vm.expectRevert(); // no $1 boxes
-        box.createLink(linkKey, M1, 1, uint40(block.timestamp + 1));
+        box.safeTransferFrom(alice, address(links), M1, 1, abi.encode(linkKey, block.timestamp + 1));
+        uint256[] memory ids = new uint256[](2);
+        uint256[] memory vals = new uint256[](2);
+        (ids[0], vals[0], ids[1], vals[1]) = (M2, 1, M2, 1);
+        vm.expectRevert(ArclawLinks.BadLink.selector); // multi-id batches refused (OZ routes a 1-id batch as single)
+        box.safeBatchTransferFrom(alice, address(links), ids, vals, abi.encode(linkKey, block.timestamp + 1));
         vm.stopPrank();
     }
 
+    function test_onlyArclawCanCreate() public {
+        vm.expectRevert(ArclawLinks.NotArclaw.selector);
+        links.onERC1155Received(address(this), alice, M2, 1, abi.encode(linkKey, block.timestamp + 1));
+    }
 }
