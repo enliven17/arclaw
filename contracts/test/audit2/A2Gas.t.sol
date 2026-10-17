@@ -95,9 +95,9 @@ contract A2GasTest is Test {
         assertLt(r, ARC_BLOCK_GAS / 4);
     }
 
-    /// Operator-sized table: ~150 outcomes, mass on the last one, so _draw scans the whole table every box.
+    /// Largest allowed table (MAX_OUTCOMES = 64), mass on the last one, so _draw scans the whole table every box.
     function test_gas_reveal20_largeTableFullScan() public {
-        (,, uint256 r) = _run(150, 1_000_000, "150 outcomes, full scan");
+        (,, uint256 r) = _run(64, 1_000_000, "64 outcomes, full scan");
         assertLt(r, ARC_BLOCK_GAS / 2);
     }
 

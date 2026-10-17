@@ -76,6 +76,8 @@ contract A2DeployForkTest is Test {
     function setUp() public {
         if (!vm.envOr("A2_FORK", false)) return;
         vm.createSelectFork("https://rpc.mainnet.arc.io");
+        vm.setEnv("OPERATOR", vm.toString(makeAddr("operator agent")));
+        vm.setEnv("OWNER", vm.toString(makeAddr("owner multisig")));
         d = new Deploy();
         d.run();
         box = d.box();

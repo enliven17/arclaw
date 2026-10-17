@@ -22,88 +22,88 @@ contract GasHogStock is ERC20 {
     }
 }
 
-/// Audit #1 PoCs. Tests named test_FINDING_* assert the vulnerable behaviour today (they pass on the current code
-/// and must be flipped once the fix lands). Tests named test_SAFE_* are regression guards for properties that hold.
+/// Audit #1 PoCs, flipped after the fix pass: test_fixed_* assert the FIXED behaviour of each finding.
+/// Tests named test_SAFE_* are regression guards for properties that held from the start.
 contract Audit1Test is Base {
     // ------------------------------------------------------------------ H-01
 
-    /// H-01a: lowering a machine's price keeps serving the table priced for the old price.
-    function test_FINDING_H01_priceCutServesOldTable() public {
-        box.setPrizes(M2, _table(address(tsla), P2)); // $5 table: packs worth $2.50 or $7.50
-        // Owner reprices machine 2 to $1 (e.g. a promo), intending to call setPrizes next.
+    /// H-01a fixed: a machine's price can never change, so a live table can never be re-rated by a price cut.
+    function test_fixed_H01_priceCutImpossible() public {
+        box.setPrizes(M2, _table(address(tsla), P2));
+        vm.expectRevert(Arclaw.PriceImmutable.selector);
         box.setMachine(M2, uint128(P1), 5000, 100_000, 6000, 8500);
-
         (uint256 rtpBps,,,) = lens.stats(box, M2);
-        assertEq(rtpBps, 37_500, "live table now pays 375% of the box price");
-        assertGt(rtpBps, box.MAX_RTP_BPS());
-
-        // Attacker back-runs setMachine: 20 boxes at $1 each.
-        _play(alice, M2, 20);
-        (uint256 id, uint256 req) = _open(alice, M2, 20);
-        vrf.fulfill(req, keccak256("any word"));
-        box.reveal(id);
-        uint256 got = box.valueOf(address(tsla), tsla.balanceOf(alice));
-        // Floor of the old table alone is $2.50 per box.
-        assertGe(got, 20 * 2.5 ether - 1e6);
-        assertGt(got, 2 * 20 * P1, "attacker more than doubled 20 USDC");
+        assertEq(rtpBps, 7500, "table still priced against 5 USDC");
+        // A cheaper promo is a new machine id with its own table and its own boxes.
+        box.setMachine(5, uint128(P1), 5000, 100_000, 6000, 8500);
+        vm.prank(alice);
+        vm.expectRevert(Arclaw.NoPrizes.selector);
+        box.open(5, 1);
     }
 
-    /// H-01b: boxes bought before a price rise open against the new, richer table (boxes are fungible per id and
-    /// the table is frozen at open, not at purchase).
-    function test_FINDING_H01_boxesBoughtCheapOpenOnRepricedTable() public {
-        box.setPrizes(M1, _table(address(nvda), P1)); // $1 table
-        _play(alice, M1, 20); // pays 20 USDC
-
-        // Owner turns machine 1 into a $10 machine and installs a $10 table.
+    /// H-01b fixed: boxes bought at 1 USDC can only ever open against a 1 USDC table.
+    function test_fixed_H01_repriceIsNewMachine() public {
+        box.setPrizes(M1, _table(address(nvda), P1));
+        _play(alice, M1, 20);
         uint256 p10 = 10 ether;
+        vm.expectRevert(Arclaw.PriceImmutable.selector);
         box.setMachine(M1, uint128(p10), 5000, 100_000, 6000, 8500);
-        box.setPrizes(M1, _table(address(nvda), p10));
+        box.setMachine(7, uint128(p10), 5000, 100_000, 6000, 8500);
+        box.setPrizes(7, _table(address(nvda), p10));
 
         (uint256 id, uint256 req) = _open(alice, M1, 20);
         vrf.fulfill(req, keccak256("w"));
         box.reveal(id);
         uint256 got = box.valueOf(address(nvda), nvda.balanceOf(alice));
-        assertGe(got, 20 * 5 ether - 1e6, "every box now worth >= $5 (floor of $10 table)");
-        assertGt(got, 4 * 20 * P1);
+        assertLe(got, 20 * 1.5 ether, "every box drew from the 1 USDC table (max pack 1.5)");
     }
 
     // ------------------------------------------------------------------ L: retry subsidy drain
 
-    /// Any third party can call retry() on every expired opening with msg.value = 0; each call spends up to
-    /// maxVrfSubsidy from the treasury. The old fee only comes back if someone calls coordinator.refundRequest.
-    function test_FINDING_retryBurnsSubsidyForAnyone() public {
+    /// Fixed: a stranger's retry pays the full fee, and the expired fee is reclaimed first, so the treasury never
+    /// pays for someone else's retries. The opener keeps a free retry.
+    function test_fixed_retryCostsStranger() public {
         box.setPrizes(M1, _table(address(nvda), P1));
         vm.deal(address(box), 10 ether);
         _play(alice, M1, 1);
+        uint256 t0 = block.timestamp;
         (uint256 id,) = _open(alice, M1, 1);
         uint256 start = address(box).balance;
         address griefer = makeAddr("griefer");
-        uint256 now_ = block.timestamp;
-        for (uint256 i; i < 5; ++i) {
-            now_ += 61;
-            vm.warp(now_); // D20 outage: nothing fulfils
+        vm.deal(griefer, 1 ether);
+        uint256 fee = vrf.fee();
+        for (uint256 i = 1; i <= 5; ++i) {
+            vm.warp(t0 + 61 * i); // D20 outage: nothing fulfils
             vm.prank(griefer);
+            vm.expectRevert(abi.encodeWithSelector(Arclaw.VrfFeeTopUp.selector, fee, 0));
             box.retry(id);
+            vm.prank(griefer);
+            box.retry{value: fee}(id);
         }
-        assertEq(start - address(box).balance, 5 * vrf.fee(), "treasury paid 5 extra fees");
+        assertEq(address(box).balance, start + 5 * fee, "treasury got every expired fee back; griefer paid");
+        vm.warp(t0 + 61 * 6);
+        vm.prank(alice);
+        box.retry(id); // the opener's retry is free and balance-neutral
+        assertEq(address(box).balance, start + 5 * fee);
     }
 
     // ------------------------------------------------------------------ I: unreserved liabilities
 
-    /// Credit owed to players is not reserved: owner withdraw (or VRF fees / refunds) can spend it.
-    function test_FINDING_creditNotReserved() public {
+    /// Fixed: the price paid for a pending box (and any owed credit) is reserved; the owner cannot withdraw it, so
+    /// the refund is paid in full at reveal.
+    function test_fixed_creditReserved() public {
         _forceSingle(M1, address(nvda), 0.75 ether);
         box.sweep(address(nvda), address(1), 100 ether); // inventory empty: card refunds
         _play(alice, M1, 1);
         (uint256 id, uint256 req) = _open(alice, M1, 1);
         vrf.fulfill(req, keccak256("w"));
-        // Pool has only the 1 USDC play minus the VRF fee, so the 0.75 refund is pushed. Drain first instead:
-        box.withdraw(address(0xBEEF), address(box).balance);
-        box.reveal(id); // push fails (no balance): becomes credit
-        assertEq(box.credit(alice), 0.75 ether);
-        vm.prank(alice);
-        vm.expectRevert(Arclaw.TransferFailed.selector);
-        box.claimCredit();
+        uint256 bal = address(box).balance;
+        vm.expectRevert(abi.encodeWithSelector(Arclaw.Reserved.selector, 0));
+        box.withdraw(address(0xBEEF), bal);
+        uint256 before = alice.balance;
+        box.reveal(id);
+        assertEq(alice.balance - before, 0.75 ether, "refund paid, not an IOU");
+        assertEq(box.credit(alice), 0);
     }
 
     // ------------------------------------------------------------------ SAFE: gas griefing of card transfers
@@ -180,10 +180,10 @@ contract Audit1Test is Base {
         assertLt(revealGas, 5_000_000);
     }
 
-    /// Large tables: setPrizes for N outcomes costs far more than the draw loop in reveal, so the 30M block limit
-    /// bounds N long before reveal(20) becomes unexecutable.
+    /// Large tables (now capped at MAX_OUTCOMES = 64): setPrizes for N outcomes costs far more than the draw loop in
+    /// reveal, so reveal(20) stays executable.
     function test_SAFE_largeTableRevealStillFits() public {
-        uint256 n = 100;
+        uint256 n = 64;
         box.setMachine(M1, uint128(P1), 5000, 100_000, 7500, 7500);
         Arclaw.OutcomeInput[] memory tab = new Arclaw.OutcomeInput[](n);
         for (uint256 i; i < n; ++i) {
@@ -198,8 +198,8 @@ contract Audit1Test is Base {
         g0 = gasleft();
         box.reveal(id);
         uint256 revealGas = g0 - gasleft();
-        emit log_named_uint("setPrizes(100) gas", setGas);
-        emit log_named_uint("reveal(20) on 100-outcome table, worst-case scan", revealGas);
+        emit log_named_uint("setPrizes(64) gas", setGas);
+        emit log_named_uint("reveal(20) on 64-outcome table, worst-case scan", revealGas);
         assertGt(setGas, revealGas);
     }
 
