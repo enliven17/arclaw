@@ -11,9 +11,10 @@
 import { useRef } from "react";
 import { PINNED, REDUCED, ScrollTrigger, gsap, pinType, useGSAP } from "@/lib/motion";
 import { examplePack, type Machine } from "@/lib/machines";
-import { Logo } from "@/components/Logo";
 import { SplitHeading } from "@/components/motion/SmoothScroll";
 import { BoosterPack, PACK_SEAL_AT } from "@/components/pack/BoosterPack";
+import { SealedBox } from "@/components/pack/SealedBox";
+import { variantOf } from "@/components/claw/view";
 import { StockCard } from "./StockCard";
 
 export function HowItWorks({ machines }: { machines: Machine[] }) {
@@ -140,21 +141,9 @@ export function HowItWorks({ machines }: { machines: Machine[] }) {
           </div>
 
           <div className="absolute inset-0 flex items-center justify-center">
-            {/* The sealed box: body, a lid that lifts, a tape band and the seal. */}
-            <div data-box="" data-how-hide="" aria-hidden="true" className="absolute aspect-[5/4] w-[52%] sm:w-[38%]">
-              <div className="absolute inset-x-0 bottom-0 top-[22%] rounded-b-[12px] rounded-t-[4px] border border-line-strong bg-panel-2">
-                <div className="absolute inset-y-0 left-1/2 w-[16%] -translate-x-1/2 border-x border-line bg-cream/[0.06]" />
-                <div className="absolute bottom-[14%] left-[8%]">
-                  <Logo variant="wordmark" height={13} />
-                </div>
-                <span className="money absolute bottom-[14%] right-[8%] text-[12px] text-muted">{machine.name}</span>
-              </div>
-              <div data-lid="" className="absolute inset-x-[-3%] top-[6%] h-[20%] rounded-[8px] border border-line-strong bg-panel-2">
-                <div className="absolute inset-y-0 left-1/2 w-[15%] -translate-x-1/2 border-x border-line bg-cream/[0.06]" />
-                <div className="absolute left-1/2 top-1/2 flex aspect-square h-[60%] -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-[6px] border border-line-strong bg-panel">
-                  <Logo variant="mark" height={14} />
-                </div>
-              </div>
+            {/* The sealed box, finished like the boxes in its machine. */}
+            <div data-how-hide="" className="absolute w-[56%] sm:w-[40%]">
+              <SealedBox variant={variantOf(machine.slug)} />
             </div>
 
             {/* The pack slot: the cards wait inside the wrapper (clipped at its bottom seal, behind its front), rise out
