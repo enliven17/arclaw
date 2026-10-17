@@ -93,7 +93,7 @@ export function RevealOverlay({
   // Cards start face down and stacked in the pack.
   useEffect(() => {
     gsap.set(q("[data-card-inner]"), { rotateY: 0 });
-    gsap.set(q("[data-rv-card]"), { opacity: 0, yPercent: 30, xPercent: 0, rotate: 0 });
+    gsap.set(q("[data-rv-card]"), { opacity: 0, yPercent: 30, xPercent: 0, rotate: 0, zIndex: 10 });
     gsap.set(q("[data-rv-pack]"), { opacity: 0, yPercent: 40, scale: 0.85 });
     gsap.set(q("[data-rv-box]"), { opacity: 1, yPercent: 0, scale: 1 });
     gsap.set(q("[data-lid]"), { yPercent: 0, rotate: 0, opacity: 1 });
@@ -136,7 +136,9 @@ export function RevealOverlay({
         if (i === 2) setStep("flip");
       },
     });
-    tl.fromTo(card, { opacity: 1, yPercent: -10, xPercent: 0, scale: 0.85 }, { yPercent: -70, duration: 0.25 * d, ease: "power2.out" }).to(card, {
+    tl.fromTo(card, { opacity: 1, yPercent: -10, xPercent: 0, scale: 0.85 }, { yPercent: -70, duration: 0.25 * d, ease: "power2.out" })
+      .set(card, { zIndex: 30 })
+      .to(card, {
       xPercent: (i - 1) * 108,
       yPercent: 0,
       scale: 1,
@@ -262,16 +264,17 @@ export function RevealOverlay({
                 <div data-rv-box="" className="absolute w-[62%]">
                   <SealedBox variant={variantOf(machine.slug)} />
                 </div>
-                <div data-rv-pack="" className="absolute z-20 w-[40%]">
+                <div data-rv-pack="" className="pointer-events-none absolute z-20 w-[40%]">
                   <BoosterPack machine={machine.name} tier={box && step !== "sealed" && step !== "pack" ? box.tier : undefined} uid="reveal-pack" />
                 </div>
-                <div className="absolute inset-0 z-10 grid place-items-center">
+                {/* No z-index here: each card stacks on its own, under the pack until it is dealt, above it after. */}
+                <div className="absolute inset-0 grid place-items-center">
                   {(box?.cards ?? []).map((c, i) => (
                     <button
                       key={`${index}-${i}`}
                       type="button"
                       data-rv-card=""
-                      className="col-start-1 row-start-1 w-[30%]"
+                      className="relative z-10 col-start-1 row-start-1 w-[30%]"
                       tabIndex={step === "flip" && !flipped[i] ? 0 : -1}
                       aria-label={flipped[i] ? `${c.ticker}, ${usdc(toUsdc(c.valueWei))} USDC` : `Turn card ${i + 1}`}
                       onClick={() => step === "flip" && flip(i)}
