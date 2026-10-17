@@ -7,7 +7,8 @@ import { chromium } from "playwright-core";
 const [url, prefix] = process.argv.slice(2);
 const mobile = process.argv.includes("--mobile");
 const b = await chromium.launch();
-for (const at of [0.5, 1.2, 1.8]) {
+const times = (process.env.AT ?? "0.5,1.2,1.8").split(",").map(Number);
+for (const at of times) {
   const ctx = await b.newContext({ viewport: mobile ? { width: 390, height: 844 } : { width: 1440, height: 900 }, isMobile: mobile, hasTouch: mobile, deviceScaleFactor: mobile ? 2 : 1 });
   const p = await ctx.newPage();
   await p.goto(url, { waitUntil: "domcontentloaded" });

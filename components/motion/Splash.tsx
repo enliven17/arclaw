@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * First visit per tab session. The claw drops on its cable with its prongs open, grips the wordmark, gives it a
+ * First visit per tab session. A USDC coin spins in and drops through the slot, then the claw drops on its cable with its prongs open, grips the wordmark, gives it a
  * tug, then hauls the whole panel up off the page like a curtain. The head script in app/layout decides
  * (html.splashing) before first paint, so a returning visitor never sees a flash of it.
  */
@@ -9,6 +9,7 @@ import { useEffect, useRef } from "react";
 import gsap from "gsap";
 import { MARK_BODY, MARK_PRONGS, MARK_SIZE, PRONG_W, WORD_H, WORD_PATH, WORD_W } from "@/lib/brand/logo";
 import { getLenis } from "@/lib/motion";
+import { USDC_BLUE, USDC_BOX, USDC_DISC, USDC_DOLLAR, USDC_RINGS } from "@/lib/brand/usdc";
 
 export const SPLASH_KEY = "arclaw:splash";
 
@@ -43,20 +44,28 @@ export function Splash() {
     gsap.set(q("[data-rig]"), { y: "-75vh" });
 
     const tl = gsap.timeline({ onComplete: done });
-    tl.to(q("[data-rig]"), { y: 0, duration: 1, ease: "power3.inOut" }, 0)
+    // Coin: pops in, spins twice on its edge, drops through the slot. The claw act starts at C.
+    const C = 1.05;
+    tl.fromTo(q("[data-coin]"), { scale: 0.6, opacity: 0, y: -72 }, { scale: 1, opacity: 1, duration: 0.35, ease: "back.out(1.6)" }, 0)
+      .fromTo(q("[data-coin]"), { rotationY: 0 }, { rotationY: 720, transformPerspective: 600, duration: 0.7, ease: "power2.inOut" }, 0.05)
+      .to(q("[data-coin]"), { y: 150, duration: 0.3, ease: "power3.in" }, 0.72)
+      .fromTo(q("[data-slot]"), { opacity: 0, scaleX: 0.6 }, { opacity: 1, scaleX: 1, duration: 0.3, ease: "power2.out" }, 0.1)
+      .to(q("[data-slot]"), { opacity: 0, duration: 0.2 }, 1.0);
+    tl.addLabel("claw", C);
+    tl.to(q("[data-rig]"), { y: 0, duration: 1, ease: "power3.inOut" }, "claw+=0")
       // fromTo, not from: a StrictMode re-run would read the first run's opacity 0 as the end value.
-      .fromTo(q("[data-word]"), { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.6, ease: "power3.out" }, 0.35)
+      .fromTo(q("[data-word]"), { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.6, ease: "power3.out" }, "claw+=0.35")
       // Grip: the prongs swing shut a touch past closed, then settle.
-      .to(q("[data-left]"), { rotation: -4, duration: 0.22, ease: "power2.in" }, 0.95)
-      .to(q("[data-right]"), { rotation: 4, duration: 0.22, ease: "power2.in" }, 0.95)
-      .to(q("[data-left], [data-right]"), { rotation: 0, duration: 0.18, ease: "power2.out" }, 1.17)
+      .to(q("[data-left]"), { rotation: -4, duration: 0.22, ease: "power2.in" }, "claw+=0.95")
+      .to(q("[data-right]"), { rotation: 4, duration: 0.22, ease: "power2.in" }, "claw+=0.95")
+      .to(q("[data-left], [data-right]"), { rotation: 0, duration: 0.18, ease: "power2.out" }, "claw+=1.17")
       // Tug: claw and wordmark lift together a few pixels, as if testing the weight.
-      .to(q("[data-rig], [data-word]"), { y: -10, duration: 0.22, ease: "power2.out" }, 1.3)
-      .to(count, { v: 100, duration: 1.5, ease: "power2.inOut", onUpdate: () => void (num.textContent = String(Math.round(count.v)).padStart(3, "0")) }, 0)
-      .to(q("[data-bar]"), { scaleX: 1, duration: 1.5, ease: "power2.inOut" }, 0)
+      .to(q("[data-rig], [data-word]"), { y: -10, duration: 0.22, ease: "power2.out" }, "claw+=1.3")
+      .to(count, { v: 100, duration: 2.55, ease: "power2.inOut", onUpdate: () => void (num.textContent = String(Math.round(count.v)).padStart(3, "0")) }, 0)
+      .to(q("[data-bar]"), { scaleX: 1, duration: 2.55, ease: "power2.inOut" }, 0)
       // Haul: the claw pulls the panel up and off the page.
-      .to(q("[data-rig], [data-word]"), { y: "-100vh", duration: 0.85, ease: "power4.in" }, 1.55)
-      .to(el, { clipPath: "inset(0 0 100% 0)", duration: 0.85, ease: "power4.inOut" }, 1.65);
+      .to(q("[data-rig], [data-word]"), { y: "-100vh", duration: 0.85, ease: "power4.in" }, "claw+=1.55")
+      .to(el, { clipPath: "inset(0 0 100% 0)", duration: 0.85, ease: "power4.inOut" }, "claw+=1.65");
     return () => {
       tl.kill();
     };
@@ -65,6 +74,19 @@ export function Splash() {
   const s = 6; // mark scale: 24 units to 144px
   return (
     <div ref={root} aria-hidden className="splash fixed inset-0 z-[100] hidden bg-ink text-cream [clip-path:inset(0_0_0_0)]">
+      <div className="absolute inset-0 grid place-items-center">
+        <div className="flex flex-col items-center">
+          {/* The coin falls through this window; its bottom edge is the slot, so the coin vanishes into it. */}
+          <div className="flex h-[170px] w-[140px] items-end justify-center overflow-hidden">
+            <svg data-coin viewBox={`0 0 ${USDC_BOX} ${USDC_BOX}`} width={112} height={112} className="mb-[-56px] block opacity-0">
+              <path fill={USDC_BLUE} d={USDC_DISC} />
+              <path fill="#fff" d={USDC_DOLLAR} />
+              <path fill="#fff" d={USDC_RINGS} />
+            </svg>
+          </div>
+          <div data-slot className="h-2 w-[136px] rounded-full bg-cream/25 opacity-0" />
+        </div>
+      </div>
       <div className="absolute inset-0 grid place-items-center">
         <div className="flex flex-col items-center">
           <div data-rig className="relative flex flex-col items-center">
