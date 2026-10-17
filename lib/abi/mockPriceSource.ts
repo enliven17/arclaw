@@ -1,4 +1,4 @@
-// Generated from contracts/out/MockPriceSource.sol/MockPriceSource.json. Do not edit; rerun the ABI export after forge build.
+// Generated from contracts/out/MockPriceSource.sol/MockPriceSource.json by contracts/script/export-abi.mjs. Do not edit.
 export const mockPriceSourceAbi = [
   {
     "type": "constructor",

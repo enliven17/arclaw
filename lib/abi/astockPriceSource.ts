@@ -1,4 +1,4 @@
-// Generated from contracts/out/AstockPriceSource.sol/AstockPriceSource.json. Do not edit; rerun the ABI export after forge build.
+// Generated from contracts/out/AstockPriceSource.sol/AstockPriceSource.json by contracts/script/export-abi.mjs. Do not edit.
 export const astockPriceSourceAbi = [
   {
     "type": "constructor",
@@ -212,6 +212,17 @@ export const astockPriceSourceAbi = [
     "inputs": [
       {
         "name": "account",
+        "type": "address",
+        "internalType": "address"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "Stale",
+    "inputs": [
+      {
+        "name": "token",
         "type": "address",
         "internalType": "address"
       }

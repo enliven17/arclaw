@@ -1,4 +1,4 @@
-// Generated from contracts/out/MockStock.sol/MockStock.json. Do not edit; rerun the ABI export after forge build.
+// Generated from contracts/out/MockStock.sol/MockStock.json by contracts/script/export-abi.mjs. Do not edit.
 export const mockStockAbi = [
   {
     "type": "constructor",

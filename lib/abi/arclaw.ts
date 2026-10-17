@@ -1,4 +1,11 @@
-// Generated from contracts/out/Arclaw.sol/Arclaw.json. Do not edit; rerun the ABI export after forge build.
+// Generated from contracts/out/Arclaw.sol/Arclaw.json by contracts/script/export-abi.mjs. Do not edit.
+// Frontend rules:
+// - Claim links: share the link URL only AFTER the createLink transaction is confirmed. A front-runner can
+//   reuse a pending linkKey (audit #2 L-3); the honest createLink then reverts with LinkKeyUsed and the
+//   link must not be shared. Generate a fresh key and retry.
+// - VRF fee: quote with coordinator.quoteFeeAt(callbackGasLimit, latest baseFee) plus a buffer (never
+//   quoteFee via eth_call). open() is subsidised; retry() is free only for the opener or operator.
+// - Reads that moved off-chain for size: stats and quoteVrfFee live in ArclawLens (lib/abi/arclawLens.ts).
 export const arclawAbi = [
   {
     "type": "constructor",
@@ -86,6 +93,19 @@ export const arclawAbi = [
         "name": "",
         "type": "uint32",
         "internalType": "uint32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "MAX_OUTCOMES",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "stateMutability": "view"
@@ -259,6 +279,19 @@ export const arclawAbi = [
     "type": "function",
     "name": "claimCredit",
     "inputs": [],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "claimCredit",
+    "inputs": [
+      {
+        "name": "to",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
     "outputs": [],
     "stateMutability": "nonpayable"
   },
@@ -458,6 +491,19 @@ export const arclawAbi = [
   },
   {
     "type": "function",
+    "name": "freeBalance",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "gift",
     "inputs": [
       {
@@ -576,6 +622,25 @@ export const arclawAbi = [
   },
   {
     "type": "function",
+    "name": "machineOff",
+    "inputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "machines",
     "inputs": [
       {
@@ -609,6 +674,19 @@ export const arclawAbi = [
         "name": "rtpMaxBps",
         "type": "uint16",
         "internalType": "uint16"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "maxTableAge",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "stateMutability": "view"
@@ -945,6 +1023,19 @@ export const arclawAbi = [
   },
   {
     "type": "function",
+    "name": "pendingReserve",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "play",
     "inputs": [
       {
@@ -970,19 +1061,6 @@ export const arclawAbi = [
         "name": "",
         "type": "address",
         "internalType": "contract IPriceSource"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "quoteVrfFee",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
       }
     ],
     "stateMutability": "view"
@@ -1024,6 +1102,19 @@ export const arclawAbi = [
     "inputs": [],
     "outputs": [],
     "stateMutability": "pure"
+  },
+  {
+    "type": "function",
+    "name": "reservedCredit",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
   },
   {
     "type": "function",
@@ -1187,6 +1278,37 @@ export const arclawAbi = [
         "name": "rtpMaxBps",
         "type": "uint16",
         "internalType": "uint16"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "setMachineActive",
+    "inputs": [
+      {
+        "name": "machineId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "active",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "setMaxTableAge",
+    "inputs": [
+      {
+        "name": "maxAge",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "outputs": [],
@@ -1467,32 +1589,36 @@ export const arclawAbi = [
   },
   {
     "type": "function",
-    "name": "tableStats",
+    "name": "tablePrice",
     "inputs": [
       {
-        "name": "tableId",
+        "name": "",
         "type": "uint256",
         "internalType": "uint256"
       }
     ],
     "outputs": [
       {
-        "name": "rtpBps",
+        "name": "",
         "type": "uint256",
         "internalType": "uint256"
-      },
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "tablePricedAt",
+    "inputs": [
       {
-        "name": "minBps",
+        "name": "",
         "type": "uint256",
         "internalType": "uint256"
-      },
+      }
+    ],
+    "outputs": [
       {
-        "name": "maxBps",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "totalWeight",
+        "name": "",
         "type": "uint256",
         "internalType": "uint256"
       }
@@ -1943,6 +2069,25 @@ export const arclawAbi = [
   },
   {
     "type": "event",
+    "name": "MachineActive",
+    "inputs": [
+      {
+        "name": "machineId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "active",
+        "type": "bool",
+        "indexed": false,
+        "internalType": "bool"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "MachineSet",
     "inputs": [
       {
@@ -1977,6 +2122,19 @@ export const arclawAbi = [
       },
       {
         "name": "rtpMaxBps",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "MaxTableAgeSet",
+    "inputs": [
+      {
+        "name": "maxAge",
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"
@@ -2713,6 +2871,11 @@ export const arclawAbi = [
   },
   {
     "type": "error",
+    "name": "MachineOff",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "NoCredit",
     "inputs": []
   },
@@ -2795,6 +2958,11 @@ export const arclawAbi = [
   },
   {
     "type": "error",
+    "name": "PriceImmutable",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "ReentrancyGuardReentrantCall",
     "inputs": []
   },
@@ -2802,6 +2970,17 @@ export const arclawAbi = [
     "type": "error",
     "name": "RenounceDisabled",
     "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Reserved",
+    "inputs": [
+      {
+        "name": "free",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
   },
   {
     "type": "error",
@@ -2870,7 +3049,22 @@ export const arclawAbi = [
   },
   {
     "type": "error",
+    "name": "TablePriceMismatch",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "TableStale",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "TooManyBoxes",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "TooManyOutcomes",
     "inputs": []
   },
   {
