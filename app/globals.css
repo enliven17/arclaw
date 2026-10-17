@@ -295,3 +295,27 @@ html.splashing .splash {
 html.splashing {
   overflow: clip;
 }
+
+/* Scrollbar: thin and quiet. A cream thumb at low opacity with rounded ends on a transparent track, brighter on
+   hover. Firefox takes scrollbar-width and scrollbar-color; WebKit and Blink take the pseudo-elements. */
+html {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(236 230 218 / 0.15) transparent;
+}
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgb(236 230 218 / 0.15);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgb(236 230 218 / 0.32);
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
