@@ -484,3 +484,10 @@ html.has-cursor :is(input:not([type="range"]):not([type="checkbox"]):not([type="
 html:not(.js) .how-step {
   grid-row: auto;
 }
+
+/* Disabled secondary buttons read as disabled too. */
+.btn-cream:disabled,
+.btn-ghost:disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
