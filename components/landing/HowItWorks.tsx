@@ -13,7 +13,7 @@ import { PINNED, REDUCED, ScrollTrigger, gsap, pinType, useGSAP } from "@/lib/mo
 import { examplePack, type Machine } from "@/lib/machines";
 import { Logo } from "@/components/Logo";
 import { SplitHeading } from "@/components/motion/SmoothScroll";
-import { BoosterPack } from "@/components/pack/BoosterPack";
+import { BoosterPack, PACK_SEAL_AT } from "@/components/pack/BoosterPack";
 import { StockCard } from "./StockCard";
 
 export function HowItWorks({ machines }: { machines: Machine[] }) {
@@ -56,7 +56,7 @@ export function HowItWorks({ machines }: { machines: Machine[] }) {
         gsap.set(inners, { rotateY: 0 });
         gsap.set(deck, { zIndex: 10 });
         // Hidden until the pack is in front of them; then they wait inside it.
-        gsap.set(cards, { yPercent: 18, scale: 0.92, opacity: 0 });
+        gsap.set(cards, { yPercent: 0, scale: 1, opacity: 0 });
         gsap.set(packEl, { opacity: 0, yPercent: 26, scale: 0.88 });
         gsap.set(box, { yPercent: -170, opacity: 0 });
         gsap.set(coin, { opacity: 0, y: 24 });
@@ -84,13 +84,14 @@ export function HowItWorks({ machines }: { machines: Machine[] }) {
           .addLabel("cards", "tear+=0.5")
           .call(() => setStep(3), [], "cards")
           // Cards slide up out of the open top, staggered, still behind the pack's body.
-          .to(cards, { yPercent: -62, duration: 0.6, stagger: 0.12, ease: "power2.out" }, "cards")
-          .set(deck, { zIndex: 30 }, "cards+=0.95")
-          .to(packEl, { yPercent: 75, opacity: 0, duration: 0.6, ease: "power2.in" }, "cards+=0.95")
+          .to(cards, { yPercent: -72, duration: 0.7, stagger: 0.12, ease: "power2.out" }, "cards")
+          // Clear of the opening: the cards come in front of the wrapper, which drops away empty.
+          .set(deck, { zIndex: 30, clipPath: "none" }, "cards+=1.05")
+          .to(packEl, { yPercent: 75, opacity: 0, duration: 0.6, ease: "power2.in" }, "cards+=1.05")
           .to(
             cards,
             { xPercent: (i: number) => spread[i]! * 106, yPercent: 0, scale: 1, rotate: (i: number) => spread[i]! * 3, duration: 0.8, ease: "power3.inOut" },
-            "cards+=1.05",
+            "cards+=1.2",
           )
           .to(inners, { rotateY: 180, duration: 0.9, stagger: 0.28, ease: "back.out(1.15)" }, "+=0.05")
           .to({}, { duration: 0.5 });
@@ -156,16 +157,23 @@ export function HowItWorks({ machines }: { machines: Machine[] }) {
               </div>
             </div>
 
-            {/* The three cards: one cell, behind the pack until they come out. Face up without JS. */}
-            <div data-deck="" className="absolute inset-0 grid place-items-center">
-              {pack.map((card, i) => (
-                <StockCard key={`${card.ticker}-${i}`} card={card} tier={tier.name} index={i} className="col-start-1 row-start-1 w-[30%]" />
-              ))}
-            </div>
-
-            {/* The booster pack. */}
-            <div data-how-hide="" className="absolute z-20 w-[44%] sm:w-[36%]">
-              <BoosterPack machine={machine.name} uid="how-pack" />
+            {/* The pack slot: the cards wait inside the wrapper (clipped at its bottom seal, behind its front), rise out
+                through the torn top, then come forward and deal out. Face up without JS. */}
+            <div className="absolute aspect-[200/330] w-[44%] sm:w-[36%]">
+              <div data-deck="" className="absolute inset-0 z-10 grid place-items-center" style={{ clipPath: `inset(-300% -200% ${((1 - PACK_SEAL_AT) * 100).toFixed(1)}% -200%)` }}>
+                {pack.map((card, i) => (
+                  <StockCard
+                    key={`${card.ticker}-${i}`}
+                    card={card}
+                    tier={tier.name}
+                    index={i}
+                    className="col-start-1 row-start-1 w-[68%] sm:w-[83%]"
+                  />
+                ))}
+              </div>
+              <div data-how-hide="" className="absolute inset-0 z-20">
+                <BoosterPack machine={machine.name} tiers={machine.tiers.length} uid="how-pack" />
+              </div>
             </div>
           </div>
         </div>

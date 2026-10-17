@@ -262,10 +262,23 @@ html.js [data-split] .split-line > span {
 html:not(.js) [data-how-hide] {
   display: none;
 }
+/* The same cases show the three cards fanned out (GSAP does this when it runs). */
+html:not(.js) [data-deck] [data-card="0"] {
+  transform: translateX(-106%) rotate(-3deg);
+}
+html:not(.js) [data-deck] [data-card="2"] {
+  transform: translateX(106%) rotate(3deg);
+}
 
 @media (prefers-reduced-motion: reduce) {
   [data-how-hide] {
     display: none;
+  }
+  [data-deck] [data-card="0"] {
+    transform: translateX(-106%) rotate(-3deg);
+  }
+  [data-deck] [data-card="2"] {
+    transform: translateX(106%) rotate(3deg);
   }
   html.js [data-reveal] {
     opacity: 1;
