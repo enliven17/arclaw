@@ -20,6 +20,12 @@ Pay USDC on Arc, play a 3D claw machine, win a sealed box. Box opens into a pack
 - The app lives under `/app`: play, the user's collection (every card pulled, current holdings and live value), and selling stocks back to USDC (Astock desk `sell(stock, sharesIn, minUsdcOut, to)` after approve; testnet uses the mock desk).
 - App flow (user spec 2026-10-17): `/app/play` is a marketplace with the three machines side by side. Tap a machine to enter it. Inside, a control panel handles the transactions (connect, choose boxes, pay, open). The machine runs its claw sequence and drops the box. The box goes full screen; tap to open it and a pack comes out; tap the pack to tear it; each tap deals one face-down card (3 total); once all three are out, tap any card to flip it.
 - Security: every contract change gets two independent audits plus green tests before any deploy.
+- Treasury (2026-10-17): box revenue funds payouts. When inventory is short at reveal, the contract buys the stock on the desk just in time; only a small float is kept for 2x+ hits. Refund only if the buy fails.
+- ARCLAW token (minted later on Arguspad, address set by owner): locked holders get a luck boost of 0 to 1%. The payout band checks include the max boost. Flash-loaned or freshly bought tokens must not count.
+- Leaderboard in the app, fed by a Convex indexer of contract events.
+- Telegram bot with designed message images; on first /start it plays the launch video.
+- Launch video built with `../ft-motion`: a big claw comes down in the middle, pulls a box up from below the frame, the box opens. Sound effects throughout, and in the site/app.
+- X: https://x.com/arclawapp. Legal pages: `/disclaimer`, `/privacy`.
 
 ## Chain facts
 
