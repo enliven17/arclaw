@@ -15,19 +15,23 @@ abstract contract Base is Test {
     MockVRFCoordinator vrf;
     MockPriceSource prices;
     MockAstockDesk desk;
-    MockStock nvda;
-    MockStock tsla;
+    MockStock nvda; // $200
+    MockStock tsla; // $400
 
     address alice = makeAddr("alice");
     address bob = makeAddr("bob");
     address op = makeAddr("operator");
-    uint256 constant PRICE = 1 ether; // 1 USDC native, 18 dp
+
+    uint256 constant M1 = 1; // $1 machine
+    uint256 constant M2 = 2; // $5 machine
+    uint256 constant P1 = 1 ether;
+    uint256 constant P2 = 5 ether;
     uint256 constant SUBSIDY = 0.1 ether;
 
     function setUp() public virtual {
         vm.warp(1_800_000_000);
         vrf = new MockVRFCoordinator();
-        box = new Arclaw(PRICE, "ipfs://box/{id}", address(vrf), SUBSIDY);
+        box = new Arclaw("ipfs://box/{id}", address(vrf), SUBSIDY);
         prices = new MockPriceSource();
         desk = new MockAstockDesk(IPriceSource(address(prices)));
         nvda = new MockStock("NVDA.arc");
@@ -37,12 +41,14 @@ abstract contract Base is Test {
 
         address[] memory t = new address[](2);
         uint256[] memory p = new uint256[](2);
-        (t[0], t[1], p[0], p[1]) = (address(nvda), address(tsla), 200e6, 400e6); // $200, $400
+        (t[0], t[1], p[0], p[1]) = (address(nvda), address(tsla), 200e6, 400e6);
         prices.setPrices(t, p);
 
-        box.setPolicy(IPriceSource(address(prices)), 7000, 8000, 50 ether);
+        box.setPolicy(IPriceSource(address(prices)), 50 ether);
         box.setOperator(op);
         box.setSink(address(desk), true);
+        box.setMachine(M1, uint128(P1), 5000, 100_000, 6000, 8500);
+        box.setMachine(M2, uint128(P2), 5000, 100_000, 6000, 8500);
 
         nvda.mint(address(box), 100 ether);
         tsla.mint(address(box), 100 ether);
@@ -50,32 +56,57 @@ abstract contract Base is Test {
         vm.deal(bob, 1000 ether);
     }
 
-    // ---------------------------------------------------------------- helpers
+    // ---------------------------------------------------------------- table helpers
 
-    function _single(address token, uint256 amount) internal pure returns (Arclaw.Prize[] memory t) {
-        t = new Arclaw.Prize[](1);
-        t[0] = Arclaw.Prize(token, 1, 0, amount);
+    /// A pack of 3 cards of `token` worth `value` (USDC 18 dp), split 40/40/20 exactly at the mock price.
+    function _pack(address token, uint88 weight, uint8 tier, uint256 value)
+        internal
+        view
+        returns (Arclaw.OutcomeInput memory o)
+    {
+        uint256 px = prices.priceOf(token);
+        o.weight = weight;
+        o.tier = tier;
+        uint256 v0 = value * 40 / 100;
+        uint256 v2 = value - 2 * v0;
+        (o.tokens[0], o.tokens[1], o.tokens[2]) = (token, token, token);
+        o.amounts[0] = v0 * 1e6 / px;
+        o.amounts[1] = v0 * 1e6 / px;
+        o.amounts[2] = v2 * 1e6 / px;
     }
 
-    /// NVDA $0.25 a card (weight 3) and TSLA $0.25 a card (weight 1): 3 cards = $0.75 per $1 box = 7500 bps.
-    function _bandTable() internal view returns (Arclaw.Prize[] memory t) {
-        t = new Arclaw.Prize[](2);
-        t[0] = Arclaw.Prize(address(nvda), 3, 0, 0.25e18 * 1e6 / 200e6);
-        t[1] = Arclaw.Prize(address(tsla), 1, 1, 0.25e18 * 1e6 / 400e6);
+    /// Common 0.5x (weight 3) + Big 1.5x (weight 1): EV 0.75x.
+    function _table(address token, uint256 price) internal view returns (Arclaw.OutcomeInput[] memory t) {
+        t = new Arclaw.OutcomeInput[](2);
+        t[0] = _pack(token, 3, 0, price / 2);
+        t[1] = _pack(token, 1, 1, price * 3 / 2);
     }
 
-    function _play(address who, uint256 n) internal {
+    /// Single outcome of `value`; rules relaxed on the machine so any value lands (for payout plumbing tests).
+    function _forceSingle(uint256 machineId, address token, uint256 value) internal {
+        (uint128 price,,,,) = box.machines(machineId);
+        uint16 bps = uint16(value * 10_000 / price); // tests keep this within [3000, 9500]
+        box.setMachine(machineId, price, 3000, 1_000_000, bps, bps);
+        Arclaw.OutcomeInput[] memory t = new Arclaw.OutcomeInput[](1);
+        t[0] = _pack(token, 1, 0, value);
+        box.setPrizes(machineId, t);
+    }
+
+    // ---------------------------------------------------------------- flow helpers
+
+    function _play(address who, uint256 machineId, uint256 n) internal {
+        (uint128 price,,,,) = box.machines(machineId);
         vm.prank(who);
-        box.play{value: n * PRICE}(n);
+        box.play{value: n * price}(machineId, n);
     }
 
-    function _open(address who, uint256 n) internal returns (uint256 openingId, uint256 requestId) {
+    function _open(address who, uint256 machineId, uint256 n) internal returns (uint256 openingId, uint256 requestId) {
         vm.prank(who);
-        (openingId, requestId) = box.open(n);
+        (openingId, requestId) = box.open(machineId, n);
     }
 
     function _status(uint256 id) internal view returns (Arclaw.OpeningStatus s) {
-        (,,, s,,,,) = box.openings(id);
+        (,,,, s,,,) = box.openings(id);
     }
 
     function _countEvents(Vm.Log[] memory logs, bytes32 sig) internal view returns (uint256 n) {

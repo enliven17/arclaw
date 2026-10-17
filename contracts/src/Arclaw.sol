@@ -16,52 +16,74 @@ import {IPriceSource} from "./interfaces/IPriceSource.sol";
 import {IAstockDesk} from "./interfaces/IAstock.sol";
 import {D20Randomness} from "./vrf/D20Randomness.sol";
 
-/// @title Arclaw: sealed boxes of tokenized stock on Arc
-/// @notice Pay `boxPrice` native USDC (18 dp) per play, get one sealed box (ERC-1155 id 0). Opening burns boxes and
-///         asks the VRF for one word; once it lands anyone can `reveal`, which draws 3 cards per box from the prize
-///         table frozen at open time and pays them from inventory. A card the inventory cannot cover is refunded at
-///         boxPrice/3 (snapshotted at open). Boxes can be gifted directly or escrowed behind a claim link.
-///         Owner sets the rules; the operator (treasury agent) reprices inside the payout band and restocks via the
-///         Astock desk under a daily cap.
+/// @title Arclaw: claw machines that pay sealed packs of tokenized stock on Arc
+/// @notice Each machine is an ERC-1155 id with its own price. Pay the price in native USDC (18 dp) per play, get one
+///         sealed box of that machine. Opening burns boxes and asks the VRF for one word; once it lands anyone can
+///         `reveal`, which draws ONE weighted outcome per box (a pack of 3 cards) from the machine's table frozen at
+///         open time and pays the cards from inventory. A card the inventory cannot cover is refunded at its value,
+///         fixed in USDC when the table was set.
+///         Every table, whoever sets it, must satisfy the machine's rules: each outcome worth at least floorBps and
+///         at most capBps of the price, and the weighted expected value inside [rtpMinBps, rtpMaxBps].
 contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, EIP712, D20Randomness {
     using SafeERC20 for IERC20;
 
     // ------------------------------------------------------------------ constants
 
-    uint256 public constant BOX = 0;
     uint256 public constant CARDS_PER_BOX = 3;
     uint256 public constant MAX_BOXES_PER_OPEN = 20;
     uint32 public constant MIN_CALLBACK_GAS = 30_000; // D20 bounds
     uint32 public constant MAX_CALLBACK_GAS = 1_000_000;
+    /// Sanity bounds on the owner's per-machine rules.
+    uint16 public constant MIN_FLOOR_BPS = 3000; // never less than 30% back
+    uint16 public constant MAX_RTP_BPS = 9500; // house edge never under 5%
+    uint32 public constant MAX_CAP_BPS = 1_000_000; // 100x
     bytes32 public constant CLAIM_TYPEHASH = keccak256("Claim(uint256 linkId,address recipient)");
-
-    string public constant name = "arclaw box";
-    string public constant symbol = "CLAW";
 
     // ------------------------------------------------------------------ types
 
-    /// One card outcome. `tier` is display rarity only (0 common upward); odds come from `weight`.
-    struct Prize {
-        address token;
+    struct Machine {
+        uint128 price; // native USDC, 18 dp; 0 = not playable
+        uint16 floorBps; // min outcome value / price
+        uint32 capBps; // max outcome value / price
+        uint16 rtpMinBps; // expected value band / price
+        uint16 rtpMaxBps;
+    }
+
+    /// Operator/owner input: one outcome = one pack.
+    struct OutcomeInput {
         uint88 weight;
         uint8 tier;
+        address[3] tokens;
+        uint256[3] amounts;
+    }
+
+    struct Card {
+        address token;
+        uint96 value; // USDC 18 dp, priced when the table was set; the shortfall refund
         uint256 amount;
+    }
+
+    struct Outcome {
+        uint88 weight;
+        uint8 tier;
+        uint128 value; // sum of card values
+        Card[3] cards;
     }
 
     enum OpeningStatus {
         None,
-        Pending, // waiting for randomness
-        Fulfilled, // word stored, ready to reveal
-        Revealed, // cards paid
-        Returned // randomness expired, boxes handed back
+        Pending,
+        Fulfilled,
+        Revealed,
+        Returned
     }
 
     struct Opening {
         address opener;
         uint32 boxes;
         uint32 tableId;
+        uint16 machineId;
         OpeningStatus status;
-        uint128 refundPerCard; // boxPrice / 3 at open time
         uint64 requestedAt;
         uint256 requestId;
         bytes32 word;
@@ -77,19 +99,23 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, EIP712, D20
     struct Link {
         address sender;
         uint32 boxes;
-        uint64 expiresAt;
+        uint16 machineId;
+        uint40 expiresAt;
         LinkStatus status;
         address linkKey;
     }
 
     // ------------------------------------------------------------------ storage
 
-    /// Price per box in native USDC (18 decimals on Arc).
-    uint256 public boxPrice;
+    mapping(uint256 => Machine) public machines;
+    uint256[] internal _machineIds;
+    /// machineId => current tableId + 1
+    mapping(uint256 => uint256) public currentTable;
 
-    /// Append-only prize table history; an opening draws from the table that was current when it opened.
-    Prize[][] internal _tables;
-    uint256[] internal _tableWeight;
+    /// Append-only table history; an opening draws from the table current when it opened.
+    Outcome[][] internal _tables;
+    uint256[] public tableWeight;
+    uint256[] public tableMachine;
 
     mapping(uint256 => Opening) public openings;
     /// requestId => openingId + 1 (0 = unknown or superseded)
@@ -99,29 +125,25 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, EIP712, D20
     mapping(uint256 => Link) public links;
     mapping(address => bool) public linkKeyUsed;
     uint256 public nextLinkId;
-    uint256 public escrowedBoxes;
+    /// machineId => boxes held in link escrow (== balanceOf(this, machineId))
+    mapping(uint256 => uint256) public escrowed;
 
-    /// Native USDC owed to addresses whose refund push failed (pull with claimCredit).
     mapping(address => uint256) public credit;
 
-    // VRF policy
     uint32 public callbackGasLimit = 100_000;
-    /// Max VRF fee per request the contract pays from revenue; the opener tops up anything above it.
     uint256 public maxVrfSubsidy;
 
-    // Lifetime totals for the site
-    uint256 public boxesSold;
+    // Lifetime totals
+    mapping(uint256 => uint256) public boxesSold; // per machine
     uint256 public boxesOpened;
     uint256 public cardsPaid;
     uint256 public cardsRefunded;
     uint256 public vrfFeesPaid;
     mapping(address => uint256) public paidOut;
 
-    // Treasury policy: owner-set, operator-bound
+    // Treasury policy
     address public operator;
     IPriceSource public priceSource;
-    uint16 public payoutMinBps = 7000;
-    uint16 public payoutMaxBps = 8000;
     mapping(address => bool) public sinks;
     uint256 public dailyCap;
     uint256 public spentDay;
@@ -129,12 +151,13 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, EIP712, D20
 
     // ------------------------------------------------------------------ events
 
-    event Played(address indexed player, uint256 boxes, uint256 paid);
-    event Gifted(address indexed from, address indexed to, uint256 boxes);
+    event Played(address indexed player, uint256 indexed machineId, uint256 boxes, uint256 paid);
+    event Gifted(address indexed from, address indexed to, uint256 indexed machineId, uint256 boxes);
     event Opened(
         uint256 indexed openingId,
         uint256 indexed requestId,
         address indexed opener,
+        uint256 machineId,
         uint256 boxes,
         uint256 tableId,
         uint256 vrfFee
@@ -143,44 +166,63 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, EIP712, D20
         uint256 indexed openingId, uint256 indexed oldRequestId, uint256 indexed newRequestId, uint256 vrfFee
     );
     event Fulfilled(uint256 indexed openingId, uint256 indexed requestId, bytes32 word);
+    event OutcomeDrawn(
+        uint256 indexed openingId,
+        uint256 boxIndex,
+        uint256 indexed machineId,
+        uint256 tier,
+        uint256 outcomeIndex,
+        uint256 valueUsdc
+    );
     event CardDrawn(
         uint256 indexed openingId,
         address indexed opener,
         address indexed token,
+        uint256 machineId,
         uint256 boxIndex,
         uint256 cardIndex,
         uint256 amount,
-        uint8 tier,
-        uint256 prizeIndex,
+        uint256 tier,
         bool paid
     );
     event Refunded(
         uint256 indexed openingId, address indexed opener, uint256 boxIndex, uint256 cardIndex, uint256 amount
     );
     event Revealed(uint256 indexed openingId, address indexed opener, uint256 cardsPaid, uint256 refund);
-    event BoxesReturned(uint256 indexed openingId, address indexed opener, uint256 boxes);
+    event BoxesReturned(uint256 indexed openingId, address indexed opener, uint256 machineId, uint256 boxes);
     event LinkCreated(
-        uint256 indexed linkId, address indexed sender, address indexed linkKey, uint256 boxes, uint64 expiresAt
+        uint256 indexed linkId,
+        address indexed sender,
+        address indexed linkKey,
+        uint256 machineId,
+        uint256 boxes,
+        uint256 expiresAt
     );
     event LinkClaimed(uint256 indexed linkId, address indexed sender, address indexed recipient, uint256 boxes);
     event LinkReclaimed(uint256 indexed linkId, address indexed sender, uint256 boxes);
     event CreditAdded(address indexed to, uint256 amount);
     event CreditClaimed(address indexed to, uint256 amount);
-    event PrizesSet(uint256 indexed tableId, uint256 count, uint256 totalWeight, address by);
+    event MachineSet(
+        uint256 indexed machineId, uint256 price, uint256 floorBps, uint256 capBps, uint256 rtpMinBps, uint256 rtpMaxBps
+    );
+    event PrizesSet(uint256 indexed machineId, uint256 indexed tableId, uint256 count, uint256 rtpBps, address by);
     event OperatorSet(address operator);
-    event PolicySet(address priceSource, uint16 payoutMinBps, uint16 payoutMaxBps, uint256 dailyCap);
+    event PolicySet(address priceSource, uint256 dailyCap);
     event SinkSet(address sink, bool allowed);
     event Spent(address indexed sink, address indexed stock, uint256 amount, uint256 sharesOut);
     event VrfConfigSet(uint32 callbackGasLimit, uint256 maxVrfSubsidy);
-    event BoxPriceSet(uint256 price);
 
     // ------------------------------------------------------------------ errors
 
     error ZeroAmount();
     error WrongPayment();
     error TooManyBoxes();
+    error UnknownMachine();
     error NoPrizes();
     error BadPrize(uint256 index);
+    error BelowFloor(uint256 index, uint256 valueBps);
+    error AboveCap(uint256 index, uint256 valueBps);
+    error RtpOutOfBand(uint256 rtpBps);
     error NotPending();
     error NotReady();
     error NotExpired();
@@ -190,12 +232,11 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, EIP712, D20
     error VrfFeeTopUp(uint256 required, uint256 sent);
     error TransferFailed();
     error NotOperator();
-    error PayoutOutOfBand(uint256 payoutBps);
     error NoPriceSource();
     error NotSink();
     error OverDailyCap();
     error Slippage(uint256 got, uint256 minOut);
-    error BadBand();
+    error BadMachine();
     error BadGas();
     error BadLink();
     error LinkKeyUsed();
@@ -209,66 +250,67 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, EIP712, D20
 
     // ------------------------------------------------------------------ constructor
 
-    constructor(uint256 boxPrice_, string memory uri_, address coordinator_, uint256 maxVrfSubsidy_)
+    constructor(string memory uri_, address coordinator_, uint256 maxVrfSubsidy_)
         ERC1155(uri_)
         Ownable(msg.sender)
         EIP712("arclaw", "1")
         D20Randomness(coordinator_)
     {
-        if (boxPrice_ == 0) revert ZeroAmount();
-        boxPrice = boxPrice_;
         maxVrfSubsidy = maxVrfSubsidy_;
     }
 
     // ================================================================== players
 
-    /// @notice One play = one sealed box. Pay exactly `boxes * boxPrice`.
-    function play(uint256 boxes) external payable whenNotPaused nonReentrant {
+    /// @notice One play = one sealed box of `machineId`. Pay exactly `boxes * price`.
+    function play(uint256 machineId, uint256 boxes) external payable whenNotPaused nonReentrant {
+        uint256 price = machines[machineId].price;
+        if (price == 0) revert UnknownMachine();
         if (boxes == 0) revert ZeroAmount();
-        if (msg.value != boxes * boxPrice) revert WrongPayment();
-        boxesSold += boxes;
-        emit Played(msg.sender, boxes, msg.value);
-        _mint(msg.sender, BOX, boxes, "");
+        if (msg.value != boxes * price) revert WrongPayment();
+        boxesSold[machineId] += boxes;
+        emit Played(msg.sender, machineId, boxes, msg.value);
+        _mint(msg.sender, machineId, boxes, "");
     }
 
-    /// @notice One sealed box to each recipient.
-    function gift(address[] calldata recipients) external nonReentrant {
+    /// @notice One sealed `machineId` box to each recipient.
+    function gift(uint256 machineId, address[] calldata recipients) external nonReentrant {
         for (uint256 i; i < recipients.length; ++i) {
-            emit Gifted(msg.sender, recipients[i], 1);
-            _safeTransferFrom(msg.sender, recipients[i], BOX, 1, "");
+            emit Gifted(msg.sender, recipients[i], machineId, 1);
+            _safeTransferFrom(msg.sender, recipients[i], machineId, 1, "");
         }
     }
 
-    /// @notice Burn `boxes` sealed boxes and request one random word for all of them.
+    /// @notice Burn `boxes` of `machineId` and request one random word for all of them.
     /// @dev The contract pays the VRF fee up to `maxVrfSubsidy`; above that the caller tops up via msg.value.
-    ///      Overpayment is returned. Quote off-chain with coordinator.quoteFeeAt(callbackGasLimit, baseFee).
-    function open(uint256 boxes) external payable whenNotPaused nonReentrant returns (uint256 openingId, uint256 requestId) {
+    function open(uint256 machineId, uint256 boxes)
+        external
+        payable
+        whenNotPaused
+        nonReentrant
+        returns (uint256 openingId, uint256 requestId)
+    {
         if (boxes == 0) revert ZeroAmount();
         if (boxes > MAX_BOXES_PER_OPEN) revert TooManyBoxes();
-        if (_tables.length == 0) revert NoPrizes();
+        uint256 t = currentTable[machineId];
+        if (t == 0) revert NoPrizes();
 
-        _burn(msg.sender, BOX, boxes);
+        _burn(msg.sender, machineId, boxes);
         openingId = nextOpeningId++;
         boxesOpened += boxes;
+        Opening storage o = openings[openingId];
+        o.opener = msg.sender;
         // forge-lint: disable-next-line(unsafe-typecast)
-        uint32 tableId = uint32(_tables.length - 1); // one table per tx, never near 2^32
-        openings[openingId] = Opening({
-            opener: msg.sender,
-            // forge-lint: disable-next-line(unsafe-typecast)
-            boxes: uint32(boxes), // <= MAX_BOXES_PER_OPEN
-            tableId: tableId,
-            status: OpeningStatus.Pending,
-            refundPerCard: SafeCast.toUint128(boxPrice / CARDS_PER_BOX),
-            requestedAt: uint64(block.timestamp),
-            requestId: 0,
-            word: bytes32(0)
-        });
+        o.boxes = uint32(boxes); // <= MAX_BOXES_PER_OPEN
+        o.tableId = SafeCast.toUint32(t - 1);
+        o.machineId = SafeCast.toUint16(machineId);
+        o.status = OpeningStatus.Pending;
+        o.requestedAt = uint64(block.timestamp);
 
         uint256 fee;
         (requestId, fee) = _request(openingId);
-        openings[openingId].requestId = requestId;
+        o.requestId = requestId;
         openingOfRequest[requestId] = openingId + 1;
-        emit Opened(openingId, requestId, msg.sender, boxes, tableId, fee);
+        emit Opened(openingId, requestId, msg.sender, machineId, boxes, t - 1, fee);
     }
 
     /// @notice Pay out a fulfilled opening. Anyone may call; cards always go to the opener.
@@ -283,13 +325,18 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, EIP712, D20
         } else if (o.status != OpeningStatus.Fulfilled) {
             revert NotPending();
         }
-        // Effects before any token or native transfer.
         o.status = OpeningStatus.Revealed;
         o.word = word;
         delete openingOfRequest[o.requestId];
 
         Opening memory m = o;
-        (uint256 paid, uint256 refund) = _payPack(openingId, m, word);
+        uint256 paid;
+        uint256 refund;
+        for (uint256 b; b < m.boxes; ++b) {
+            (uint256 p, uint256 r) = _payBox(openingId, m, b);
+            paid += p;
+            refund += r;
+        }
         cardsPaid += paid;
         cardsRefunded += uint256(m.boxes) * CARDS_PER_BOX - paid;
         emit Revealed(openingId, m.opener, paid, refund);
@@ -323,11 +370,11 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, EIP712, D20
         delete openingOfRequest[o.requestId];
         uint256 boxes = o.boxes;
         boxesOpened -= boxes;
-        emit BoxesReturned(openingId, msg.sender, boxes);
-        _mint(msg.sender, BOX, boxes, "");
+        emit BoxesReturned(openingId, msg.sender, o.machineId, boxes);
+        _mint(msg.sender, o.machineId, boxes, "");
     }
 
-    /// @notice Pull native USDC that could not be pushed (the receiver rejected it).
+    /// @notice Pull native USDC that could not be pushed (the receiver rejected it, or the pool was short).
     function claimCredit() external nonReentrant {
         uint256 amount = credit[msg.sender];
         if (amount == 0) revert NoCredit();
@@ -339,8 +386,8 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, EIP712, D20
 
     // ================================================================== claim links
 
-    /// @notice Escrow `boxes` under an ephemeral public key. Share the private key off-chain (in the link).
-    function createLink(address linkKey, uint32 boxes, uint64 expiresAt)
+    /// @notice Escrow `boxes` of `machineId` under an ephemeral public key shared off-chain in the link.
+    function createLink(address linkKey, uint256 machineId, uint32 boxes, uint40 expiresAt)
         external
         whenNotPaused
         nonReentrant
@@ -350,12 +397,13 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, EIP712, D20
         if (linkKeyUsed[linkKey]) revert LinkKeyUsed();
         linkKeyUsed[linkKey] = true;
         linkId = nextLinkId++;
-        links[linkId] = Link(msg.sender, boxes, expiresAt, LinkStatus.Open, linkKey);
-        escrowedBoxes += boxes;
-        // Plain move into this contract's own balance: no receiver hook, and since this contract is not an
-        // ERC1155Receiver nobody else can push boxes in, so balanceOf(this) == escrowedBoxes.
-        _update(msg.sender, address(this), _one(BOX), _one(boxes));
-        emit LinkCreated(linkId, msg.sender, linkKey, boxes, expiresAt);
+        links[linkId] =
+            Link(msg.sender, boxes, SafeCast.toUint16(machineId), expiresAt, LinkStatus.Open, linkKey);
+        escrowed[machineId] += boxes;
+        // Plain move into this contract's balance, no receiver hook. This contract is not an ERC1155Receiver, so
+        // nobody else can push boxes in: balanceOf(this, id) == escrowed[id].
+        _update(msg.sender, address(this), _one(machineId), _one(boxes));
+        emit LinkCreated(linkId, msg.sender, linkKey, machineId, boxes, expiresAt);
     }
 
     /// @notice Claim a link for `recipient`. `signature` is the link key's EIP-712 signature over
@@ -366,15 +414,14 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, EIP712, D20
         if (l.status != LinkStatus.Open) revert LinkNotOpen();
         if (block.timestamp > l.expiresAt) revert LinkExpired();
         if (recipient == address(0)) revert BadLink();
-        bytes32 digest = _hashTypedDataV4(keccak256(abi.encode(CLAIM_TYPEHASH, linkId, recipient)));
-        (address signer, ECDSA.RecoverError err,) = ECDSA.tryRecover(digest, signature);
+        (address signer, ECDSA.RecoverError err,) = ECDSA.tryRecover(claimDigest(linkId, recipient), signature);
         if (err != ECDSA.RecoverError.NoError || signer != l.linkKey) revert BadSignature();
 
         l.status = LinkStatus.Claimed;
-        uint256 boxes = l.boxes;
-        escrowedBoxes -= boxes;
+        (uint256 id, uint256 boxes) = (l.machineId, l.boxes);
+        escrowed[id] -= boxes;
         emit LinkClaimed(linkId, l.sender, recipient, boxes);
-        _safeTransferFrom(address(this), recipient, BOX, boxes, "");
+        _safeTransferFrom(address(this), recipient, id, boxes, "");
     }
 
     /// @notice After expiry the sender takes unclaimed boxes back.
@@ -384,38 +431,54 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, EIP712, D20
         if (msg.sender != l.sender) revert NotSender();
         if (block.timestamp <= l.expiresAt) revert LinkNotExpired();
         l.status = LinkStatus.Reclaimed;
-        uint256 boxes = l.boxes;
-        escrowedBoxes -= boxes;
+        (uint256 id, uint256 boxes) = (l.machineId, l.boxes);
+        escrowed[id] -= boxes;
         emit LinkReclaimed(linkId, msg.sender, boxes);
-        _safeTransferFrom(address(this), msg.sender, BOX, boxes, "");
+        _safeTransferFrom(address(this), msg.sender, id, boxes, "");
     }
 
-    /// @notice The digest a link key signs (for off-chain tooling and tests).
-    function claimDigest(uint256 linkId, address recipient) external view returns (bytes32) {
+    /// @notice The EIP-712 digest a link key signs.
+    function claimDigest(uint256 linkId, address recipient) public view returns (bytes32) {
         return _hashTypedDataV4(keccak256(abi.encode(CLAIM_TYPEHASH, linkId, recipient)));
     }
 
     // ================================================================== views
 
-    function prizes() external view returns (Prize[] memory) {
-        if (_tables.length == 0) return new Prize[](0);
-        return _tables[_tables.length - 1];
+    function machineIds() external view returns (uint256[] memory) {
+        return _machineIds;
     }
 
-    function prizeTable(uint256 tableId) external view returns (Prize[] memory) {
-        return _tables[tableId];
+    /// @notice Current outcome table of a machine.
+    function outcomes(uint256 machineId) external view returns (Outcome[] memory) {
+        uint256 t = currentTable[machineId];
+        if (t == 0) return new Outcome[](0);
+        return _tables[t - 1];
     }
 
     function tableCount() external view returns (uint256) {
         return _tables.length;
     }
 
-    function totalWeight() external view returns (uint256) {
-        return _tables.length == 0 ? 0 : _tableWeight[_tables.length - 1];
-    }
-
-    function tableWeight(uint256 tableId) external view returns (uint256) {
-        return _tableWeight[tableId];
+    /// @notice Realised odds of a stored table: expected value, smallest and largest outcome, in bps of the
+    ///         machine's current price, plus the total weight.
+    function tableStats(uint256 tableId)
+        external
+        view
+        returns (uint256 rtpBps, uint256 minBps, uint256 maxBps, uint256 totalWeight)
+    {
+        Outcome[] storage t = _tables[tableId];
+        uint256 price = machines[tableMachine[tableId]].price;
+        uint256 ev;
+        minBps = type(uint256).max;
+        for (uint256 i; i < t.length; ++i) {
+            uint256 v = t[i].value;
+            totalWeight += t[i].weight;
+            ev += v * t[i].weight;
+            uint256 bps = v * 10_000 / price;
+            if (bps < minBps) minBps = bps;
+            if (bps > maxBps) maxBps = bps;
+        }
+        rtpBps = ev * 10_000 / totalWeight / price;
     }
 
     /// @notice Current exact VRF fee for one open (valid inside a transaction; via eth_call the base fee may read 0).
@@ -423,20 +486,10 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, EIP712, D20
         return _quoteRandomness(callbackGasLimit);
     }
 
-    /// @notice Expected payout of a table per box (3 cards), in bps of boxPrice, priced by `priceSource`.
-    function payoutBps(Prize[] calldata table) public view returns (uint256) {
+    /// @notice Card value in native USDC (18 dp) at the price source's price.
+    function valueOf(address token, uint256 amount) public view returns (uint256) {
         if (address(priceSource) == address(0)) revert NoPriceSource();
-        uint256 w;
-        uint256 value; // sum of weight * card value, USD 18 dp (same units as boxPrice)
-        for (uint256 i; i < table.length; ++i) {
-            Prize calldata p = table[i];
-            w += p.weight;
-            uint256 usd18 =
-                p.amount * priceSource.priceOf(p.token) * 1e12 / 10 ** IERC20Metadata(p.token).decimals();
-            value += usd18 * p.weight;
-        }
-        if (w == 0) revert NoPrizes();
-        return value * CARDS_PER_BOX * 10_000 / w / boxPrice;
+        return amount * priceSource.priceOf(token) * 1e12 / 10 ** IERC20Metadata(token).decimals();
     }
 
     // ================================================================== operator
@@ -446,11 +499,9 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, EIP712, D20
         _;
     }
 
-    /// @notice Reprice the table; lands only if the expected payout per box is inside the owner's band.
-    function operatorSetPrizes(Prize[] calldata table) external onlyOperator {
-        uint256 bps = payoutBps(table);
-        if (bps < payoutMinBps || bps > payoutMaxBps) revert PayoutOutOfBand(bps);
-        _pushTable(table);
+    /// @notice Reprice a machine's table. Lands only if it satisfies the machine's floor, cap and RTP band.
+    function operatorSetPrizes(uint256 machineId, OutcomeInput[] calldata input) external onlyOperator {
+        _setPrizes(machineId, input);
     }
 
     /// @notice Restock: buy `stock` on an allow-listed Astock desk with `amount` native USDC, delivered here.
@@ -477,9 +528,31 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, EIP712, D20
 
     // ================================================================== owner
 
-    /// @notice Owner override, no band check (the owner sets the band).
-    function setPrizes(Prize[] calldata table) external onlyOwner {
-        _pushTable(table);
+    /// @notice Owner sets a table; the machine's rules still apply (the owner moves the rules via setMachine).
+    function setPrizes(uint256 machineId, OutcomeInput[] calldata input) external onlyOwner {
+        _setPrizes(machineId, input);
+    }
+
+    /// @notice Create or update a machine and its rules. price 0 stops new plays (opens and reveals continue).
+    ///         Rules apply to tables set from now on; the current table keeps serving until replaced.
+    ///         Bounds: floor >= MIN_FLOOR_BPS, floor <= rtpMin <= rtpMax <= min(MAX_RTP_BPS, cap), cap <= MAX_CAP_BPS.
+    function setMachine(
+        uint256 machineId,
+        uint128 price,
+        uint16 floorBps,
+        uint32 capBps,
+        uint16 rtpMinBps,
+        uint16 rtpMaxBps
+    ) external onlyOwner {
+        if (machineId == 0 || machineId > type(uint16).max) revert BadMachine();
+        if (
+            floorBps < MIN_FLOOR_BPS || floorBps > rtpMinBps || rtpMinBps > rtpMaxBps || rtpMaxBps > MAX_RTP_BPS
+                || rtpMaxBps > capBps || capBps > MAX_CAP_BPS
+        ) revert BadMachine();
+        Machine storage m = machines[machineId];
+        if (m.capBps == 0) _machineIds.push(machineId);
+        (m.price, m.floorBps, m.capBps, m.rtpMinBps, m.rtpMaxBps) = (price, floorBps, capBps, rtpMinBps, rtpMaxBps);
+        emit MachineSet(machineId, price, floorBps, capBps, rtpMinBps, rtpMaxBps);
     }
 
     function setOperator(address op) external onlyOwner {
@@ -487,10 +560,9 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, EIP712, D20
         emit OperatorSet(op);
     }
 
-    function setPolicy(IPriceSource source, uint16 minBps, uint16 maxBps, uint256 cap) external onlyOwner {
-        if (minBps > maxBps) revert BadBand();
-        (priceSource, payoutMinBps, payoutMaxBps, dailyCap) = (source, minBps, maxBps, cap);
-        emit PolicySet(address(source), minBps, maxBps, cap);
+    function setPolicy(IPriceSource source, uint256 cap) external onlyOwner {
+        (priceSource, dailyCap) = (source, cap);
+        emit PolicySet(address(source), cap);
     }
 
     function setSink(address sink, bool allowed) external onlyOwner {
@@ -502,12 +574,6 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, EIP712, D20
         if (gasLimit < MIN_CALLBACK_GAS || gasLimit > MAX_CALLBACK_GAS) revert BadGas();
         (callbackGasLimit, maxVrfSubsidy) = (gasLimit, subsidy);
         emit VrfConfigSet(gasLimit, subsidy);
-    }
-
-    function setBoxPrice(uint256 price) external onlyOwner {
-        if (price == 0) revert ZeroAmount();
-        boxPrice = price;
-        emit BoxPriceSet(price);
     }
 
     function setURI(string calldata uri_) external onlyOwner {
@@ -551,7 +617,6 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, EIP712, D20
         emit Fulfilled(idPlusOne - 1, requestId, word);
     }
 
-    /// Pays the fee (subsidised up to maxVrfSubsidy, caller tops up the rest) and returns any change.
     function _request(uint256 openingId) internal returns (uint256 requestId, uint256 fee) {
         uint32 gasLimit = callbackGasLimit;
         fee = _quoteRandomness(gasLimit);
@@ -570,34 +635,32 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, EIP712, D20
         if (!expired) revert NotExpired();
     }
 
-    function _payPack(uint256 openingId, Opening memory m, bytes32 word)
-        internal
-        returns (uint256 paid, uint256 refund)
-    {
-        Prize[] storage table = _tables[m.tableId];
-        uint256 w = _tableWeight[m.tableId];
-        for (uint256 b; b < m.boxes; ++b) {
-            for (uint256 c; c < CARDS_PER_BOX; ++c) {
-                uint256 idx = _draw(table, w, uint256(keccak256(abi.encode(word, b, c))));
-                Prize memory p = table[idx];
-                bool ok = _balanceOf(p.token) >= p.amount && IERC20(p.token).trySafeTransfer(m.opener, p.amount);
-                emit CardDrawn(openingId, m.opener, p.token, b, c, p.amount, p.tier, idx, ok);
-                if (ok) {
-                    ++paid;
-                    paidOut[p.token] += p.amount;
-                } else {
-                    refund += m.refundPerCard;
-                    emit Refunded(openingId, m.opener, b, c, m.refundPerCard);
-                }
+    function _payBox(uint256 openingId, Opening memory m, uint256 b) internal returns (uint256 paid, uint256 refund) {
+        Outcome[] storage t = _tables[m.tableId];
+        uint256 idx = _draw(t, tableWeight[m.tableId], uint256(keccak256(abi.encode(m.word, b))));
+        Outcome storage out = t[idx];
+        uint256 tier = out.tier;
+        emit OutcomeDrawn(openingId, b, m.machineId, tier, idx, out.value);
+        for (uint256 c; c < CARDS_PER_BOX; ++c) {
+            Card memory card = out.cards[c];
+            bool ok = _balanceOf(card.token) >= card.amount
+                && IERC20(card.token).trySafeTransfer(m.opener, card.amount);
+            emit CardDrawn(openingId, m.opener, card.token, m.machineId, b, c, card.amount, tier, ok);
+            if (ok) {
+                ++paid;
+                paidOut[card.token] += card.amount;
+            } else {
+                refund += card.value;
+                emit Refunded(openingId, m.opener, b, c, card.value);
             }
         }
     }
 
-    function _draw(Prize[] storage table, uint256 w, uint256 rand) internal view returns (uint256) {
+    function _draw(Outcome[] storage t, uint256 w, uint256 rand) internal view returns (uint256) {
         uint256 r = rand % w;
-        uint256 n = table.length;
+        uint256 n = t.length;
         for (uint256 i; i < n; ++i) {
-            uint256 wi = table[i].weight;
+            uint256 wi = t[i].weight;
             if (r < wi) return i;
             r -= wi;
         }
@@ -612,21 +675,63 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, EIP712, D20
         }
     }
 
-    function _pushTable(Prize[] calldata table) internal {
-        if (table.length == 0) revert NoPrizes();
-        Prize[] storage t = _tables.push();
+    /// Prices every card and enforces floor, cap and RTP band. Returns the card values (USDC 18 dp).
+    function _evaluate(uint256 machineId, OutcomeInput[] calldata input)
+        internal
+        view
+        returns (uint256 rtpBps, uint256[3][] memory values)
+    {
+        Machine memory mc = machines[machineId];
+        if (mc.price == 0) revert UnknownMachine();
+        if (input.length == 0) revert NoPrizes();
+        values = new uint256[3][](input.length);
         uint256 w;
-        for (uint256 i; i < table.length; ++i) {
-            Prize calldata p = table[i];
-            if (p.token == address(0) || p.amount == 0 || p.weight == 0) revert BadPrize(i);
-            t.push(p);
+        uint256 ev;
+        for (uint256 i; i < input.length; ++i) {
+            OutcomeInput calldata p = input[i];
+            if (p.weight == 0) revert BadPrize(i);
+            uint256 v;
+            for (uint256 c; c < CARDS_PER_BOX; ++c) {
+                if (p.tokens[c] == address(0) || p.amounts[c] == 0) revert BadPrize(i);
+                values[i][c] = valueOf(p.tokens[c], p.amounts[c]);
+                v += values[i][c];
+            }
+            if (v * 10_000 < uint256(mc.floorBps) * mc.price) revert BelowFloor(i, v * 10_000 / mc.price);
+            if (v * 10_000 > uint256(mc.capBps) * mc.price) revert AboveCap(i, v * 10_000 / mc.price);
             w += p.weight;
+            ev += v * p.weight;
         }
-        _tableWeight.push(w);
-        emit PrizesSet(_tables.length - 1, table.length, w, msg.sender);
+        rtpBps = ev * 10_000 / w / mc.price;
+        if (ev * 10_000 < uint256(mc.rtpMinBps) * mc.price * w || ev * 10_000 > uint256(mc.rtpMaxBps) * mc.price * w)
+        {
+            revert RtpOutOfBand(rtpBps);
+        }
     }
 
-    /// Push native USDC; if the receiver rejects it, keep it as pull credit so reveal can never be blocked.
+    function _setPrizes(uint256 machineId, OutcomeInput[] calldata input) internal {
+        (uint256 rtpBps, uint256[3][] memory values) = _evaluate(machineId, input);
+        Outcome[] storage t = _tables.push();
+        uint256 tableId = _tables.length - 1;
+        uint256 w;
+        for (uint256 i; i < input.length; ++i) {
+            OutcomeInput calldata p = input[i];
+            Outcome storage o = t.push();
+            uint256 v;
+            for (uint256 c; c < CARDS_PER_BOX; ++c) {
+                o.cards[c] = Card(p.tokens[c], SafeCast.toUint96(values[i][c]), p.amounts[c]);
+                v += values[i][c];
+            }
+            (o.weight, o.tier, o.value) = (p.weight, p.tier, SafeCast.toUint128(v));
+            w += p.weight;
+        }
+        tableWeight.push(w);
+        tableMachine.push(machineId);
+        currentTable[machineId] = tableId + 1;
+        emit PrizesSet(machineId, tableId, input.length, rtpBps, msg.sender);
+    }
+
+    /// Push native USDC; if the receiver rejects it or the pool is short, keep it as pull credit so a reveal
+    /// is never blocked.
     function _sendNative(address to, uint256 amount) internal {
         (bool ok,) = to.call{value: amount}("");
         if (!ok) {

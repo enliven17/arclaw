@@ -11,12 +11,12 @@ contract LinksTest is Base {
     function setUp() public override {
         super.setUp();
         linkKey = vm.addr(linkPk);
-        _play(alice, 5);
+        _play(alice, M2, 5);
     }
 
-    function _create(uint32 n, uint64 ttl) internal returns (uint256 id) {
+    function _create(uint32 n, uint256 ttl) internal returns (uint256 id) {
         vm.prank(alice);
-        id = box.createLink(linkKey, n, uint64(block.timestamp) + ttl);
+        id = box.createLink(linkKey, M2, n, uint40(block.timestamp + ttl));
     }
 
     function _sign(uint256 pk, uint256 linkId, address recipient) internal view returns (bytes memory) {
@@ -26,16 +26,16 @@ contract LinksTest is Base {
 
     function test_claimLink_happyPath() public {
         uint256 id = _create(3, 1 days);
-        assertEq(box.balanceOf(alice, 0), 2);
-        assertEq(box.balanceOf(address(box), 0), 3);
-        assertEq(box.escrowedBoxes(), 3);
+        assertEq(box.balanceOf(alice, M2), 2);
+        assertEq(box.balanceOf(address(box), M2), 3);
+        assertEq(box.escrowed(M2), 3);
 
         bytes memory sig = _sign(linkPk, id, bob);
         vm.prank(makeAddr("relayer")); // anyone may relay
         box.claimLink(id, bob, sig);
-        assertEq(box.balanceOf(bob, 0), 3);
-        assertEq(box.escrowedBoxes(), 0);
-        assertEq(box.balanceOf(address(box), 0), 0);
+        assertEq(box.balanceOf(bob, M2), 3);
+        assertEq(box.escrowed(M2), 0);
+        assertEq(box.balanceOf(address(box), M2), 0);
     }
 
     function test_claimLink_digestMatchesEip712() public view {
@@ -81,7 +81,7 @@ contract LinksTest is Base {
         bytes memory sig = _sign(linkPk, id0, bob);
         uint256 otherPk = 0xB0B;
         vm.prank(alice);
-        uint256 id1 = box.createLink(vm.addr(otherPk), 1, uint64(block.timestamp + 1 days));
+        uint256 id1 = box.createLink(vm.addr(otherPk), M2, 1, uint40(block.timestamp + 1 days));
         vm.expectRevert(Arclaw.BadSignature.selector);
         box.claimLink(id1, bob, sig);
     }
@@ -90,7 +90,7 @@ contract LinksTest is Base {
         _create(1, 1 days);
         vm.prank(alice);
         vm.expectRevert(Arclaw.LinkKeyUsed.selector);
-        box.createLink(linkKey, 1, uint64(block.timestamp + 1 days));
+        box.createLink(linkKey, M2, 1, uint40(block.timestamp + 1 days));
     }
 
     function test_reclaimAfterExpiry() public {
@@ -110,8 +110,8 @@ contract LinksTest is Base {
 
         vm.prank(alice);
         box.reclaimLink(id);
-        assertEq(box.balanceOf(alice, 0), 5);
-        assertEq(box.escrowedBoxes(), 0);
+        assertEq(box.balanceOf(alice, M2), 5);
+        assertEq(box.escrowed(M2), 0);
 
         vm.prank(alice);
         vm.expectRevert(Arclaw.LinkNotOpen.selector);
@@ -121,13 +121,15 @@ contract LinksTest is Base {
     function test_createLink_validation() public {
         vm.startPrank(alice);
         vm.expectRevert(Arclaw.BadLink.selector);
-        box.createLink(address(0), 1, uint64(block.timestamp + 1));
+        box.createLink(address(0), M2, 1, uint40(block.timestamp + 1));
         vm.expectRevert(Arclaw.BadLink.selector);
-        box.createLink(linkKey, 0, uint64(block.timestamp + 1));
+        box.createLink(linkKey, M2, 0, uint40(block.timestamp + 1));
         vm.expectRevert(Arclaw.BadLink.selector);
-        box.createLink(linkKey, 1, uint64(block.timestamp));
+        box.createLink(linkKey, M2, 1, uint40(block.timestamp));
         vm.expectRevert(); // insufficient balance
-        box.createLink(linkKey, 6, uint64(block.timestamp + 1));
+        box.createLink(linkKey, M2, 6, uint40(block.timestamp + 1));
+        vm.expectRevert(); // no $1 boxes
+        box.createLink(linkKey, M1, 1, uint40(block.timestamp + 1));
         vm.stopPrank();
     }
 

@@ -3,25 +3,30 @@ pragma solidity 0.8.28;
 
 import {Base} from "./Base.t.sol";
 import {Arclaw} from "../src/Arclaw.sol";
-import {Vm} from "forge-std/Vm.sol";
 import {IPriceSource} from "../src/interfaces/IPriceSource.sol";
+import {Vm} from "forge-std/Vm.sol";
 
 contract PlayTest is Base {
-    function test_play_exactPayment() public {
-        _play(alice, 3);
-        assertEq(box.balanceOf(alice, 0), 3);
-        assertEq(address(box).balance, 3 * PRICE);
-        assertEq(box.boxesSold(), 3);
+    function test_play_exactPayment_perMachine() public {
+        _play(alice, M1, 3);
+        _play(alice, M2, 2);
+        assertEq(box.balanceOf(alice, M1), 3);
+        assertEq(box.balanceOf(alice, M2), 2);
+        assertEq(address(box).balance, 3 * P1 + 2 * P2);
+        assertEq(box.boxesSold(M1), 3);
+        assertEq(box.boxesSold(M2), 2);
     }
 
     function test_play_wrongPayment() public {
         vm.startPrank(alice);
         vm.expectRevert(Arclaw.WrongPayment.selector);
-        box.play{value: PRICE}(2);
+        box.play{value: P1}(M1, 2);
         vm.expectRevert(Arclaw.WrongPayment.selector);
-        box.play{value: PRICE + 1}(1);
+        box.play{value: P1}(M2, 1); // $1 into the $5 machine
         vm.expectRevert(Arclaw.ZeroAmount.selector);
-        box.play{value: 0}(0);
+        box.play{value: 0}(M1, 0);
+        vm.expectRevert(Arclaw.UnknownMachine.selector);
+        box.play{value: P1}(9, 1);
         vm.stopPrank();
     }
 
@@ -29,38 +34,39 @@ contract PlayTest is Base {
         box.pause();
         vm.prank(alice);
         vm.expectRevert();
-        box.play{value: PRICE}(1);
+        box.play{value: P1}(M1, 1);
     }
 
     function test_gift_batch() public {
-        _play(alice, 2);
+        _play(alice, M2, 2);
         address[] memory to = new address[](2);
         (to[0], to[1]) = (bob, makeAddr("carol"));
         vm.prank(alice);
-        box.gift(to);
-        assertEq(box.balanceOf(alice, 0), 0);
-        assertEq(box.balanceOf(bob, 0), 1);
-        assertEq(box.balanceOf(to[1], 0), 1);
+        box.gift(M2, to);
+        assertEq(box.balanceOf(alice, M2), 0);
+        assertEq(box.balanceOf(bob, M2), 1);
+        assertEq(box.balanceOf(to[1], M2), 1);
     }
 
     function test_cannotPushBoxesIntoContract() public {
-        _play(alice, 1);
+        _play(alice, M1, 1);
         vm.prank(alice);
         vm.expectRevert(); // not an ERC1155Receiver
-        box.safeTransferFrom(alice, address(box), 0, 1, "");
+        box.safeTransferFrom(alice, address(box), M1, 1, "");
     }
 }
 
 contract OpenRevealTest is Base {
     function setUp() public override {
         super.setUp();
-        box.setPrizes(_single(address(nvda), 0.001 ether));
+        box.setPrizes(M1, _table(address(nvda), P1));
+        box.setPrizes(M2, _table(address(tsla), P2));
     }
 
-    function test_openFulfillReveal_paysThreeCards() public {
-        _play(alice, 1);
-        (uint256 id, uint256 req) = _open(alice, 1);
-        assertEq(box.balanceOf(alice, 0), 0);
+    function test_openFulfillReveal_paysOnePackOfThree() public {
+        _play(alice, M1, 1);
+        (uint256 id, uint256 req) = _open(alice, M1, 1);
+        assertEq(box.balanceOf(alice, M1), 0);
         assertEq(uint8(_status(id)), uint8(Arclaw.OpeningStatus.Pending));
 
         vm.expectRevert(Arclaw.NotReady.selector);
@@ -73,99 +79,161 @@ contract OpenRevealTest is Base {
         vm.prank(bob); // anyone can reveal, cards go to the opener
         box.reveal(id);
         Vm.Log[] memory logs = vm.getRecordedLogs();
+        assertEq(_countEvents(logs, Arclaw.OutcomeDrawn.selector), 1);
         assertEq(_countEvents(logs, Arclaw.CardDrawn.selector), 3);
         assertEq(_countEvents(logs, Arclaw.Refunded.selector), 0);
 
-        assertEq(nvda.balanceOf(alice), 0.003 ether);
+        uint256 got = nvda.balanceOf(alice);
+        assertTrue(got == 0.0025 ether || got == 0.0075 ether, "one whole pack: 0.5x or 1.5x");
         assertEq(nvda.balanceOf(bob), 0);
         assertEq(box.cardsPaid(), 3);
-        assertEq(box.paidOut(address(nvda)), 0.003 ether);
 
         vm.expectRevert(Arclaw.NotPending.selector);
         box.reveal(id);
     }
 
+    function test_machinesDrawFromTheirOwnTables() public {
+        _play(alice, M1, 1);
+        _play(alice, M2, 1);
+        (uint256 a, uint256 ra) = _open(alice, M1, 1);
+        (uint256 b, uint256 rb) = _open(alice, M2, 1);
+        vrf.fulfill(ra, keccak256("a"));
+        vrf.fulfill(rb, keccak256("b"));
+        box.reveal(a);
+        assertGt(nvda.balanceOf(alice), 0);
+        assertEq(tsla.balanceOf(alice), 0);
+        box.reveal(b);
+        uint256 t = tsla.balanceOf(alice); // $5 machine: 2.5 or 7.5 USDC of TSLA at $400
+        assertTrue(t == 0.00625 ether || t == 0.01875 ether);
+    }
+
+    function test_outcomeDrawnEvent() public {
+        _play(alice, M2, 1);
+        (uint256 id, uint256 req) = _open(alice, M2, 1);
+        vrf.fulfill(req, keccak256("e"));
+        vm.recordLogs();
+        box.reveal(id);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].topics[0] != Arclaw.OutcomeDrawn.selector) continue;
+            assertEq(uint256(logs[i].topics[1]), id);
+            assertEq(uint256(logs[i].topics[2]), M2);
+            (uint256 boxIndex, uint256 tier,, uint256 value) = abi.decode(logs[i].data, (uint256, uint256, uint256, uint256));
+            assertEq(boxIndex, 0);
+            assertEq(value, tier == 0 ? P2 / 2 : P2 * 3 / 2);
+        }
+    }
+
     function test_multiBoxOpen_oneRequest() public {
-        _play(alice, 5);
+        _play(alice, M1, 5);
         uint256 nextBefore = vrf.nextId();
-        (uint256 id, uint256 req) = _open(alice, 5);
+        (uint256 id, uint256 req) = _open(alice, M1, 5);
         assertEq(vrf.nextId(), nextBefore + 1, "one VRF request for 5 boxes");
         vrf.fulfill(req, keccak256("w"));
         vm.recordLogs();
         box.reveal(id);
-        assertEq(_countEvents(vm.getRecordedLogs(), Arclaw.CardDrawn.selector), 15);
-        assertEq(nvda.balanceOf(alice), 0.015 ether);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        assertEq(_countEvents(logs, Arclaw.OutcomeDrawn.selector), 5);
+        assertEq(_countEvents(logs, Arclaw.CardDrawn.selector), 15);
+    }
+
+    function test_distribution_matchesWeights() public {
+        // 3:1 table; 400 boxes over 20 openings, ~300 common expected.
+        uint256 commons;
+        for (uint256 r; r < 20; ++r) {
+            _play(alice, M1, 20);
+            (uint256 id, uint256 req) = _open(alice, M1, 20);
+            vrf.fulfill(req, keccak256(abi.encode("dist", r)));
+            vm.recordLogs();
+            box.reveal(id);
+            Vm.Log[] memory logs = vm.getRecordedLogs();
+            for (uint256 i; i < logs.length; ++i) {
+                if (logs[i].topics[0] != Arclaw.OutcomeDrawn.selector) continue;
+                (, uint256 tier,,) = abi.decode(logs[i].data, (uint256, uint256, uint256, uint256));
+                if (tier == 0) ++commons;
+            }
+        }
+        assertGt(commons, 270);
+        assertLt(commons, 330);
     }
 
     function test_tooManyBoxes() public {
-        _play(alice, 21);
+        _play(alice, M1, 21);
         vm.prank(alice);
         vm.expectRevert(Arclaw.TooManyBoxes.selector);
-        box.open(21);
+        box.open(M1, 21);
+    }
+
+    function test_open_needsTable() public {
+        box.setMachine(3, uint128(10 ether), 5000, 100_000, 6000, 8500);
+        vm.deal(alice, 100 ether);
+        _play(alice, 3, 1);
+        vm.prank(alice);
+        vm.expectRevert(Arclaw.NoPrizes.selector);
+        box.open(3, 1);
     }
 
     function test_vrfFee_subsidisedAndTopUp() public {
-        _play(alice, 2);
+        _play(alice, M1, 2);
         uint256 balBefore = address(box).balance;
-        _open(alice, 1); // fee 0.02 <= subsidy: free for the opener
+        _open(alice, M1, 1);
         assertEq(address(box).balance, balBefore - 0.02 ether);
         assertEq(box.vrfFeesPaid(), 0.02 ether);
 
-        vrf.setFee(0.25 ether); // spike: opener tops up 0.15, change returned
+        vrf.setFee(0.25 ether);
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(Arclaw.VrfFeeTopUp.selector, 0.15 ether, 0.1 ether));
-        box.open{value: 0.1 ether}(1);
+        box.open{value: 0.1 ether}(M1, 1);
 
         uint256 aliceBefore = alice.balance;
         vm.prank(alice);
-        box.open{value: 1 ether}(1);
+        box.open{value: 1 ether}(M1, 1);
         assertEq(alice.balance, aliceBefore - 0.15 ether);
     }
 
     function test_tableFrozenAtOpen() public {
-        _play(alice, 1);
-        (uint256 id, uint256 req) = _open(alice, 1);
-        box.setPrizes(_single(address(tsla), 5 ether)); // owner changes table after the request
+        _play(alice, M1, 1);
+        (uint256 id, uint256 req) = _open(alice, M1, 1);
+        box.setPrizes(M1, _table(address(tsla), P1)); // changed after the request
         vrf.fulfill(req, keccak256("x"));
         box.reveal(id);
-        assertEq(nvda.balanceOf(alice), 0.003 ether);
+        assertGt(nvda.balanceOf(alice), 0);
         assertEq(tsla.balanceOf(alice), 0);
     }
 
     function test_revealPausedStillWorks() public {
-        _play(alice, 1);
-        (uint256 id, uint256 req) = _open(alice, 1);
+        _play(alice, M1, 1);
+        (uint256 id, uint256 req) = _open(alice, M1, 1);
         box.pause();
         vrf.fulfill(req, keccak256("x"));
         box.reveal(id);
-        assertEq(nvda.balanceOf(alice), 0.003 ether);
+        assertGt(nvda.balanceOf(alice), 0);
     }
 
     function test_failedCallback_revealReadsCoordinator() public {
-        _play(alice, 1);
-        (uint256 id, uint256 req) = _open(alice, 1);
+        _play(alice, M1, 1);
+        (uint256 id, uint256 req) = _open(alice, M1, 1);
         vrf.fulfillStarved(req, keccak256("starved"));
         assertEq(uint8(_status(id)), uint8(Arclaw.OpeningStatus.Pending));
-        box.reveal(id); // word comes from coordinator.getRequest
-        assertEq(nvda.balanceOf(alice), 0.003 ether);
-        vm.expectRevert(); // late redelivery of a finished request is rejected
+        box.reveal(id);
+        assertGt(nvda.balanceOf(alice), 0);
         vm.prank(address(vrf));
+        vm.expectRevert(Arclaw.UnexpectedCallback.selector);
         box.rawFulfillRandomness(req, keccak256("starved"));
     }
 
     function test_onlyCoordinatorCanFulfill() public {
-        _play(alice, 1);
-        (, uint256 req) = _open(alice, 1);
+        _play(alice, M1, 1);
+        (, uint256 req) = _open(alice, M1, 1);
         vm.expectRevert();
         box.rawFulfillRandomness(req, bytes32(uint256(1)));
     }
 
-    function testFuzz_revealAlwaysThreeCardsPerBox(bytes32 word, uint8 n) public {
+    function testFuzz_revealAlwaysThreeCardsPerBox(bytes32 word, uint8 n, bool big) public {
         n = uint8(bound(n, 1, 20));
-        Arclaw.Prize[] memory t = _bandTable();
-        box.setPrizes(t);
-        _play(alice, n);
-        (uint256 id, uint256 req) = _open(alice, n);
+        uint256 m = big ? M2 : M1;
+        _play(alice, m, n);
+        (uint256 id, uint256 req) = _open(alice, m, n);
         vrf.fulfill(req, word);
         box.reveal(id);
         assertEq(box.cardsPaid() + box.cardsRefunded(), uint256(n) * 3);
@@ -174,13 +242,12 @@ contract OpenRevealTest is Base {
 }
 
 contract ShortfallTest is Base {
-    function test_shortfall_refundsPerCard() public {
-        // Inventory covers exactly one card of 40 NVDA.
-        box.setPrizes(_single(address(nvda), 40 ether));
-        vm.prank(address(box));
-        nvda.transfer(address(1), 60 ether); // leave 40 in the pool
-        _play(alice, 1);
-        (uint256 id, uint256 req) = _open(alice, 1);
+    function test_shortfall_refundsThatCardsValue() public {
+        _forceSingle(M1, address(nvda), 0.75 ether); // cards 0.30 / 0.30 / 0.15 USDC of NVDA
+        // Leave inventory for exactly the first card (0.0015 NVDA).
+        box.sweep(address(nvda), address(1), 100 ether - 0.0015 ether);
+        _play(alice, M1, 1);
+        (uint256 id, uint256 req) = _open(alice, M1, 1);
         vrf.fulfill(req, keccak256("w"));
         uint256 before = alice.balance;
         vm.recordLogs();
@@ -188,109 +255,162 @@ contract ShortfallTest is Base {
         Vm.Log[] memory logs = vm.getRecordedLogs();
         assertEq(_countEvents(logs, Arclaw.CardDrawn.selector), 3);
         assertEq(_countEvents(logs, Arclaw.Refunded.selector), 2);
-        assertEq(nvda.balanceOf(alice), 40 ether);
-        assertEq(alice.balance, before + 2 * (PRICE / 3));
+        assertEq(nvda.balanceOf(alice), 0.0015 ether);
+        assertEq(alice.balance, before + 0.30 ether + 0.15 ether, "refund = the missing cards' values");
         assertEq(box.cardsRefunded(), 2);
     }
 
-    function test_shortfall_refundUsesPriceAtOpen() public {
-        box.setPrizes(_single(address(nvda), 1000 ether)); // never covered
-        _play(alice, 1);
-        (uint256 id, uint256 req) = _open(alice, 1);
-        box.setBoxPrice(5 ether); // repricing after the open does not change the refund
-        vm.deal(address(box), 10 ether);
+    function test_shortfall_valueFixedAtTableTime() public {
+        _forceSingle(M1, address(nvda), 0.75 ether);
+        box.sweep(address(nvda), address(1), 100 ether); // nothing left
+        _play(alice, M1, 1);
+        (uint256 id, uint256 req) = _open(alice, M1, 1);
+        address[] memory t = new address[](1);
+        uint256[] memory p = new uint256[](1);
+        (t[0], p[0]) = (address(nvda), 1e6); // NVDA crashes to $1 after the open
+        prices.setPrices(t, p);
         vrf.fulfill(req, keccak256("w"));
         uint256 before = alice.balance;
         box.reveal(id);
-        assertEq(alice.balance, before + 3 * (PRICE / 3));
+        assertEq(alice.balance, before + 0.75 ether);
     }
 
     function test_shortfall_underfundedRefundBecomesCredit() public {
-        box.setPrizes(_single(address(nvda), 1000 ether)); // never covered
-        _play(alice, 1); // 1 USDC in, 0.02 VRF fee out: 0.98 left, 0.999.. owed
-        (uint256 id, uint256 req) = _open(alice, 1);
+        _forceSingle(M1, address(nvda), 0.75 ether);
+        box.sweep(address(nvda), address(1), 100 ether);
+        _play(alice, M1, 1);
+        (uint256 id, uint256 req) = _open(alice, M1, 1);
+        box.withdraw(address(this), address(box).balance - 0.5 ether); // pool holds less than the refund
         vrf.fulfill(req, keccak256("w"));
         box.reveal(id); // never blocked
-        assertEq(box.credit(alice), 3 * (PRICE / 3));
-        vm.deal(address(box), 5 ether); // treasury tops up
+        assertEq(box.credit(alice), 0.75 ether);
+        vm.deal(address(box), 5 ether);
         uint256 before = alice.balance;
         vm.prank(alice);
         box.claimCredit();
-        assertEq(alice.balance, before + 3 * (PRICE / 3));
+        assertEq(alice.balance, before + 0.75 ether);
         assertEq(box.credit(alice), 0);
     }
+
+    receive() external payable {}
 }
 
-contract PolicyTest is Base {
-    function test_payoutBps_threeCards() public view {
-        assertEq(box.payoutBps(_bandTable()), 7500);
+contract RulesTest is Base {
+    function test_table_inBand() public {
+        Arclaw.OutcomeInput[] memory t = _table(address(nvda), P1);
+        vm.prank(op);
+        box.operatorSetPrizes(M1, t);
+        uint256 tid = box.currentTable(M1) - 1;
+        (uint256 rtp, uint256 minBps, uint256 maxBps, uint256 w) = box.tableStats(tid);
+        assertEq(rtp, 7500);
+        assertEq(minBps, 5000);
+        assertEq(maxBps, 15_000);
+        assertEq(w, 4);
+        assertEq(box.outcomes(M1).length, 2);
+        assertEq(box.outcomes(M1)[1].cards[0].value, 0.6 ether);
     }
 
-    function test_operatorSetPrizes_inBand() public {
+    function test_floorRejected() public {
+        Arclaw.OutcomeInput[] memory t = _table(address(nvda), P1);
+        t[0] = _pack(address(nvda), 3, 0, 0.49 ether); // 4900 bps < 5000 floor
         vm.prank(op);
-        box.operatorSetPrizes(_bandTable());
-        assertEq(box.tableCount(), 1);
-        assertEq(box.totalWeight(), 4);
+        vm.expectRevert(abi.encodeWithSelector(Arclaw.BelowFloor.selector, 0, 4900));
+        box.operatorSetPrizes(M1, t);
+        vm.expectRevert(abi.encodeWithSelector(Arclaw.BelowFloor.selector, 0, 4900));
+        box.setPrizes(M1, t); // the owner is bound too
     }
 
-    function test_operatorSetPrizes_belowAndAboveBand() public {
-        Arclaw.Prize[] memory t = _bandTable();
-        t[0].amount = t[0].amount / 2; // ~ 0.125*3*.75 + .25*3*.25 = 4687 bps
-        uint256 low = box.payoutBps(t);
-        assertLt(low, 7000);
+    function test_capRejected() public {
+        Arclaw.OutcomeInput[] memory t = new Arclaw.OutcomeInput[](3);
+        t[0] = _pack(address(nvda), 1000, 0, 0.5 ether);
+        t[1] = _pack(address(nvda), 300, 1, 1 ether);
+        t[2] = _pack(address(nvda), 1, 2, 10.2 ether); // 10.2x > 10x cap
         vm.prank(op);
-        vm.expectRevert(abi.encodeWithSelector(Arclaw.PayoutOutOfBand.selector, low));
-        box.operatorSetPrizes(t);
+        vm.expectRevert(abi.encodeWithSelector(Arclaw.AboveCap.selector, 2, 102_000));
+        box.operatorSetPrizes(M1, t);
+        t[2] = _pack(address(nvda), 1, 2, 10 ether); // exactly at the cap lands
+        vm.prank(op);
+        box.operatorSetPrizes(M1, t);
+    }
 
-        t = _bandTable();
-        t[1].amount = t[1].amount * 3; // 0.25*3*.75 + .75*3*.25 = 1.125 -> 11250 bps
-        uint256 bps = box.payoutBps(t);
-        assertGt(bps, 8000);
+    function test_rtpBandRejected() public {
+        Arclaw.OutcomeInput[] memory t = new Arclaw.OutcomeInput[](1);
+        t[0] = _pack(address(nvda), 1, 0, 0.5 ether); // RTP 50% < 60%
         vm.prank(op);
-        vm.expectRevert(abi.encodeWithSelector(Arclaw.PayoutOutOfBand.selector, bps));
-        box.operatorSetPrizes(t);
+        vm.expectRevert(abi.encodeWithSelector(Arclaw.RtpOutOfBand.selector, 5000));
+        box.operatorSetPrizes(M1, t);
+
+        t = _table(address(nvda), P1);
+        t[1].weight = 2; // (1.5 + 3) / 5 = 0.9 > 0.85
+        vm.prank(op);
+        vm.expectRevert(abi.encodeWithSelector(Arclaw.RtpOutOfBand.selector, 9000));
+        box.operatorSetPrizes(M1, t);
+    }
+
+    function test_rulesAreOwnerSettableAndBounded() public {
+        vm.expectEmit(true, false, false, true);
+        emit Arclaw.MachineSet(M1, P1, 5000, 50_000, 7000, 8000);
+        box.setMachine(M1, uint128(P1), 5000, 50_000, 7000, 8000);
+        vm.expectRevert(Arclaw.BadMachine.selector);
+        box.setMachine(M1, uint128(P1), 2999, 100_000, 6000, 8500); // floor under 30%
+        vm.expectRevert(Arclaw.BadMachine.selector);
+        box.setMachine(M1, uint128(P1), 5000, 100_000, 6000, 9501); // RTP over 95%
+        vm.expectRevert(Arclaw.BadMachine.selector);
+        box.setMachine(M1, uint128(P1), 6000, 100_000, 5500, 8500); // floor above rtpMin
+        vm.expectRevert(Arclaw.BadMachine.selector);
+        box.setMachine(M1, uint128(P1), 5000, 1_000_001, 6000, 8500); // cap over 100x
+        vm.expectRevert(Arclaw.BadMachine.selector);
+        box.setMachine(0, uint128(P1), 5000, 100_000, 6000, 8500);
+        vm.prank(alice);
+        vm.expectRevert();
+        box.setMachine(M1, uint128(P1), 5000, 100_000, 6000, 8500);
+        assertEq(box.machineIds().length, 2);
     }
 
     function test_operatorOnly() public {
-        Arclaw.Prize[] memory t = _bandTable();
+        Arclaw.OutcomeInput[] memory t = _table(address(nvda), P1);
         vm.prank(alice);
         vm.expectRevert(Arclaw.NotOperator.selector);
-        box.operatorSetPrizes(t);
+        box.operatorSetPrizes(M1, t);
         vm.prank(alice);
         vm.expectRevert(Arclaw.NotOperator.selector);
         box.spend(address(desk), address(nvda), 1 ether, 1);
     }
 
     function test_ownerOnly() public {
-        Arclaw.Prize[] memory t = _bandTable();
+        Arclaw.OutcomeInput[] memory t = _table(address(nvda), P1);
         address src = address(box.priceSource());
         vm.startPrank(alice);
         vm.expectRevert();
-        box.setPrizes(t);
+        box.setPrizes(M1, t);
         vm.expectRevert();
         box.withdraw(alice, 1);
         vm.expectRevert();
-        box.setPolicy(IPriceSource(src), 0, 10_000, type(uint256).max);
+        box.setPolicy(IPriceSource(src), type(uint256).max);
         vm.stopPrank();
         vm.expectRevert(Arclaw.RenounceDisabled.selector);
         box.renounceOwnership();
     }
 
     function test_badPrizeRejected() public {
-        Arclaw.Prize[] memory t = _single(address(0), 1);
+        Arclaw.OutcomeInput[] memory t = _table(address(nvda), P1);
+        t[1].tokens[2] = address(0);
+        vm.expectRevert(abi.encodeWithSelector(Arclaw.BadPrize.selector, 1));
+        box.setPrizes(M1, t);
+        t = _table(address(nvda), P1);
+        t[0].weight = 0;
         vm.expectRevert(abi.encodeWithSelector(Arclaw.BadPrize.selector, 0));
-        box.setPrizes(t);
-        t = _single(address(nvda), 0);
-        vm.expectRevert(abi.encodeWithSelector(Arclaw.BadPrize.selector, 0));
-        box.setPrizes(t);
+        box.setPrizes(M1, t);
+        vm.expectRevert(Arclaw.UnknownMachine.selector);
+        box.setPrizes(7, t);
     }
 
     function test_spend_buysIntoContract() public {
-        _play(alice, 10);
+        _play(alice, M1, 10);
         uint256 before = nvda.balanceOf(address(box));
         vm.prank(op);
         uint256 got = box.spend(address(desk), address(nvda), 2 ether, 0.01 ether);
-        assertEq(got, 0.01 ether); // $2 at $200
+        assertEq(got, 0.01 ether);
         assertEq(nvda.balanceOf(address(box)), before + got);
         assertEq(box.spentToday(), 2 ether);
     }
@@ -300,23 +420,20 @@ contract PolicyTest is Base {
         vm.startPrank(op);
         vm.expectRevert(Arclaw.NotSink.selector);
         box.spend(alice, address(nvda), 1 ether, 1);
-
-        vm.expectRevert(); // desk reverts Slippage
+        vm.expectRevert();
         box.spend(address(desk), address(nvda), 1 ether, 1 ether);
-
         box.spend(address(desk), address(nvda), 30 ether, 1);
         vm.expectRevert(Arclaw.OverDailyCap.selector);
         box.spend(address(desk), address(nvda), 20 ether + 1, 1);
         box.spend(address(desk), address(nvda), 20 ether, 1);
         vm.stopPrank();
-
-        vm.warp(block.timestamp + 1 days); // new UTC day resets the cap
+        vm.warp(block.timestamp + 1 days);
         vm.prank(op);
         box.spend(address(desk), address(nvda), 50 ether, 1);
     }
 
     function test_withdrawAndSweep() public {
-        _play(alice, 2);
+        _play(alice, M2, 1);
         box.withdraw(bob, 1 ether);
         assertEq(bob.balance, 1001 ether);
         box.sweep(address(nvda), bob, 1 ether);
@@ -335,49 +452,48 @@ contract PolicyTest is Base {
 contract StuckVrfTest is Base {
     function setUp() public override {
         super.setUp();
-        box.setPrizes(_single(address(nvda), 0.001 ether));
-        _play(alice, 2);
+        box.setPrizes(M1, _table(address(nvda), P1));
+        _play(alice, M1, 2);
     }
 
     function test_retry_afterExpiry() public {
-        (uint256 id, uint256 req) = _open(alice, 2);
+        (uint256 id, uint256 req) = _open(alice, M1, 2);
         vm.expectRevert(Arclaw.NotExpired.selector);
         box.retry(id);
 
         vm.warp(block.timestamp + 61);
-        vm.expectRevert(); // coordinator refuses a late proof
+        vm.expectRevert();
         vrf.fulfill(req, keccak256("late"));
 
-        vm.prank(bob); // anyone can re-request
+        vm.prank(bob);
         uint256 req2 = box.retry(id);
         assertTrue(req2 != req);
         assertEq(box.openingOfRequest(req), 0);
 
-        // the expired fee comes back to the contract
         uint256 bal = address(box).balance;
         vrf.refundRequest(req);
         assertEq(address(box).balance, bal + 0.02 ether);
 
         vrf.fulfill(req2, keccak256("w"));
         box.reveal(id);
-        assertEq(nvda.balanceOf(alice), 0.006 ether);
+        assertEq(box.cardsPaid(), 6);
     }
 
     function test_retry_refusedOnceFulfilled() public {
-        (uint256 id, uint256 req) = _open(alice, 1);
-        vrf.fulfillStarved(req, keccak256("w")); // accepted, callback failed
+        (uint256 id, uint256 req) = _open(alice, M1, 1);
+        vrf.fulfillStarved(req, keccak256("w"));
         vm.warp(block.timestamp + 120);
         vm.expectRevert(Arclaw.AlreadyFulfilled.selector);
-        box.retry(id); // no re-roll of a known word
+        box.retry(id);
         vm.prank(alice);
         vm.expectRevert(Arclaw.AlreadyFulfilled.selector);
         box.returnBoxes(id);
         box.reveal(id);
-        assertEq(nvda.balanceOf(alice), 0.003 ether);
+        assertEq(box.cardsPaid(), 3);
     }
 
     function test_returnBoxes_afterExpiry() public {
-        (uint256 id,) = _open(alice, 2);
+        (uint256 id,) = _open(alice, M1, 2);
         vm.prank(alice);
         vm.expectRevert(Arclaw.NotExpired.selector);
         box.returnBoxes(id);
@@ -387,7 +503,7 @@ contract StuckVrfTest is Base {
         box.returnBoxes(id);
         vm.prank(alice);
         box.returnBoxes(id);
-        assertEq(box.balanceOf(alice, 0), 2);
+        assertEq(box.balanceOf(alice, M1), 2);
         assertEq(box.boxesOpened(), 0);
         vm.expectRevert(Arclaw.NotPending.selector);
         box.reveal(id);

@@ -4,11 +4,6 @@ export const arclawAbi = [
     "type": "constructor",
     "inputs": [
       {
-        "name": "boxPrice_",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
         "name": "uri_",
         "type": "string",
         "internalType": "string"
@@ -29,19 +24,6 @@ export const arclawAbi = [
   {
     "type": "receive",
     "stateMutability": "payable"
-  },
-  {
-    "type": "function",
-    "name": "BOX",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
   },
   {
     "type": "function",
@@ -97,6 +79,32 @@ export const arclawAbi = [
   },
   {
     "type": "function",
+    "name": "MAX_CAP_BPS",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint32",
+        "internalType": "uint32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "MAX_RTP_BPS",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint16",
+        "internalType": "uint16"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "MIN_CALLBACK_GAS",
     "inputs": [],
     "outputs": [
@@ -104,6 +112,19 @@ export const arclawAbi = [
         "name": "",
         "type": "uint32",
         "internalType": "uint32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "MIN_FLOOR_BPS",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint16",
+        "internalType": "uint16"
       }
     ],
     "stateMutability": "view"
@@ -165,19 +186,6 @@ export const arclawAbi = [
   },
   {
     "type": "function",
-    "name": "boxPrice",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
     "name": "boxesOpened",
     "inputs": [],
     "outputs": [
@@ -192,7 +200,13 @@ export const arclawAbi = [
   {
     "type": "function",
     "name": "boxesSold",
-    "inputs": [],
+    "inputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
     "outputs": [
       {
         "name": "",
@@ -305,14 +319,19 @@ export const arclawAbi = [
         "internalType": "address"
       },
       {
+        "name": "machineId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
         "name": "boxes",
         "type": "uint32",
         "internalType": "uint32"
       },
       {
         "name": "expiresAt",
-        "type": "uint64",
-        "internalType": "uint64"
+        "type": "uint40",
+        "internalType": "uint40"
       }
     ],
     "outputs": [
@@ -332,6 +351,25 @@ export const arclawAbi = [
         "name": "",
         "type": "address",
         "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "currentTable",
+    "inputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "outputs": [
@@ -401,8 +439,14 @@ export const arclawAbi = [
   },
   {
     "type": "function",
-    "name": "escrowedBoxes",
-    "inputs": [],
+    "name": "escrowed",
+    "inputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
     "outputs": [
       {
         "name": "",
@@ -416,6 +460,11 @@ export const arclawAbi = [
     "type": "function",
     "name": "gift",
     "inputs": [
+      {
+        "name": "machineId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
       {
         "name": "recipients",
         "type": "address[]",
@@ -490,9 +539,14 @@ export const arclawAbi = [
         "internalType": "uint32"
       },
       {
+        "name": "machineId",
+        "type": "uint16",
+        "internalType": "uint16"
+      },
+      {
         "name": "expiresAt",
-        "type": "uint64",
-        "internalType": "uint64"
+        "type": "uint40",
+        "internalType": "uint40"
       },
       {
         "name": "status",
@@ -509,6 +563,58 @@ export const arclawAbi = [
   },
   {
     "type": "function",
+    "name": "machineIds",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256[]",
+        "internalType": "uint256[]"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "machines",
+    "inputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "price",
+        "type": "uint128",
+        "internalType": "uint128"
+      },
+      {
+        "name": "floorBps",
+        "type": "uint16",
+        "internalType": "uint16"
+      },
+      {
+        "name": "capBps",
+        "type": "uint32",
+        "internalType": "uint32"
+      },
+      {
+        "name": "rtpMinBps",
+        "type": "uint16",
+        "internalType": "uint16"
+      },
+      {
+        "name": "rtpMaxBps",
+        "type": "uint16",
+        "internalType": "uint16"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "maxVrfSubsidy",
     "inputs": [],
     "outputs": [
@@ -516,19 +622,6 @@ export const arclawAbi = [
         "name": "",
         "type": "uint256",
         "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "name",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "string",
-        "internalType": "string"
       }
     ],
     "stateMutability": "view"
@@ -576,6 +669,11 @@ export const arclawAbi = [
     "type": "function",
     "name": "open",
     "inputs": [
+      {
+        "name": "machineId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
       {
         "name": "boxes",
         "type": "uint256",
@@ -642,14 +740,14 @@ export const arclawAbi = [
         "internalType": "uint32"
       },
       {
+        "name": "machineId",
+        "type": "uint16",
+        "internalType": "uint16"
+      },
+      {
         "name": "status",
         "type": "uint8",
         "internalType": "enum Arclaw.OpeningStatus"
-      },
-      {
-        "name": "refundPerCard",
-        "type": "uint128",
-        "internalType": "uint128"
       },
       {
         "name": "requestedAt",
@@ -687,15 +785,15 @@ export const arclawAbi = [
     "name": "operatorSetPrizes",
     "inputs": [
       {
-        "name": "table",
+        "name": "machineId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "input",
         "type": "tuple[]",
-        "internalType": "struct Arclaw.Prize[]",
+        "internalType": "struct Arclaw.OutcomeInput[]",
         "components": [
-          {
-            "name": "token",
-            "type": "address",
-            "internalType": "address"
-          },
           {
             "name": "weight",
             "type": "uint88",
@@ -707,15 +805,78 @@ export const arclawAbi = [
             "internalType": "uint8"
           },
           {
-            "name": "amount",
-            "type": "uint256",
-            "internalType": "uint256"
+            "name": "tokens",
+            "type": "address[3]",
+            "internalType": "address[3]"
+          },
+          {
+            "name": "amounts",
+            "type": "uint256[3]",
+            "internalType": "uint256[3]"
           }
         ]
       }
     ],
     "outputs": [],
     "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "outcomes",
+    "inputs": [
+      {
+        "name": "machineId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "tuple[]",
+        "internalType": "struct Arclaw.Outcome[]",
+        "components": [
+          {
+            "name": "weight",
+            "type": "uint88",
+            "internalType": "uint88"
+          },
+          {
+            "name": "tier",
+            "type": "uint8",
+            "internalType": "uint8"
+          },
+          {
+            "name": "value",
+            "type": "uint128",
+            "internalType": "uint128"
+          },
+          {
+            "name": "cards",
+            "type": "tuple[3]",
+            "internalType": "struct Arclaw.Card[3]",
+            "components": [
+              {
+                "name": "token",
+                "type": "address",
+                "internalType": "address"
+              },
+              {
+                "name": "value",
+                "type": "uint96",
+                "internalType": "uint96"
+              },
+              {
+                "name": "amount",
+                "type": "uint256",
+                "internalType": "uint256"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "stateMutability": "view"
   },
   {
     "type": "function",
@@ -771,73 +932,6 @@ export const arclawAbi = [
   },
   {
     "type": "function",
-    "name": "payoutBps",
-    "inputs": [
-      {
-        "name": "table",
-        "type": "tuple[]",
-        "internalType": "struct Arclaw.Prize[]",
-        "components": [
-          {
-            "name": "token",
-            "type": "address",
-            "internalType": "address"
-          },
-          {
-            "name": "weight",
-            "type": "uint88",
-            "internalType": "uint88"
-          },
-          {
-            "name": "tier",
-            "type": "uint8",
-            "internalType": "uint8"
-          },
-          {
-            "name": "amount",
-            "type": "uint256",
-            "internalType": "uint256"
-          }
-        ]
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "payoutMaxBps",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint16",
-        "internalType": "uint16"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "payoutMinBps",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint16",
-        "internalType": "uint16"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
     "name": "pendingOwner",
     "inputs": [],
     "outputs": [
@@ -853,6 +947,11 @@ export const arclawAbi = [
     "type": "function",
     "name": "play",
     "inputs": [
+      {
+        "name": "machineId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
       {
         "name": "boxes",
         "type": "uint256",
@@ -871,82 +970,6 @@ export const arclawAbi = [
         "name": "",
         "type": "address",
         "internalType": "contract IPriceSource"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "prizeTable",
-    "inputs": [
-      {
-        "name": "tableId",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "tuple[]",
-        "internalType": "struct Arclaw.Prize[]",
-        "components": [
-          {
-            "name": "token",
-            "type": "address",
-            "internalType": "address"
-          },
-          {
-            "name": "weight",
-            "type": "uint88",
-            "internalType": "uint88"
-          },
-          {
-            "name": "tier",
-            "type": "uint8",
-            "internalType": "uint8"
-          },
-          {
-            "name": "amount",
-            "type": "uint256",
-            "internalType": "uint256"
-          }
-        ]
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "prizes",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "tuple[]",
-        "internalType": "struct Arclaw.Prize[]",
-        "components": [
-          {
-            "name": "token",
-            "type": "address",
-            "internalType": "address"
-          },
-          {
-            "name": "weight",
-            "type": "uint88",
-            "internalType": "uint88"
-          },
-          {
-            "name": "tier",
-            "type": "uint8",
-            "internalType": "uint8"
-          },
-          {
-            "name": "amount",
-            "type": "uint256",
-            "internalType": "uint256"
-          }
-        ]
       }
     ],
     "stateMutability": "view"
@@ -1133,12 +1156,37 @@ export const arclawAbi = [
   },
   {
     "type": "function",
-    "name": "setBoxPrice",
+    "name": "setMachine",
     "inputs": [
       {
-        "name": "price",
+        "name": "machineId",
         "type": "uint256",
         "internalType": "uint256"
+      },
+      {
+        "name": "price",
+        "type": "uint128",
+        "internalType": "uint128"
+      },
+      {
+        "name": "floorBps",
+        "type": "uint16",
+        "internalType": "uint16"
+      },
+      {
+        "name": "capBps",
+        "type": "uint32",
+        "internalType": "uint32"
+      },
+      {
+        "name": "rtpMinBps",
+        "type": "uint16",
+        "internalType": "uint16"
+      },
+      {
+        "name": "rtpMaxBps",
+        "type": "uint16",
+        "internalType": "uint16"
       }
     ],
     "outputs": [],
@@ -1167,16 +1215,6 @@ export const arclawAbi = [
         "internalType": "contract IPriceSource"
       },
       {
-        "name": "minBps",
-        "type": "uint16",
-        "internalType": "uint16"
-      },
-      {
-        "name": "maxBps",
-        "type": "uint16",
-        "internalType": "uint16"
-      },
-      {
         "name": "cap",
         "type": "uint256",
         "internalType": "uint256"
@@ -1190,15 +1228,15 @@ export const arclawAbi = [
     "name": "setPrizes",
     "inputs": [
       {
-        "name": "table",
+        "name": "machineId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "input",
         "type": "tuple[]",
-        "internalType": "struct Arclaw.Prize[]",
+        "internalType": "struct Arclaw.OutcomeInput[]",
         "components": [
-          {
-            "name": "token",
-            "type": "address",
-            "internalType": "address"
-          },
           {
             "name": "weight",
             "type": "uint88",
@@ -1210,9 +1248,14 @@ export const arclawAbi = [
             "internalType": "uint8"
           },
           {
-            "name": "amount",
-            "type": "uint256",
-            "internalType": "uint256"
+            "name": "tokens",
+            "type": "address[3]",
+            "internalType": "address[3]"
+          },
+          {
+            "name": "amounts",
+            "type": "uint256[3]",
+            "internalType": "uint256[3]"
           }
         ]
       }
@@ -1392,19 +1435,6 @@ export const arclawAbi = [
   },
   {
     "type": "function",
-    "name": "symbol",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "string",
-        "internalType": "string"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
     "name": "tableCount",
     "inputs": [],
     "outputs": [
@@ -1418,10 +1448,10 @@ export const arclawAbi = [
   },
   {
     "type": "function",
-    "name": "tableWeight",
+    "name": "tableMachine",
     "inputs": [
       {
-        "name": "tableId",
+        "name": "",
         "type": "uint256",
         "internalType": "uint256"
       }
@@ -1437,8 +1467,48 @@ export const arclawAbi = [
   },
   {
     "type": "function",
-    "name": "totalWeight",
-    "inputs": [],
+    "name": "tableStats",
+    "inputs": [
+      {
+        "name": "tableId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "rtpBps",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "minBps",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "maxBps",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "totalWeight",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "tableWeight",
+    "inputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
     "outputs": [
       {
         "name": "",
@@ -1483,6 +1553,30 @@ export const arclawAbi = [
         "name": "",
         "type": "string",
         "internalType": "string"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "valueOf",
+    "inputs": [
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "amount",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "stateMutability": "view"
@@ -1558,19 +1652,6 @@ export const arclawAbi = [
   },
   {
     "type": "event",
-    "name": "BoxPriceSet",
-    "inputs": [
-      {
-        "name": "price",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
     "name": "BoxesReturned",
     "inputs": [
       {
@@ -1584,6 +1665,12 @@ export const arclawAbi = [
         "type": "address",
         "indexed": true,
         "internalType": "address"
+      },
+      {
+        "name": "machineId",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
       },
       {
         "name": "boxes",
@@ -1617,6 +1704,12 @@ export const arclawAbi = [
         "internalType": "address"
       },
       {
+        "name": "machineId",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
         "name": "boxIndex",
         "type": "uint256",
         "indexed": false,
@@ -1636,12 +1729,6 @@ export const arclawAbi = [
       },
       {
         "name": "tier",
-        "type": "uint8",
-        "indexed": false,
-        "internalType": "uint8"
-      },
-      {
-        "name": "prizeIndex",
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"
@@ -1741,6 +1828,12 @@ export const arclawAbi = [
         "internalType": "address"
       },
       {
+        "name": "machineId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
         "name": "boxes",
         "type": "uint256",
         "indexed": false,
@@ -1803,6 +1896,12 @@ export const arclawAbi = [
         "internalType": "address"
       },
       {
+        "name": "machineId",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
         "name": "boxes",
         "type": "uint256",
         "indexed": false,
@@ -1810,9 +1909,9 @@ export const arclawAbi = [
       },
       {
         "name": "expiresAt",
-        "type": "uint64",
+        "type": "uint256",
         "indexed": false,
-        "internalType": "uint64"
+        "internalType": "uint256"
       }
     ],
     "anonymous": false
@@ -1844,6 +1943,49 @@ export const arclawAbi = [
   },
   {
     "type": "event",
+    "name": "MachineSet",
+    "inputs": [
+      {
+        "name": "machineId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "price",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "floorBps",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "capBps",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "rtpMinBps",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "rtpMaxBps",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "Opened",
     "inputs": [
       {
@@ -1863,6 +2005,12 @@ export const arclawAbi = [
         "type": "address",
         "indexed": true,
         "internalType": "address"
+      },
+      {
+        "name": "machineId",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
       },
       {
         "name": "boxes",
@@ -1894,6 +2042,49 @@ export const arclawAbi = [
         "type": "address",
         "indexed": false,
         "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "OutcomeDrawn",
+    "inputs": [
+      {
+        "name": "openingId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "boxIndex",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "machineId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "tier",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "outcomeIndex",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "valueUsdc",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
       }
     ],
     "anonymous": false
@@ -1960,6 +2151,12 @@ export const arclawAbi = [
         "internalType": "address"
       },
       {
+        "name": "machineId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
         "name": "boxes",
         "type": "uint256",
         "indexed": false,
@@ -1985,18 +2182,6 @@ export const arclawAbi = [
         "internalType": "address"
       },
       {
-        "name": "payoutMinBps",
-        "type": "uint16",
-        "indexed": false,
-        "internalType": "uint16"
-      },
-      {
-        "name": "payoutMaxBps",
-        "type": "uint16",
-        "indexed": false,
-        "internalType": "uint16"
-      },
-      {
         "name": "dailyCap",
         "type": "uint256",
         "indexed": false,
@@ -2010,6 +2195,12 @@ export const arclawAbi = [
     "name": "PrizesSet",
     "inputs": [
       {
+        "name": "machineId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
         "name": "tableId",
         "type": "uint256",
         "indexed": true,
@@ -2022,7 +2213,7 @@ export const arclawAbi = [
         "internalType": "uint256"
       },
       {
-        "name": "totalWeight",
+        "name": "rtpBps",
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"
@@ -2312,12 +2503,23 @@ export const arclawAbi = [
   },
   {
     "type": "error",
-    "name": "AlreadyFulfilled",
-    "inputs": []
+    "name": "AboveCap",
+    "inputs": [
+      {
+        "name": "index",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "valueBps",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
   },
   {
     "type": "error",
-    "name": "BadBand",
+    "name": "AlreadyFulfilled",
     "inputs": []
   },
   {
@@ -2328,6 +2530,11 @@ export const arclawAbi = [
   {
     "type": "error",
     "name": "BadLink",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "BadMachine",
     "inputs": []
   },
   {
@@ -2345,6 +2552,22 @@ export const arclawAbi = [
     "type": "error",
     "name": "BadSignature",
     "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "BelowFloor",
+    "inputs": [
+      {
+        "name": "index",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "valueBps",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
   },
   {
     "type": "error",
@@ -2572,17 +2795,6 @@ export const arclawAbi = [
   },
   {
     "type": "error",
-    "name": "PayoutOutOfBand",
-    "inputs": [
-      {
-        "name": "payoutBps",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ]
-  },
-  {
-    "type": "error",
     "name": "ReentrancyGuardReentrantCall",
     "inputs": []
   },
@@ -2590,6 +2802,17 @@ export const arclawAbi = [
     "type": "error",
     "name": "RenounceDisabled",
     "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "RtpOutOfBand",
+    "inputs": [
+      {
+        "name": "rtpBps",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
   },
   {
     "type": "error",
@@ -2658,6 +2881,11 @@ export const arclawAbi = [
   {
     "type": "error",
     "name": "UnexpectedCallback",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "UnknownMachine",
     "inputs": []
   },
   {

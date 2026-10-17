@@ -44,8 +44,8 @@ contract GreedyOpener is IERC1155Receiver {
     }
 
     function playAndOpen() external payable {
-        box.play{value: msg.value}(1);
-        (openingId,) = box.open(1);
+        box.play{value: msg.value}(1, 1);
+        (openingId,) = box.open(1, 1);
     }
 
     receive() external payable {
@@ -78,9 +78,14 @@ contract ReentrancyTest is Base {
     function test_tokenHookCannotReenterReveal() public {
         HookToken hook = new HookToken();
         hook.mint(address(box), 10 ether);
-        box.setPrizes(_single(address(hook), 1 ether));
-        _play(alice, 1);
-        (uint256 id, uint256 req) = _open(alice, 1);
+        address[] memory t = new address[](1);
+        uint256[] memory p = new uint256[](1);
+        (t[0], p[0]) = (address(hook), 200e6);
+        prices.setPrices(t, p);
+        _forceSingle(M1, address(hook), 0.75 ether);
+        uint256 inv = hook.balanceOf(address(box));
+        _play(alice, M1, 1);
+        (uint256 id, uint256 req) = _open(alice, M1, 1);
         vrf.fulfill(req, keccak256("w"));
         hook.arm(box, id);
 
@@ -91,23 +96,24 @@ contract ReentrancyTest is Base {
         // hook's own state too), so each card degrades to a refund instead of a double payout or a stuck box.
         assertFalse(hook.reentered());
         assertEq(hook.balanceOf(alice), 0);
-        assertEq(hook.balanceOf(address(box)), 10 ether);
-        assertEq(alice.balance, before + 3 * (PRICE / 3));
+        assertEq(hook.balanceOf(address(box)), inv);
+        assertEq(alice.balance, before + 0.75 ether);
         assertEq(box.cardsPaid(), 0);
         assertEq(box.cardsRefunded(), 3);
         assertEq(uint8(_status(id)), uint8(Arclaw.OpeningStatus.Revealed));
     }
 
     function test_nativeRefundReceiverCannotReenter_getsCredit() public {
-        box.setPrizes(_single(address(nvda), 1000 ether)); // never covered: full refund
+        _forceSingle(M1, address(nvda), 0.75 ether);
+        box.sweep(address(nvda), address(1), 100 ether); // empty pool: full refund
         GreedyOpener g = new GreedyOpener(box);
-        g.playAndOpen{value: PRICE}();
+        g.playAndOpen{value: P1}();
         (,,,,,, uint256 req,) = box.openings(g.openingId());
         vrf.fulfill(req, keccak256("w"));
 
         box.reveal(g.openingId()); // must not be blocked by a hostile opener
         assertEq(g.attempts(), 0); // receive() reverted, the attempt was rolled back
-        assertEq(box.credit(address(g)), 3 * (PRICE / 3));
+        assertEq(box.credit(address(g)), 0.75 ether);
 
         vm.expectRevert(Arclaw.TransferFailed.selector); // its receive() still reverts on the pull
         g.claim();
@@ -115,9 +121,9 @@ contract ReentrancyTest is Base {
 
     function test_vrfCallbackCannotPayOut() public {
         // The callback only stores the word: no token moves inside the coordinator's gas budget.
-        box.setPrizes(_single(address(nvda), 1 ether));
-        _play(alice, 1);
-        (, uint256 req) = _open(alice, 1);
+        box.setPrizes(M1, _table(address(nvda), P1));
+        _play(alice, M1, 1);
+        (, uint256 req) = _open(alice, M1, 1);
         uint256 before = nvda.balanceOf(alice);
         vrf.fulfill(req, keccak256("w"));
         assertEq(nvda.balanceOf(alice), before);

@@ -1,0 +1,124 @@
+{
+  "policy": {
+    "floorBps": 5000,
+    "rtpMinBps": 6000,
+    "rtpMaxBps": 8500,
+    "cardsPerBox": 3
+  },
+  "machines": [
+    {
+      "id": 1,
+      "name": "Single",
+      "priceUsdc": 1,
+      "capBps": 100000,
+      "tiers": [
+        {
+          "name": "Common",
+          "multiplierBps": 5000,
+          "weight": 5055
+        },
+        {
+          "name": "Uncommon",
+          "multiplierBps": 8000,
+          "weight": 3000
+        },
+        {
+          "name": "Rare",
+          "multiplierBps": 12000,
+          "weight": 1600
+        },
+        {
+          "name": "Epic",
+          "multiplierBps": 20000,
+          "weight": 250
+        },
+        {
+          "name": "Legendary",
+          "multiplierBps": 40000,
+          "weight": 80
+        },
+        {
+          "name": "Jackpot",
+          "multiplierBps": 100000,
+          "weight": 15
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "Stack",
+      "priceUsdc": 5,
+      "capBps": 100000,
+      "tiers": [
+        {
+          "name": "Common",
+          "multiplierBps": 5000,
+          "weight": 5000
+        },
+        {
+          "name": "Uncommon",
+          "multiplierBps": 8000,
+          "weight": 3000
+        },
+        {
+          "name": "Rare",
+          "multiplierBps": 12000,
+          "weight": 1650
+        },
+        {
+          "name": "Epic",
+          "multiplierBps": 20000,
+          "weight": 260
+        },
+        {
+          "name": "Legendary",
+          "multiplierBps": 40000,
+          "weight": 75
+        },
+        {
+          "name": "Jackpot",
+          "multiplierBps": 100000,
+          "weight": 15
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "name": "Vault",
+      "priceUsdc": 10,
+      "capBps": 100000,
+      "tiers": [
+        {
+          "name": "Common",
+          "multiplierBps": 5000,
+          "weight": 4950
+        },
+        {
+          "name": "Uncommon",
+          "multiplierBps": 8000,
+          "weight": 3000
+        },
+        {
+          "name": "Rare",
+          "multiplierBps": 12000,
+          "weight": 1700
+        },
+        {
+          "name": "Epic",
+          "multiplierBps": 20000,
+          "weight": 260
+        },
+        {
+          "name": "Legendary",
+          "multiplierBps": 40000,
+          "weight": 75
+        },
+        {
+          "name": "Jackpot",
+          "multiplierBps": 100000,
+          "weight": 15
+        }
+      ]
+    }
+  ]
+}

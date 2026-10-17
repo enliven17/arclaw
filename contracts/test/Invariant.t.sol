@@ -5,6 +5,8 @@ import {Test} from "forge-std/Test.sol";
 import {Arclaw} from "../src/Arclaw.sol";
 import {MockStock} from "../src/mocks/MockStock.sol";
 import {MockVRFCoordinator} from "../src/mocks/MockVRFCoordinator.sol";
+import {MockPriceSource} from "../src/mocks/MockPriceSource.sol";
+import {IPriceSource} from "../src/interfaces/IPriceSource.sol";
 
 /// Drives random plays, opens, fulfills, reveals, retries, links and warps.
 contract Handler is Test {
@@ -26,26 +28,31 @@ contract Handler is Test {
         return actors[s % 3];
     }
 
+    function _m(uint256 s) internal pure returns (uint256) {
+        return (s >> 8) % 2 + 1;
+    }
+
     function play(uint256 s, uint256 n) external {
         n = bound(n, 1, 5);
+        (uint128 price,,,,) = box.machines(_m(s));
         vm.prank(_actor(s));
-        box.play{value: n * box.boxPrice()}(n);
+        box.play{value: n * price}(_m(s), n);
     }
 
     function open(uint256 s, uint256 n) external {
         address a = _actor(s);
-        uint256 bal = box.balanceOf(a, 0);
+        uint256 bal = box.balanceOf(a, _m(s));
         if (bal == 0) return;
         n = bound(n, 1, bal > 20 ? 20 : bal);
         vm.prank(a);
-        (uint256 id,) = box.open(n);
+        (uint256 id,) = box.open(_m(s), n);
         openings.push(id);
     }
 
     function fulfillAndReveal(uint256 i, bytes32 w) external {
         if (openings.length == 0) return;
         uint256 id = openings[i % openings.length];
-        (,,, Arclaw.OpeningStatus st,,, uint256 req,) = box.openings(id);
+        (,,,, Arclaw.OpeningStatus st,, uint256 req,) = box.openings(id);
         if (st != Arclaw.OpeningStatus.Pending) return;
         try vrf.fulfill(req, w) {} catch {}
         try box.reveal(id) {} catch {}
@@ -60,12 +67,12 @@ contract Handler is Test {
 
     function createLink(uint256 s, uint256 n) external {
         address a = _actor(s);
-        uint256 bal = box.balanceOf(a, 0);
+        uint256 bal = box.balanceOf(a, _m(s));
         if (bal == 0) return;
         n = bound(n, 1, bal);
         uint256 pk = uint256(keccak256(abi.encode("link", ++nonce))) % 1e70 + 1;
         vm.prank(a);
-        uint256 id = box.createLink(vm.addr(pk), uint32(n), uint64(block.timestamp + 1 hours));
+        uint256 id = box.createLink(vm.addr(pk), _m(s), uint32(n), uint40(block.timestamp + 1 hours));
         linkIds.push(id);
         linkPk[id] = pk;
     }
@@ -81,7 +88,7 @@ contract Handler is Test {
     function reclaimLink(uint256 i) external {
         if (linkIds.length == 0) return;
         uint256 id = linkIds[i % linkIds.length];
-        (address sender,,,,) = box.links(id);
+        (address sender,,,,,) = box.links(id);
         vm.warp(block.timestamp + 1 hours + 1);
         vm.prank(sender);
         try box.reclaimLink(id) {} catch {}
@@ -96,20 +103,39 @@ contract ArclawInvariants is Test {
 
     function setUp() public {
         vrf = new MockVRFCoordinator();
-        box = new Arclaw(1 ether, "", address(vrf), 0.1 ether);
+        box = new Arclaw("", address(vrf), 0.1 ether);
         nvda = new MockStock("NVDA.arc");
         nvda.mint(address(box), 1e24);
-        Arclaw.Prize[] memory t = new Arclaw.Prize[](2);
-        t[0] = Arclaw.Prize(address(nvda), 3, 0, 0.001 ether);
-        t[1] = Arclaw.Prize(address(nvda), 1, 1, 0.01 ether);
-        box.setPrizes(t);
+        MockPriceSource ps = new MockPriceSource();
+        address[] memory tk = new address[](1);
+        uint256[] memory px = new uint256[](1);
+        (tk[0], px[0]) = (address(nvda), 200e6);
+        ps.setPrices(tk, px);
+        box.setPolicy(IPriceSource(address(ps)), 0);
+        for (uint256 m = 1; m <= 2; ++m) {
+            uint256 price = m == 1 ? 1 ether : 5 ether;
+            box.setMachine(m, uint128(price), 5000, 100_000, 6000, 8500);
+            // 0.5x (w3) and 1.5x (w1): NVDA at $200 -> 1 USDC = 0.005 NVDA
+            Arclaw.OutcomeInput[] memory t = new Arclaw.OutcomeInput[](2);
+            for (uint256 k; k < 2; ++k) {
+                uint256 each = ((k == 0 ? price / 2 : price * 3 / 2) + 599) / 600; // round up: floor holds
+                t[k].weight = k == 0 ? 3 : 1;
+                t[k].tier = uint8(k);
+                for (uint256 c; c < 3; ++c) {
+                    t[k].tokens[c] = address(nvda);
+                    t[k].amounts[c] = each;
+                }
+            }
+            box.setPrizes(m, t);
+        }
         handler = new Handler(box, vrf);
         targetContract(address(handler));
     }
 
     /// Escrowed link boxes are exactly the contract's own box balance.
     function invariant_escrowMatchesBalance() public view {
-        assertEq(box.balanceOf(address(box), 0), box.escrowedBoxes());
+        assertEq(box.balanceOf(address(box), 1), box.escrowed(1));
+        assertEq(box.balanceOf(address(box), 2), box.escrowed(2));
     }
 
     /// Every card revealed was either paid or refunded, never more than 3 per opened box.
