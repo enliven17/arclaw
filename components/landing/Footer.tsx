@@ -8,6 +8,7 @@ import { variantOf, type Variant } from "@/components/claw/view";
 import { Logo } from "@/components/Logo";
 import { SplitHeading } from "@/components/motion/SmoothScroll";
 import type { Machine } from "@/lib/machines";
+import { X_HANDLE, X_URL } from "@/lib/seo";
 
 const LINKS = [
   { href: "#machines", label: "Machines" },
@@ -53,6 +54,11 @@ export function Footer({ art, machines }: { art: Record<Variant, ClawArt>; machi
                   </a>
                 </li>
               ))}
+              <li>
+                <a className="transition-colors hover:text-cream" href={X_URL} rel="noopener noreferrer" target="_blank">
+                  X {X_HANDLE}
+                </a>
+              </li>
               <li>
                 <a className="transition-colors hover:text-cream" href="https://explorer.arc.io" rel="noopener noreferrer" target="_blank">
                   Arc explorer
