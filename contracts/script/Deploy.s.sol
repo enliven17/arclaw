@@ -2,6 +2,7 @@
 pragma solidity 0.8.28;
 
 import {Script, console} from "forge-std/Script.sol";
+import {VmSafe} from "forge-std/Vm.sol";
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {Arclaw} from "../src/Arclaw.sol";
 import {ArclawLens} from "../src/ArclawLens.sol";
@@ -109,9 +110,14 @@ abstract contract ArcConfig is Script {
         }
     }
 
-    /// One outcome per tier: a 3-card pack worth multiplier x price. Card amounts round up (so a pack never dips
-    /// under its multiplier and the floor holds) except for a tier at the cap, which rounds down.
-    function buildTable(MachineCfg memory m, address[8] memory tok, uint256[8] memory px)
+    /// Safety margin, in bps of a pack's value, for tiers sitting on the floor or the cap. The contract re-prices
+    /// a table at inclusion; without slack a 1-tick oracle move between simulation and broadcast (or between an
+    /// operator's quote and its transaction) would revert setPrizes with BelowFloor or AboveCap.
+    uint256 constant EDGE_MARGIN_BPS = 100; // 1%
+
+    /// One outcome per tier: a 3-card pack worth multiplier x price. A tier at (or under) the floor is built 1% above
+    /// it and a tier at (or over) the cap 1% under it. Card amounts round up, except at the cap, where they round down.
+    function buildTable(MachineCfg memory m, uint256 floorBps, address[8] memory tok, uint256[8] memory px)
         internal
         pure
         returns (Arclaw.OutcomeInput[] memory t)
@@ -120,8 +126,12 @@ abstract contract ArcConfig is Script {
         uint256 price = m.priceUsdc * 1e18;
         for (uint256 k; k < m.tiers.length; ++k) {
             Tier memory tier = m.tiers[k];
-            uint256 target = price * tier.multiplierBps / 10_000; // USDC 18 dp
-            bool roundDown = tier.multiplierBps >= m.capBps;
+            bool atCap = tier.multiplierBps >= m.capBps;
+            uint256 mult = tier.multiplierBps <= floorBps
+                ? floorBps * (10_000 + EDGE_MARGIN_BPS) / 10_000
+                : atCap ? m.capBps * (10_000 - EDGE_MARGIN_BPS) / 10_000 : tier.multiplierBps;
+            uint256 target = price * mult / 10_000; // USDC 18 dp
+            bool roundDown = atCap;
             (uint8[3] memory s, uint8[3] memory pct) = packOf(k);
             uint256 left = target;
             t[k].weight = uint88(tier.weight);
@@ -257,15 +267,26 @@ abstract contract OddsWriter is ArcConfig {
 ///   forge script script/Deploy.s.sol --tc Deploy --rpc-url https://rpc.testnet.arc.io --private-key $PRIVATE_KEY \
 ///     --broadcast --with-gas-price 30gwei --priority-gas-price 1gwei
 /// Mainnet (5042): AstockPriceSource + Arclaw on the real coordinator and desk, tables priced from the live oracle,
-///   deployed PAUSED until inventory is bought (operator `spend`) and the owner unpauses.
-/// Env: OPERATOR (default deployer), BOX_URI, DAILY_CAP (wei, default 50 USDC), POOL_USD (testnet seed per stock,
-///   USD 6 dp, default $2000), MOCK_PRICES=1 (testnet: skip the mainnet fork, use fixed prices).
+///   deployed PAUSED until inventory is bought (operator `spend`) and the owner multisig unpauses.
+///   OWNER=<multisig> OPERATOR=<treasury agent> forge script script/Deploy.s.sol --tc Deploy \
+///     --rpc-url https://rpc.mainnet.arc.io --private-key $DEPLOYER_KEY --broadcast \
+///     --with-gas-price 30gwei --priority-gas-price 1gwei --verify --verifier blockscout \
+///     --verifier-url https://explorer.arc.io/api/
+///   Arc drops transactions with maxFeePerGas under 20 gwei, and forge overestimates (hundreds of gwei) without
+///   --with-gas-price. Afterwards the multisig calls acceptOwnership() on Arclaw and AstockPriceSource.
+/// Env:
+///   OWNER         final owner (multisig). Mainnet: required. Ownable2Step: it must acceptOwnership().
+///   OPERATOR      treasury agent (reprices, restocks). Mainnet: required and must differ from the deployer.
+///   BOX_URI, DAILY_CAP (wei, default 50 USDC), MAX_TABLE_AGE (seconds; testnet default 30 days, mainnet 24 h),
+///   POOL_USD (testnet seed per stock, USD 6 dp, default $2000), MOCK_PRICES=1 (testnet: fixed prices, no fork).
+/// Deployment files (lib/deployments/arc-<chain>.json, lib/machines.resolved*.json) are written only on --broadcast.
 contract Deploy is OddsWriter {
     Arclaw public box;
     ArclawLens public lens;
     address public priceSource;
     address public desk;
     address public operator;
+    address public owner;
     address[8] public tokens;
     uint256[8] public prices;
 
@@ -285,6 +306,7 @@ contract Deploy is OddsWriter {
 
         vm.startBroadcast();
         operator = vm.envOr("OPERATOR", msg.sender);
+        owner = vm.envOr("OWNER", msg.sender);
         MockPriceSource src = new MockPriceSource();
         priceSource = address(src);
         desk = address(new MockAstockDesk(IPriceSource(priceSource)));
@@ -303,16 +325,21 @@ contract Deploy is OddsWriter {
         }
         src.setPrices(list, px);
         src.setRelayer(operator);
+        // Mock prices never move and no keeper runs on testnet: let tables live a month.
+        box.setMaxTableAge(vm.envOr("MAX_TABLE_AGE", uint256(30 days)));
         _configure();
+        if (owner != msg.sender) box.transferOwnership(owner);
         vm.stopBroadcast();
 
-        printAndWrite(box, lens, "../lib/machines.resolved.json");
-        _write("../lib/deployments/arc-testnet.json", D20_TESTNET);
+        _publish("../lib/deployments/arc-testnet.json", "../lib/machines.resolved.json", D20_TESTNET);
     }
 
     function _mainnet() internal {
+        operator = vm.envAddress("OPERATOR");
+        owner = vm.envAddress("OWNER");
         vm.startBroadcast();
-        operator = vm.envOr("OPERATOR", msg.sender);
+        require(operator != msg.sender, "OPERATOR must not be the deployer");
+        require(owner != address(0) && operator != address(0), "OWNER and OPERATOR required");
         AstockPriceSource src = new AstockPriceSource(ASTOCK_ORACLE);
         priceSource = address(src);
         desk = ASTOCK_DESK;
@@ -330,11 +357,17 @@ contract Deploy is OddsWriter {
         box = new Arclaw(vm.envOr("BOX_URI", string("")), D20_MAINNET, 0.05 ether);
         lens = new ArclawLens();
         box.pause(); // no inventory yet: every card would refund
+        uint256 age = vm.envOr("MAX_TABLE_AGE", uint256(0));
+        if (age != 0) box.setMaxTableAge(age);
         _configure();
+        if (owner != msg.sender) {
+            box.transferOwnership(owner);
+            src.transferOwnership(owner);
+        }
         vm.stopBroadcast();
 
-        printAndWrite(box, lens, ""); // print only; the resolved file tracks the testnet deployment
-        console.log("PAUSED. Fund inventory via spend(), then unpause().");
+        _publish("../lib/deployments/arc-mainnet.json", "../lib/machines.resolved.mainnet.json", D20_MAINNET);
+        console.log("PAUSED. Owner accepts ownership; operator restocks via spend(); owner unpauses.");
     }
 
     /// Machines, rules and tables, all from machines.json.
@@ -354,8 +387,17 @@ contract Deploy is OddsWriter {
                 uint16(p.rtpMinBps),
                 uint16(p.rtpMaxBps)
             );
-            box.setPrizes(ms[i].id, buildTable(ms[i], tokens, prices));
+            box.setPrizes(ms[i].id, buildTable(ms[i], p.floorBps, tokens, prices));
         }
+    }
+
+    /// Prints the odds; writes the deployment and resolved-odds files only on a real broadcast.
+    function _publish(string memory depPath, string memory oddsPath, address coordinator) internal {
+        bool live =
+            vm.isContext(VmSafe.ForgeContext.ScriptBroadcast) || vm.isContext(VmSafe.ForgeContext.ScriptResume);
+        printAndWrite(box, lens, live ? oddsPath : "");
+        if (live) _write(depPath, coordinator);
+        else console.log("dry run: deployment files not written");
     }
 
     function _write(string memory path, address coordinator) internal {
@@ -369,9 +411,11 @@ contract Deploy is OddsWriter {
         vm.serializeUint(o, "chainId", block.chainid);
         vm.serializeUint(o, "deployBlock", block.number); // lower bound for indexers
         vm.serializeAddress(o, "arclaw", address(box));
+        vm.serializeAddress(o, "lens", address(lens));
         vm.serializeAddress(o, "priceSource", priceSource);
         vm.serializeAddress(o, "desk", desk);
         vm.serializeAddress(o, "operator", operator);
+        vm.serializeAddress(o, "owner", owner);
         vm.serializeUint(o, "machines", box.machineIds());
         vm.serializeAddress(o, "vrfCoordinator", coordinator);
         string memory json = vm.serializeString(o, "stocks", stocksJson);
@@ -379,12 +423,17 @@ contract Deploy is OddsWriter {
     }
 }
 
-/// Prints the live odds of a deployed Arclaw and rewrites ../lib/machines.resolved.json.
+/// Prints the live odds of the Arclaw deployed on this chain (lib/deployments/arc-<chain>.json) and rewrites the
+/// matching resolved-odds file (lib/machines.resolved.json on testnet, lib/machines.resolved.mainnet.json on mainnet).
 ///   forge script script/Deploy.s.sol --tc Odds --rpc-url https://rpc.testnet.arc.io
 contract Odds is OddsWriter {
     function run() external {
-        string memory dep = vm.readFile("../lib/deployments/arc-testnet.json");
+        bool main = block.chainid == MAINNET;
+        require(main || block.chainid == TESTNET, "unsupported chain");
+        string memory dep =
+            vm.readFile(main ? "../lib/deployments/arc-mainnet.json" : "../lib/deployments/arc-testnet.json");
         Arclaw box = Arclaw(payable(vm.parseJsonAddress(dep, ".arclaw")));
-        printAndWrite(box, new ArclawLens(), block.chainid == TESTNET ? "../lib/machines.resolved.json" : "");
+        ArclawLens lens = ArclawLens(vm.parseJsonAddress(dep, ".lens"));
+        printAndWrite(box, lens, main ? "../lib/machines.resolved.mainnet.json" : "../lib/machines.resolved.json");
     }
 }

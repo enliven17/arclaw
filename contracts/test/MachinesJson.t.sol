@@ -22,10 +22,10 @@ contract Builder is ArcConfig {
 
     function buildFor(MachineCfg memory m, address[8] memory tok, uint256[8] memory px)
         external
-        pure
+        view
         returns (Arclaw.OutcomeInput[] memory)
     {
-        return buildTable(m, tok, px);
+        return buildTable(m, readPolicy(vm.readFile(MACHINES)).floorBps, tok, px);
     }
 }
 
