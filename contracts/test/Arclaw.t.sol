@@ -475,6 +475,35 @@ contract RulesTest is Base {
 
     receive() external payable {}
 
+    function test_staleTableRefusesOpen() public {
+        box.setPrizes(M1, _table(address(nvda), P1));
+        uint256 pricedAt = box.tablePricedAt(box.currentTable(M1) - 1);
+        assertEq(pricedAt, block.timestamp);
+        _play(alice, M1, 2);
+        vm.warp(block.timestamp + 1 days); // exactly maxTableAge: still fine
+        _open(alice, M1, 1);
+        vm.warp(block.timestamp + 1);
+        vm.prank(alice);
+        vm.expectRevert(Arclaw.TableStale.selector);
+        box.open(M1, 1);
+        Arclaw.OutcomeInput[] memory fresh = _table(address(nvda), P1);
+        vm.prank(op);
+        box.operatorSetPrizes(M1, fresh); // keeper reprices
+        _open(alice, M1, 1);
+    }
+
+    function test_maxTableAgeOwnerSet() public {
+        vm.expectEmit(false, false, false, true);
+        emit Arclaw.MaxTableAgeSet(6 hours);
+        box.setMaxTableAge(6 hours);
+        assertEq(box.maxTableAge(), 6 hours);
+        vm.expectRevert(Arclaw.BadMachine.selector);
+        box.setMaxTableAge(0);
+        vm.prank(alice);
+        vm.expectRevert();
+        box.setMaxTableAge(1 days);
+    }
+
     function test_operatorOnly() public {
         Arclaw.OutcomeInput[] memory t = _table(address(nvda), P1);
         vm.prank(alice);

@@ -11,4 +11,5 @@ interface IAstockDesk {
 ///         Prices the Robinhood Chain underlying, USD 6 dp.
 interface IAstockOracle {
     function getPrice(address underlying) external view returns (uint256);
+    function isStale(address underlying) external view returns (bool);
 }

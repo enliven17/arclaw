@@ -118,6 +118,9 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, EIP712, D20
     uint256[] public tableMachine;
     /// Machine price each table was validated against; open() refuses a mismatch.
     uint256[] public tablePrice;
+    /// When each table was priced; open() refuses tables older than maxTableAge.
+    uint256[] public tablePricedAt;
+    uint256 public maxTableAge = 1 days;
     /// machineId => no new plays or opens (owner switch); reveals, returns and links keep working.
     mapping(uint256 => bool) public machineOff;
 
@@ -219,6 +222,7 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, EIP712, D20
     event PolicySet(address priceSource, uint256 dailyCap);
     event SinkSet(address sink, bool allowed);
     event Spent(address indexed sink, address indexed stock, uint256 amount, uint256 sharesOut);
+    event MaxTableAgeSet(uint256 maxAge);
     event VrfConfigSet(uint32 callbackGasLimit, uint256 maxVrfSubsidy);
 
     // ------------------------------------------------------------------ errors
@@ -249,6 +253,7 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, EIP712, D20
     error PriceImmutable();
     error MachineOff();
     error TablePriceMismatch();
+    error TableStale();
     error BadGas();
     error BadLink();
     error LinkKeyUsed();
@@ -309,6 +314,7 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, EIP712, D20
         if (t == 0) revert NoPrizes();
         if (machineOff[machineId]) revert MachineOff();
         if (tablePrice[t - 1] != machines[machineId].price) revert TablePriceMismatch();
+        if (block.timestamp > tablePricedAt[t - 1] + maxTableAge) revert TableStale();
 
         _burn(msg.sender, machineId, boxes);
         openingId = nextOpeningId++;
@@ -618,6 +624,13 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, EIP712, D20
         emit VrfConfigSet(gasLimit, subsidy);
     }
 
+    /// @notice How long a priced table may keep serving new opens before the operator must reprice it.
+    function setMaxTableAge(uint256 maxAge) external onlyOwner {
+        if (maxAge == 0) revert BadMachine();
+        maxTableAge = maxAge;
+        emit MaxTableAgeSet(maxAge);
+    }
+
     function setURI(string calldata uri_) external onlyOwner {
         _setURI(uri_);
     }
@@ -788,6 +801,7 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, EIP712, D20
         tableWeight.push(w);
         tableMachine.push(machineId);
         tablePrice.push(machines[machineId].price);
+        tablePricedAt.push(block.timestamp);
         currentTable[machineId] = tableId + 1;
         emit PrizesSet(machineId, tableId, input.length, rtpBps, msg.sender);
     }
