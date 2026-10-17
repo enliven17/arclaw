@@ -258,7 +258,15 @@ html.js [data-split] .split-line > span {
   transform: rotateY(180deg);
 }
 
+/* How it works: without JS or with reduced motion only the face-up cards show (no box, pack or coin over them). */
+html:not(.js) [data-how-hide] {
+  display: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
+  [data-how-hide] {
+    display: none;
+  }
   html.js [data-reveal] {
     opacity: 1;
   }

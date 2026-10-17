@@ -27,7 +27,8 @@ export function Hero({ art, machines }: { art: ClawArt; machines: Machine[] }) {
       if (!el) return;
       if (process.env.NODE_ENV !== "production") (window as unknown as { __claw?: ClawHandle | null }).__claw = claw.current;
       const mm = gsap.matchMedia();
-      mm.add({ pinned: PINNED, reduced: REDUCED }, (ctx) => {
+      // `any` always matches: with only pinned and reduced, phones and touch laptops (neither) never ran the callback.
+      mm.add({ pinned: PINNED, reduced: REDUCED, any: "all" }, (ctx) => {
         const { pinned, reduced } = ctx.conditions as { pinned: boolean; reduced: boolean };
         if (reduced) return;
         if (pinned) {
