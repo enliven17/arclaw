@@ -9,6 +9,8 @@
  * and nothing plays before that. Sound is on by default; the toggle (components/SoundToggle.tsx) persists the
  * choice in localStorage. Everything is short and quiet: one master gain at 0.22.
  */
+import { whenSplashDone } from "./splash";
+
 export type Sfx = "coin" | "motor" | "drop" | "grip" | "box" | "tear" | "deal" | "flip" | "rare" | "jackpot" | "open" | "close";
 
 const KEY = "arclaw:sound";
@@ -40,27 +42,44 @@ export function onSoundChange(fn: () => void): () => void {
   return () => window.removeEventListener(EVENT, fn);
 }
 
-/** Create the context on the first gesture (call once from the app shell); the noise buffer is built then too. */
+function createContext() {
+  if (ctx) return;
+  const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  if (!AC) return;
+  ctx = new AC();
+  master = ctx.createGain();
+  master.gain.value = 0.22;
+  master.connect(ctx.destination);
+  noise = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
+  const d = noise.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+}
+
+/**
+ * Call once from the app shell. Opening the audio device can block the main thread for hundreds of milliseconds on
+ * Windows, so the (suspended) context is created while the page is idle, and the first gesture only resumes it.
+ * Doing it all on the first click froze whatever that click started (the claw page transition).
+ */
 export function armSound(): () => void {
   if (typeof window === "undefined") return () => {};
+  const idle = window.requestIdleCallback ?? ((fn: () => void) => window.setTimeout(fn, 1500));
+  const cancelIdle = window.cancelIdleCallback ?? window.clearTimeout;
+  let live = true;
+  let pending = 0;
+  // After the splash, never during it.
+  void whenSplashDone().then(() => {
+    if (live) pending = idle(createContext, { timeout: 4000 });
+  });
   const unlock = () => {
-    if (!ctx) {
-      const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-      if (!AC) return;
-      ctx = new AC();
-      master = ctx.createGain();
-      master.gain.value = 0.22;
-      master.connect(ctx.destination);
-      noise = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
-      const d = noise.getChannelData(0);
-      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
-    }
-    if (ctx.state === "suspended") void ctx.resume();
+    createContext();
+    if (ctx?.state === "suspended") void ctx.resume();
   };
   const opts: AddEventListenerOptions = { capture: true, passive: true };
   window.addEventListener("pointerdown", unlock, opts);
   window.addEventListener("keydown", unlock, opts);
   return () => {
+    live = false;
+    cancelIdle(pending);
     window.removeEventListener("pointerdown", unlock, opts);
     window.removeEventListener("keydown", unlock, opts);
   };
