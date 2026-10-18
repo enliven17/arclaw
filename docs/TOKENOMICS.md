@@ -58,6 +58,18 @@ About three boxes in four leave money behind (that is the house edge), and that 
 6. **Inventory is market exposure.** Held stock moves with the market; keep any pre-bought inventory small and reprice tables instead of hoarding it.
 7. **Retries cost the caller.** Only the opener or the operator retries an expired VRF request for free; the old request is refunded before a new one is made. (Audit #1 L-01, M-01.)
 
+## ARCLAW holders
+
+Two separate things. Only the first is code.
+
+**1. Luck boost (on-chain, LuckVault).** ARCLAW locked in the vault for at least 24 hours (minAge) gives a boost between 0 and 1% (100 bps). With probability boost/10,000 a box draws a second pack from an independent random stream and keeps the better one. The stake tiers and their boosts (for example 1k, 10k and 100k ARCLAW for 0.25%, 0.5% and 1%) are set by the owner after the token exists; until then boosts are off. Flash-loaned or freshly bought tokens earn nothing, and unstaking is instant.
+
+What it is worth at the top tier: about 0.16 percentage points of return (about 1.6 USDC per 1,000 USDC played; 0.16 cent per Single box, 0.8 cent per Stack box, 1.6 cent per Vault box). It is a small perk, by design: every table is checked on-chain at the maximum boost, so the house edge cannot be bent by it.
+
+**2. Buyback and distribution (off-chain, run by the team).** Not in any contract and no on-chain obligation. The team may use part of the house edge to buy ARCLAW on the market and distribute or burn it, by its own decision, in the amounts it chooses and announces. While margin is small the amounts are small; as profit grows the team intends to increase them. Nothing here is a promise of yield or a share of revenue. Because the contract does not know about it, it needs no audit and can change any time.
+
+Not decided yet and not written anywhere: ARCLAW total supply, allocation and launch plan (it is minted later on Arguspad; the owner sets its address in the vault).
+
 ## Not legal advice
 
 Paying for a chance at a prize of value is regulated as gambling in many places, whatever the floor. Mainnet needs a legal opinion, age gating and geo blocking before launch.
