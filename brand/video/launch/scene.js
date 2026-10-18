@@ -302,7 +302,7 @@ function drawCard(ctx, img, w, x, y, { rot = 0, sx = 1, scale = 1, alpha = 1, sh
 }
 
 // ───────────────────────────── a cabinet, front on, (x, y) its top-left
-function cabinet(ctx, x, y, w, h, variant, t, { clawDrop = 0, clawGrab = 0 } = {}) {
+function cabinet(ctx, x, y, w, h, variant, t, { play = 0 } = {}) {
   const f = FINISH[variant], line = (a) => col(CREAM, a);
   ctx.save(); ctx.lineWidth = 1.5;
   const mq = h * 0.13, gTop = mq + h * 0.02, gH = h * 0.47, deck = gTop + gH, dH = h * 0.06, base = deck + dH, bH = h - base - 10;
@@ -317,15 +317,34 @@ function cabinet(ctx, x, y, w, h, variant, t, { clawDrop = 0, clawGrab = 0 } = {
   const chW = w * 0.24, chH = gH * 0.2;
   ctx.strokeStyle = line(0.16); ctx.strokeRect(x + 16, y + gTop + gH - chH - 8, chW, chH);
   // the pile of boxes in this machine's finish
-  const bs = (w * 0.18) / 200;
+  const bs = (w * 0.18) / 200, bh = 160 * bs, sealed = { x: 0, y: 0, rot: 0, a: 1 };
+  const pileAt = (px, row) => [x + w * px - 4, y + gTop + gH - 8 - row * bh * 0.86];
   const pile = [[0.48, 0], [0.66, 0], [0.84, 0], [0.57, 1], [0.75, 1], [0.66, 2]];
+  // `play` (0 to 1) runs one game: over the pile, down onto the top box, grip, up, across to the chute, let go.
+  const taken = play > 0.47;
   for (const [px, row] of pile) {
-    ctx.save(); ctx.translate(x + w * px - 4, y + gTop + gH - 8 - row * 160 * bs * 0.86); box(ctx, bs, variant, { lid: { x: 0, y: 0, rot: 0, a: 1 } }); ctx.restore();
+    if (taken && row === 2) continue;
+    const [bx, by] = pileAt(px, row);
+    ctx.save(); ctx.translate(bx, by); box(ctx, bs, variant, { lid: sealed }); ctx.restore();
   }
-  // the little claw on its rail
-  const ck = (w * 0.15) / 24, cx = x + w * 0.32 + Math.sin(t * 0.6 + w) * 4, cy = y + gTop + 30 + clawDrop * gH * 0.42;
+  // the little claw on its rail, sized so the outer prongs hug a box (7.4 units = half a box, as the big claw)
+  const ck = (100 * bs) / 7.4, rest = y + gTop + 8.25 * ck - 6; // hub centre at the top of its travel
+  const [topX, topBottom] = pileAt(0.66, 2), chuteX = x + 16 + (w * 0.24) / 2;
+  const reach = topBottom - bh - GRIP_Y * ck - rest; // drop that puts the grip on the top box's lid
+  const seg = (a, b) => E.inOutCubic(prog(play, a, b));
+  const idleX = x + w * 0.32 + Math.sin(t * 0.6 + w) * 4 * (play > 0 ? 0 : 1);
+  const hx = play < 0.6 ? lerp(idleX, topX, seg(0, 0.2)) : lerp(topX, chuteX, seg(0.6, 0.8));
+  const drop = reach * (seg(0.22, 0.38) - seg(0.47, 0.6));
+  const open = Math.min(seg(0.05, 0.2), 1 - seg(0.4, 0.46)) + seg(0.84, 0.9) * 0.8;
+  const hy = rest + drop;
   ctx.save(); ctx.beginPath(); ctx.rect(x + 6, y + gTop + 14, w - 12, gH - 14); ctx.clip();
-  claw(ctx, cx, cy + 8.25 * ck - 30, ck, { open: clawGrab, cable: 40 + clawDrop * gH * 0.42 });
+  claw(ctx, hx, hy, ck, { open, cable: hy - y - gTop + 20, part: 'back' });
+  if (taken) {
+    // held under the prongs, then let go over the chute and falls through it
+    const fall = prog(play, 0.86, 1), bottom = hy + GRIP_Y * ck + bh + (play > 0.86 ? fall * fall * gH * 0.8 : 0);
+    ctx.save(); ctx.translate(hx, bottom); box(ctx, bs, variant, { lid: sealed }); ctx.restore();
+  }
+  claw(ctx, hx, hy, ck, { open, cable: hy - y - gTop + 20, part: 'front' });
   ctx.restore();
   // deck: joystick and button
   ctx.fillStyle = col(PANEL2); ctx.strokeStyle = line(0.16); ctx.beginPath(); ctx.roundRect(x - 8, y + deck, w + 16, dH, 6); ctx.fill(); ctx.stroke();
@@ -438,26 +457,31 @@ export default {
         const lp = prog(t, POP, POP + 0.55);
         Object.assign(lid, { x: -E.outCubic(lp) * 420, y: -E.outCubic(lp) * 520 + lp * lp * 220, rot: -E.outCubic(lp) * 1.3, a: 1 - prog(t, POP + 0.25, POP + 0.55) });
       }
-      const sink = E.inBack(prog(t, POP + 0.75, POP + 1.35), 1.2);
-      boxBottom += sink * 560;
+      // as the lid pops the empty box drops straight out the bottom of the frame, under the rising pack
+      const sink = E.inCubic(prog(t, POP + 0.06, POP + 0.5));
+      const sinkBy = sink * (H - L.floorY + bh + 80);
+      boxBottom += sinkBy;
+      boxRot += sink * 0.12;
+      lid.y -= sinkBy; // the lid is drawn in box space; keep it on its own flight
 
-      if (t > fallT && t < POP + 1.4) floorShadow(ctx, boxX, L.floorY + 6, bw * 0.48, 14, 0.55 * clamp(1 - (L.floorY - boxBottom) / 300) * (1 - sink));
+      if (t > fallT && t < POP + 0.6) floorShadow(ctx, boxX, L.floorY + 6, bw * 0.48, 14, 0.55 * clamp(1 - (L.floorY - boxBottom) / 300) * (1 - sink));
 
-      // the pack and the cards that come out of it
-      if (t > POP) {
-        const ps = packState(t, L, H, api);
-        if (t >= DEAL) cardsDeal(ctx, t, api, L, ps, true);
-        pack(ctx, cx, ps.y, L.packS, { rot: ps.rot, tear: t >= TEAR ? prog(t, TEAR, TEAR + 0.4) : 0, tug: t > TUG && t < TEAR ? Math.sin(prog(t, TUG, TEAR) * Math.PI) : 0, sheen: -0.25 + E.outCubic(prog(t, POP + 0.1, TEAR + 0.5)) * 0.35 });
-      }
       // claw: cable, hub and centre prong behind the box, outer prongs in front
       const clawOn = hubY > -420 && t < LAND + 1.0;
       if (clawOn) claw(ctx, cx, hubY, K, { open, rot: sway, part: 'back' });
-      if (boxBottom - bh < H + 20 && t < POP + 1.5) {
+      if (boxBottom - bh < H + 20 && t < POP + 0.6) {
         ctx.save(); ctx.translate(boxX, boxBottom); ctx.rotate(boxRot);
         box(ctx, bs, 'single', { lid: t < POP + 0.6 ? lid : null, squash });
         ctx.restore();
       }
       if (clawOn) claw(ctx, cx, hubY, K, { open, rot: sway, part: 'front' });
+
+      // the pack and the cards that come out of it, in front of the falling box
+      if (t > POP) {
+        const ps = packState(t, L, H, api);
+        if (t >= DEAL) cardsDeal(ctx, t, api, L, ps, true);
+        pack(ctx, cx, ps.y, L.packS, { rot: ps.rot, tear: t >= TEAR ? prog(t, TEAR, TEAR + 0.4) : 0, tug: t > TUG && t < TEAR ? Math.sin(prog(t, TUG, TEAR) * Math.PI) : 0, sheen: -0.25 + E.outCubic(prog(t, POP + 0.1, TEAR + 0.5)) * 0.35 });
+      }
     }
 
     // ── bar 2-3 copy
@@ -543,10 +567,10 @@ function machines(ctx, t, api, L, C, { MACH, COIN, COPY2, END }) {
     const t0 = MACH + i * api.step * 1.5, p = spring(t - t0, 10, 6.5), g = gone(i);
     if (p <= 0) return;
     const dy = (1 - p) * 700 + g * 900;
-    const clawDrop = i === mid ? Math.sin(prog(t, COIN + 0.25, COIN + 1.6) * Math.PI) : 0;
-    const clawGrab = i === mid ? 1 - E.outCubic(prog(t, COIN + 0.6, COIN + 0.8)) * (t < COIN + 1.6 ? 1 : 0) : 0;
+    // the coin starts a game in the middle machine: its claw fetches a box before the machines leave
+    const play = i === mid ? prog(t, COIN + 0.2, END - 0.45) : 0;
     ctx.save(); ctx.translate(0, dy); ctx.globalAlpha *= clamp(p * 2) * (1 - g * 0.6);
-    cabinet(ctx, xs[i], L.mTop, L.mw, L.mH, k, t, { clawDrop, clawGrab: i === mid && t > COIN + 0.2 ? clawGrab : 0 });
+    cabinet(ctx, xs[i], L.mTop, L.mw, L.mH, k, t, { play });
     // label: name left, price right in mono
     const m = C.machines[i];
     if (L.sq) {
