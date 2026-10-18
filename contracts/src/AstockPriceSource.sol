@@ -20,9 +20,15 @@ contract AstockPriceSource is IPriceSource, Ownable2Step {
     error Unpriced(address token);
     error Stale(address token);
     error LengthMismatch();
+    error RenounceDisabled();
 
     constructor(IAstockOracle oracle_) Ownable(msg.sender) {
         oracle = oracle_;
+    }
+
+    /// @notice Disabled: without an owner no new .arc token could ever be mapped.
+    function renounceOwnership() public pure override {
+        revert RenounceDisabled();
     }
 
     function setUnderlyings(address[] calldata tokens, address[] calldata underlyings) external onlyOwner {

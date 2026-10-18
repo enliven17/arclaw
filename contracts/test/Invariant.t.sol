@@ -47,8 +47,9 @@ contract Handler is Test {
         uint256 bal = box.balanceOf(a, _m(s));
         if (bal == 0) return;
         n = bound(n, 1, bal > 20 ? 20 : bal);
+        uint256 tid51 = box.currentTable(_m(s)) - 1;
         vm.prank(a);
-        (uint256 id,) = box.open(_m(s), n);
+        (uint256 id,) = box.open(_m(s), n, tid51);
         openings.push(id);
     }
 
@@ -135,6 +136,8 @@ contract ArclawInvariants is Test {
         }
         links = new ArclawLinks(IERC1155(address(box)));
         handler = new Handler(box, links, vrf);
+        box.setKeeper(address(handler), true); // the handler reveals like the house bot
+        vm.deal(address(box), 100 ether); // house float: VRF subsidies are paid from it
         targetContract(address(handler));
     }
 
@@ -148,6 +151,27 @@ contract ArclawInvariants is Test {
     /// Every card revealed was either paid or refunded, never more than 3 per opened box.
     function invariant_cardsBounded() public view {
         assertLe(box.cardsPaid() + box.cardsRefunded(), box.boxesOpened() * 3);
+    }
+
+    /// Sealed boxes are backed: sealedReserve is exactly the price of every box still sealed (held or escrowed).
+    function invariant_sealedReserveMatchesSealedBoxes() public view {
+        uint256 sealedValue;
+        for (uint256 m = 1; m <= 2; ++m) {
+            (uint128 price,,,,) = box.machines(m);
+            uint256 held = box.balanceOf(address(links), m);
+            for (uint256 i; i < 3; ++i) {
+                address actor = vm.addr(uint256(keccak256(abi.encodePacked("a", vm.toString(i))))); // makeAddr("a<i>")
+                held += box.balanceOf(actor, m);
+            }
+            sealedValue += held * price;
+        }
+        assertEq(box.sealedReserve(), sealedValue);
+    }
+
+    /// Every liability (credit, pending and sealed boxes) is backed by native at all times.
+    function invariant_liabilitiesBacked() public view {
+        assertGe(address(box).balance, box.reservedCredit() + box.pendingReserve() + box.sealedReserve());
+        assertEq(box.totalOwed(), 0, "full inventory: no refund, no IOU");
     }
 
     /// Prize tokens out == what the counter says.

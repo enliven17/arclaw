@@ -53,7 +53,7 @@ contract FlashBorrower {
     function onFlash(uint256 amount, bytes calldata) external {
         token.approve(address(vault), amount);
         vault.stake(amount);
-        (openingId,) = box.open(1, 1);
+        (openingId,) = box.open(1, 1, box.currentTable(1) - 1);
         vault.unstake(amount);
     }
 
@@ -95,7 +95,7 @@ contract LuckTest is Base {
         vault.setTiers(mins, bps);
         box.setLuck(vault);
         box.setPrizes(M1, _table(address(nvda), P1));
-        box.setMaxTableAge(365 days); // these tests travel in time
+        // tables live at most a day (MAX_TABLE_AGE); no test here opens more than a day after pricing
     }
 
     function _stake(address who, uint256 amount) internal {

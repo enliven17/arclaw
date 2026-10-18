@@ -50,8 +50,14 @@ contract LuckVault is ILuck, Ownable2Step, ReentrancyGuard {
     error BadAge();
     error ZeroAmount();
     error NotEnough();
+    error RenounceDisabled();
 
     constructor() Ownable(msg.sender) {}
+
+    /// @notice Disabled: without an owner the token, tiers and age could never be set again.
+    function renounceOwnership() public pure override {
+        revert RenounceDisabled();
+    }
 
     // ------------------------------------------------------------------ players
 

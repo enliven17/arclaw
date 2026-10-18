@@ -40,7 +40,7 @@ contract Audit1Test is Base {
         box.setMachine(5, uint128(P1), 5000, 100_000, 6000, 8500);
         vm.prank(alice);
         vm.expectRevert(Arclaw.NoPrizes.selector);
-        box.open(5, 1);
+        box.open(5, 1, 0);
     }
 
     /// H-01b fixed: boxes bought at 1 USDC can only ever open against a 1 USDC table.

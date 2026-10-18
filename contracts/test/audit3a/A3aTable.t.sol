@@ -5,21 +5,16 @@ import {Base} from "../Base.t.sol";
 import {Arclaw} from "../../src/Arclaw.sol";
 
 /// Auditor 3a: what a sealed box (or an open in the mempool) is actually promised.
-/// These tests document CURRENT behaviour (the finding); flip them when fixed.
+/// Flipped: each test now asserts the FIXED behaviour on the auditor's scenario.
 contract A3aTableTest is Base {
     function _single(address token, uint256 value) internal view returns (Arclaw.OutcomeInput[] memory t) {
         t = new Arclaw.OutcomeInput[](1);
         t[0] = _pack(token, 1, 0, value);
     }
 
-    function _tableId(uint256 openingId) internal view returns (uint256 t) {
-        (,, uint32 tid,,,,,) = box.openings(openingId);
-        t = tid;
-    }
-
-    /// M-01: open() has no expected-table parameter. The operator (a hot treasury key) or any keeper reprice that
-    /// lands first decides the table the player's boxes are frozen against. Displayed 75% table, served 60%.
-    function test_m01_openCanBeFrontRunWithMinRtpTable() public {
+    /// M-01 fixed: open() takes the table id the player was shown. A reprice that lands first (operator or keeper
+    /// front-run with a band-legal 0.60x table) makes the open revert instead of freezing it against that table.
+    function test_fixed_m01_openRevertsIfTableChanged() public {
         box.setPrizes(M2, _table(address(nvda), P2)); // EV 0.75x: what the site shows
         uint256 shown = box.currentTable(M2) - 1;
         _play(alice, M2, 1);
@@ -29,29 +24,36 @@ contract A3aTableTest is Base {
         vm.prank(op);
         box.operatorSetPrizes(M2, worst);
 
-        (uint256 id, uint256 req) = _open(alice, M2, 1);
-        assertTrue(_tableId(id) != shown, "frozen against a table alice never saw");
-        vrf.fulfill(req, keccak256("any"));
-        uint256 before = nvda.balanceOf(alice);
-        box.reveal(id);
-        // 0.60 x 5 USDC of NVDA at $200 = 0.015 NVDA, every time, vs 0.75x expected on the shown table
-        assertApproxEqAbs(nvda.balanceOf(alice) - before, 0.015 ether, 3);
+        vm.prank(alice);
+        vm.expectRevert(Arclaw.TableChanged.selector);
+        box.open(M2, 1, shown);
+        assertEq(box.balanceOf(alice, M2), 1, "box still sealed");
+        assertEq(box.pendingReserve(), 0);
     }
 
-    /// M-02: the price is immutable, but the rules are not. The owner can re-rate boxes already sold by moving the
-    /// machine to floor = cap = band = 30% (MIN_FLOOR_BPS) and setting a 0.30x table. This is the same harm H-01
-    /// fixed for price, and 30% is below the product promise of "at least 50% back".
-    function test_m02_ruleChangeReRatesSoldBoxesTo30Percent() public {
+    /// M-02 fixed: once a machine exists its floor and RTP lower bound only move up, and no floor is under 50%. The
+    /// auditor's re-rate (floor = cap = band = 30%, then a 0.30x table) is impossible in every variant.
+    function test_fixed_m02_rulesCannotReRateSoldBoxes() public {
         box.setPrizes(M1, _table(address(nvda), P1)); // sold under 50% floor, 60-85% band
         _play(alice, M1, 10);
 
+        vm.expectRevert(Arclaw.BadMachine.selector); // under MIN_FLOOR_BPS (50%)
         box.setMachine(M1, uint128(P1), 3000, 3000, 3000, 3000);
-        box.setPrizes(M1, _single(address(nvda), P1 * 3000 / 10_000));
+        vm.expectRevert(Arclaw.BadMachine.selector);
+        box.setMachine(M1, uint128(P1), 4999, 100_000, 6000, 8500);
+        vm.expectRevert(Arclaw.RuleLowered.selector); // rtpMin 60% -> 50%
+        box.setMachine(M1, uint128(P1), 5000, 100_000, 5000, 8500);
 
-        (uint256 id, uint256 req) = _open(alice, M1, 10);
-        vrf.fulfill(req, keccak256("w"));
-        box.reveal(id);
-        // 10 boxes x 0.30 USDC of NVDA at $200 = 0.015 NVDA for 10 USDC paid
-        assertApproxEqAbs(nvda.balanceOf(alice), 0.015 ether, 30);
+        // up is fine, and then it is the new minimum
+        box.setMachine(M1, uint128(P1), 5500, 100_000, 6500, 8500);
+        vm.expectRevert(Arclaw.RuleLowered.selector);
+        box.setMachine(M1, uint128(P1), 5000, 100_000, 6500, 8500);
+        // cap and rtpMax may still move either way inside the bounds
+        box.setMachine(M1, uint128(P1), 5500, 50_000, 6500, 8000);
+        box.setMachine(M1, uint128(P1), 5500, 100_000, 6500, 8500);
+
+        Arclaw.OutcomeInput[] memory thirty = _single(address(nvda), P1 * 3000 / 10_000);
+        vm.expectPartialRevert(Arclaw.BelowFloor.selector);
+        box.setPrizes(M1, thirty);
     }
 }

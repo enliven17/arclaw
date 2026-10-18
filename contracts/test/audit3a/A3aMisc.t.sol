@@ -5,6 +5,8 @@ import {Base} from "../Base.t.sol";
 import {Arclaw} from "../../src/Arclaw.sol";
 import {ArclawLinks} from "../../src/ArclawLinks.sol";
 import {LuckVault, ILuck} from "../../src/LuckVault.sol";
+import {AstockPriceSource} from "../../src/AstockPriceSource.sol";
+import {IAstockOracle} from "../../src/interfaces/IAstock.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
 contract A3aToken is ERC20 {
@@ -20,27 +22,24 @@ contract SilentVault {
     fallback() external {}
 }
 
-/// Auditor 3a: luck vault, treasury and links edges. Documents CURRENT behaviour.
+/// Auditor 3a: luck vault, treasury and links edges. L-03 and L-04 flipped to the FIXED behaviour; INFO unchanged.
 contract A3aMiscTest is Base {
     function setUp() public override {
         super.setUp();
         box.setPrizes(M1, _table(address(nvda), P1));
     }
 
-    /// L-03: _boostOf promises "a missing or failing vault means no boost, never a revert", but a vault that
-    /// returns empty or short data (an EOA, a wrong address, a fallback-only proxy) makes try/catch fail in the
-    /// caller's ABI decode, which is not caught: every open() reverts until the owner fixes `luck`.
-    function test_l03_nonConformingVaultBricksOpen() public {
-        _play(alice, M1, 1);
+    /// L-03 fixed: the vault is read with a raw staticcall and a 32-byte return check, so an EOA, a wrong address
+    /// or a fallback-only proxy as `luck` means no boost, never a bricked open().
+    function test_fixed_l03_nonConformingVaultMeansNoBoost() public {
+        _play(alice, M1, 2);
         box.setLuck(ILuck(makeAddr("eoa")));
-        vm.prank(alice);
-        vm.expectRevert();
-        box.open(M1, 1);
+        (uint256 a,) = _open(alice, M1, 1);
+        assertEq(box.openingBoost(a), 0);
 
         box.setLuck(ILuck(address(new SilentVault())));
-        vm.prank(alice);
-        vm.expectRevert();
-        box.open(M1, 1);
+        (uint256 b,) = _open(alice, M1, 1);
+        assertEq(box.openingBoost(b), 0);
     }
 
     /// INFO: one wei staked by anyone blocks setLuckToken forever (totalStaked != 0, no admin unstake). The owner
@@ -58,20 +57,40 @@ contract A3aMiscTest is Base {
         v.setLuckToken(address(0));
     }
 
-    /// L-04: sealed (sold, not yet opened) boxes are not a liability: their revenue is free balance and the owner
-    /// can withdraw it the moment it is paid. The buyer's box is then backed only by inventory and whatever float
-    /// remains; machineOff or an un-repriced table (TableStale) also leaves it unopenable with no refund path.
-    function test_l04_sealedBoxRevenueIsWithdrawable() public {
-        uint256 start = address(box).balance;
+    /// INFO fixed: neither the vault nor the mainnet price source can be left without an owner.
+    function test_fixed_info_renounceDisabled() public {
+        LuckVault v = new LuckVault();
+        vm.expectRevert(LuckVault.RenounceDisabled.selector);
+        v.renounceOwnership();
+        AstockPriceSource ps = new AstockPriceSource(IAstockOracle(address(0)));
+        vm.expectRevert(AstockPriceSource.RenounceDisabled.selector);
+        ps.renounceOwnership();
+        assertEq(v.owner(), address(this));
+        assertEq(ps.owner(), address(this));
+    }
+
+    /// L-04 fixed: sold-but-unopened boxes are a liability. Their revenue sits in sealedReserve (out of the free
+    /// balance) until the box is opened (then pendingReserve) or forever if it never is, so the owner cannot
+    /// withdraw it. A machine switched off keeps its boxes sealed but fully backed.
+    function test_fixed_l04_sealedBoxRevenueIsReserved() public {
+        uint256 start = box.freeBalance();
         _play(alice, M1, 20);
-        assertEq(box.freeBalance(), start + 20 ether);
+        assertEq(box.sealedReserve(), 20 ether);
+        assertEq(box.freeBalance(), start, "nothing new is free");
+        vm.expectRevert(abi.encodeWithSelector(Arclaw.Reserved.selector, start));
         box.withdraw(address(0xBEEF), 20 ether);
-        assertEq(box.balanceOf(alice, M1), 20, "alice still holds 20 boxes backed by nothing native");
 
         box.setMachineActive(M1, false);
+        uint256 shown = box.currentTable(M1) - 1;
         vm.prank(alice);
         vm.expectRevert(Arclaw.MachineOff.selector);
-        box.open(M1, 1);
+        box.open(M1, 1, shown);
+        assertEq(box.sealedReserve(), 20 ether, "still backed while the machine is off");
+
+        box.setMachineActive(M1, true);
+        _open(alice, M1, 5);
+        assertEq(box.sealedReserve(), 15 ether, "opened boxes move to pendingReserve");
+        assertEq(box.pendingReserve(), 5 ether);
     }
 
     /// INFO: the link-key front-run documented in ArclawLinks costs the griefer nothing lasting: the squatting link

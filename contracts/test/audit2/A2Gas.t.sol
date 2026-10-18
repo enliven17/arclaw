@@ -36,6 +36,7 @@ contract A2GasTest is Test {
         ps.setPrices(t, p);
         box.setPolicy(IPriceSource(address(ps)), 0);
         box.setMachine(M, uint128(PRICE), 5000, 100_000, 6000, 8500);
+        box.setKeeper(address(this), true); // reveals like the house bot
     }
 
     /// n outcomes, all worth 0.75x, cards on 3 distinct stocks rotating over 8. Last outcome weight `lastW`.
@@ -66,10 +67,11 @@ contract A2GasTest is Test {
         vm.prank(p);
         box.play{value: 20 * PRICE}(M, 20);
 
+        uint256 shown = box.currentTable(M) - 1;
         _coolAll();
         uint256 g = gasleft();
         vm.prank(p);
-        (uint256 id, uint256 req) = box.open(M, 20);
+        (uint256 id, uint256 req) = box.open(M, 20, shown);
         gOpen = g - gasleft();
 
         _coolAll();
@@ -109,16 +111,18 @@ contract A2GasTest is Test {
         vm.prank(p);
         box.play{value: PRICE}(M, 1);
 
+        uint256 shown = box.currentTable(M) - 1;
         vm.prank(p);
-        (, uint256 req) = box.open(M, 1);
+        (, uint256 req) = box.open(M, 1, shown);
         _coolAll();
         assertTrue(vrf.fulfill(req, keccak256("w")), "delivered at callbackGasLimit 100k");
 
         box.setVrfConfig(30_000, 0.05 ether); // D20 minimum
         vm.prank(p);
         box.play{value: PRICE}(M, 1);
+        uint256 shown2 = box.currentTable(M) - 1;
         vm.prank(p);
-        (, uint256 req2) = box.open(M, 1);
+        (, uint256 req2) = box.open(M, 1, shown2);
         _coolAll();
         bool ok = vrf.fulfill(req2, keccak256("w2"));
         ID20Coordinator.Request memory r = vrf.getRequest(req2);

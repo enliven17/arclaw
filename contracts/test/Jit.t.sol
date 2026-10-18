@@ -88,10 +88,14 @@ contract JitTest is Base {
         vm.deal(address(box), 3.3 ether); // 3 reserved for bob + 0.3 free after alice's own box is released
         vrf.fulfill(req, keccak256("w"));
         box.reveal(id);
-        // Alice's own box is released at reveal, so JIT may spend 3.3 - 3 = 0.3: only the 0.15 card (cost 0.1515)
-        // fits; the two 0.30 cards (cost 0.303 each) would dip into bob's reserve and are refunded instead.
-        assertEq(box.cardsPaid(), 1);
-        assertEq(box.cardsRefunded(), 2);
+        // Alice's own box is released at reveal, so 3.3 - 3 = 0.3 is usable. The two 0.30 cards (cost 0.303 each)
+        // do not fit and are refunded; their 0.60 of refunds is owed first, so the 0.15 card is not bought either.
+        // Alice gets the 0.3 that is there and an IOU for the rest; bob's reserve is never touched.
+        assertEq(box.cardsPaid(), 0);
+        assertEq(box.cardsRefunded(), 3);
+        assertEq(box.owed(alice), 0.45 ether);
+        assertEq(address(box).balance, 3 ether, "bob's 3 pending boxes still backed");
+        assertTrue(box.paused(), "an IOU pauses play");
     }
 
     function test_reserveFloor_blocksWithdrawNotJit() public {
@@ -125,7 +129,7 @@ contract JitTest is Base {
             (t[i], p[i]) = (address(s[i]), (100 + 50 * i) * 1e6);
         }
         prices.setPrices(t, p);
-        box.setMachine(M1, uint128(P1), 3000, 1_000_000, 7500, 7500);
+        box.setMachine(M1, uint128(P1), 5000, 1_000_000, 7500, 7500);
         Arclaw.OutcomeInput[] memory tab = new Arclaw.OutcomeInput[](1);
         tab[0].weight = 1;
         for (uint256 c; c < 3; ++c) {

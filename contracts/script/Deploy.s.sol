@@ -331,8 +331,8 @@ contract Deploy is OddsWriter {
         }
         src.setPrices(list, px);
         src.setRelayer(operator);
-        // Mock prices never move and no keeper runs on testnet: let tables live a month.
-        box.setMaxTableAge(vm.envOr("MAX_TABLE_AGE", uint256(30 days)));
+        // Tables live at most a day (Arclaw.MAX_TABLE_AGE): the operator must reprice testnet tables daily too.
+        box.setMaxTableAge(vm.envOr("MAX_TABLE_AGE", uint256(1 days)));
         _configure();
         if (owner != msg.sender) box.transferOwnership(owner);
         vm.stopBroadcast();
@@ -385,6 +385,8 @@ contract Deploy is OddsWriter {
         box.setPolicy(IPriceSource(priceSource), vm.envOr("DAILY_CAP", uint256(50 ether)));
         box.setSink(desk, true);
         box.setOperator(operator);
+        // The reveal bot: may reveal any opening at once (openers always can; anyone after an hour).
+        box.setKeeper(vm.envOr("KEEPER", operator), true);
         // ARCLAW luck: the vault ships with no token and no tiers (boosts off) until ARCLAW exists on Arguspad.
         luck = new LuckVault();
         box.setLuck(luck);

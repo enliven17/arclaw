@@ -52,6 +52,7 @@ abstract contract Base is Test {
 
         box.setPolicy(IPriceSource(address(prices)), 50 ether);
         box.setOperator(op);
+        box.setKeeper(address(this), true); // the test contract reveals like the house bot
         box.setSink(address(desk), true);
         box.setMachine(M1, uint128(P1), 5000, 100_000, 6000, 8500);
         box.setMachine(M2, uint128(P2), 5000, 100_000, 6000, 8500);
@@ -91,8 +92,10 @@ abstract contract Base is Test {
     /// Single outcome of `value`; rules relaxed on the machine so any value lands (for payout plumbing tests).
     function _forceSingle(uint256 machineId, address token, uint256 value) internal {
         (uint128 price,,,,) = box.machines(machineId);
-        uint16 bps = uint16(value * 10_000 / price); // tests keep this within [3000, 9500]
-        box.setMachine(machineId, price, 3000, 1_000_000, bps, bps);
+        // floor and rtpMin only move up: keep them, open rtpMax to the pack (tests keep it within [rtpMin, 9500])
+        (, uint16 floorBps,, uint16 rtpMin,) = box.machines(machineId);
+        uint16 bps = uint16(value * 10_000 / price);
+        box.setMachine(machineId, price, floorBps, 1_000_000, rtpMin, bps);
         Arclaw.OutcomeInput[] memory t = new Arclaw.OutcomeInput[](1);
         t[0] = _pack(token, 1, 0, value);
         box.setPrizes(machineId, t);
@@ -107,8 +110,9 @@ abstract contract Base is Test {
     }
 
     function _open(address who, uint256 machineId, uint256 n) internal returns (uint256 openingId, uint256 requestId) {
+        uint256 tableId = box.currentTable(machineId) - 1;
         vm.prank(who);
-        (openingId, requestId) = box.open(machineId, n);
+        (openingId, requestId) = box.open(machineId, n, tableId);
     }
 
     /// Creates a gift link the way a wallet does: one transfer to the escrow with (linkKey, expiresAt) as data.

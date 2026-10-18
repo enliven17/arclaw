@@ -75,8 +75,13 @@ contract OpenRevealTest is Base {
         assertTrue(vrf.fulfill(req, keccak256("word")), "callback delivered within 100k gas");
         assertEq(uint8(_status(id)), uint8(Arclaw.OpeningStatus.Fulfilled));
 
+        vm.prank(bob); // a third party may not time someone else's reveal
+        vm.expectRevert(Arclaw.NotOpener.selector);
+        box.reveal(id);
+        vm.warp(block.timestamp + 1 hours); // PUBLIC_REVEAL_AFTER: then anyone may, cards still go to the opener
+
         vm.recordLogs();
-        vm.prank(bob); // anyone can reveal, cards go to the opener
+        vm.prank(bob);
         box.reveal(id);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         assertEq(_countEvents(logs, Arclaw.OutcomeDrawn.selector), 1);
@@ -160,9 +165,10 @@ contract OpenRevealTest is Base {
 
     function test_tooManyBoxes() public {
         _play(alice, M1, 21);
+        uint256 shown = box.currentTable(M1) - 1;
         vm.prank(alice);
         vm.expectRevert(Arclaw.TooManyBoxes.selector);
-        box.open(M1, 21);
+        box.open(M1, 21, shown);
     }
 
     function test_open_needsTable() public {
@@ -171,7 +177,7 @@ contract OpenRevealTest is Base {
         _play(alice, 3, 1);
         vm.prank(alice);
         vm.expectRevert(Arclaw.NoPrizes.selector);
-        box.open(3, 1);
+        box.open(3, 1, 0);
     }
 
     function test_vrfFee_subsidisedAndTopUp() public {
@@ -182,13 +188,14 @@ contract OpenRevealTest is Base {
         assertEq(box.vrfFeesPaid(), 0.02 ether);
 
         vrf.setFee(0.25 ether);
+        uint256 shown = box.currentTable(M1) - 1;
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(Arclaw.VrfFeeTopUp.selector, 0.15 ether, 0.1 ether));
-        box.open{value: 0.1 ether}(M1, 1);
+        box.open{value: 0.1 ether}(M1, 1, shown);
 
         uint256 aliceBefore = alice.balance;
         vm.prank(alice);
-        box.open{value: 1 ether}(M1, 1);
+        box.open{value: 1 ether}(M1, 1, shown);
         assertEq(alice.balance, aliceBefore - 0.15 ether);
     }
 
@@ -304,21 +311,25 @@ contract ShortfallTest is Base {
         assertEq(alice.balance, before + 0.75 ether);
     }
 
-    function test_shortfall_underfundedRefundBecomesCredit() public {
+    function test_shortfall_underfundedRefundBecomesIou() public {
         _forceSingle(M1, address(nvda), 0.75 ether);
         box.sweep(address(nvda), address(1), 100 ether);
         _play(alice, M1, 1);
         (uint256 id, uint256 req) = _open(alice, M1, 1);
         vm.deal(address(box), 0.5 ether); // pool holds less than the refund (withdraw cannot do this any more)
         vrf.fulfill(req, keccak256("w"));
-        box.reveal(id); // never blocked
-        assertEq(box.credit(alice), 0.75 ether);
-        vm.deal(address(box), 5 ether);
         uint256 before = alice.balance;
-        vm.prank(alice);
-        box.claimCredit();
-        assertEq(alice.balance, before + 0.75 ether);
+        box.reveal(id); // never blocked
+        assertEq(alice.balance, before + 0.5 ether, "what the pool has");
+        assertEq(box.owed(alice), 0.25 ether, "the rest is an IOU");
         assertEq(box.credit(alice), 0);
+        assertTrue(box.paused());
+        vm.deal(address(box), 5 ether);
+        vm.prank(alice);
+        box.claimOwed(alice);
+        assertEq(alice.balance, before + 0.75 ether);
+        assertEq(box.owed(alice), 0);
+        assertEq(box.totalOwed(), 0);
     }
 
     receive() external payable {}
@@ -414,9 +425,10 @@ contract RulesTest is Base {
         vm.prank(alice);
         vm.expectRevert(Arclaw.MachineOff.selector);
         box.play{value: P1}(M1, 1);
+        uint256 shown = box.currentTable(M1) - 1;
         vm.prank(alice);
         vm.expectRevert(Arclaw.MachineOff.selector);
-        box.open(M1, 1);
+        box.open(M1, 1, shown);
         vrf.fulfill(req, keccak256("w"));
         box.reveal(id); // pending openings still pay
         box.setMachineActive(M1, true);
@@ -444,23 +456,23 @@ contract RulesTest is Base {
         vm.expectRevert(abi.encodeWithSelector(Arclaw.Reserved.selector, 0));
         box.spend(address(desk), address(tsla), 1 ether, 1);
 
-        vm.deal(address(box), 1 ether); // pool smaller than the 1.5 refund owed: it becomes credit
+        vm.deal(address(box), 1 ether); // pool smaller than the 1.5 refund: 1 paid, 0.5 owed
         vrf.fulfill(req, keccak256("w"));
         box.reveal(id);
         assertEq(box.pendingReserve(), 0);
-        assertEq(box.credit(alice), 1.5 ether);
-        assertEq(box.reservedCredit(), 1.5 ether);
+        assertEq(box.owed(alice), 0.5 ether);
+        assertEq(box.totalOwed(), 0.5 ether);
         vm.deal(address(box), 4 ether); // treasury top-up
-        assertEq(box.freeBalance(), 2.5 ether);
-        vm.expectRevert(abi.encodeWithSelector(Arclaw.Reserved.selector, 2.5 ether));
-        box.withdraw(address(this), 2.5 ether + 1);
-        box.withdraw(address(this), 2.5 ether);
+        assertEq(box.freeBalance(), 3.5 ether, "IOUs are reserved too");
+        vm.expectRevert(abi.encodeWithSelector(Arclaw.Reserved.selector, 3.5 ether));
+        box.withdraw(address(this), 3.5 ether + 1);
+        box.withdraw(address(this), 3.5 ether);
 
         address to = makeAddr("alice-eoa");
         vm.prank(alice);
-        box.claimCredit(to); // pay elsewhere
-        assertEq(to.balance, 1.5 ether);
-        assertEq(box.reservedCredit(), 0);
+        box.claimOwed(to); // pay elsewhere
+        assertEq(to.balance, 0.5 ether);
+        assertEq(box.totalOwed(), 0);
     }
 
     function test_reserve_releasedOnReturn() public {
@@ -484,9 +496,10 @@ contract RulesTest is Base {
         vm.warp(block.timestamp + 1 days); // exactly maxTableAge: still fine
         _open(alice, M1, 1);
         vm.warp(block.timestamp + 1);
+        uint256 shown = box.currentTable(M1) - 1;
         vm.prank(alice);
         vm.expectRevert(Arclaw.TableStale.selector);
-        box.open(M1, 1);
+        box.open(M1, 1, shown);
         Arclaw.OutcomeInput[] memory fresh = _table(address(nvda), P1);
         vm.prank(op);
         box.operatorSetPrizes(M1, fresh); // keeper reprices
@@ -556,6 +569,10 @@ contract RulesTest is Base {
 
     function test_spend_buysIntoContract() public {
         _play(alice, M1, 10);
+        vm.expectRevert(abi.encodeWithSelector(Arclaw.Reserved.selector, 0));
+        vm.prank(op);
+        box.spend(address(desk), address(nvda), 2 ether, 0.01 ether); // sealed revenue backs the sealed boxes
+        vm.deal(address(box), address(box).balance + 2 ether); // treasury float
         uint256 before = nvda.balanceOf(address(box));
         vm.prank(op);
         uint256 got = box.spend(address(desk), address(nvda), 2 ether, 0.01 ether);
@@ -583,6 +600,9 @@ contract RulesTest is Base {
 
     function test_withdrawAndSweep() public {
         _play(alice, M2, 1);
+        vm.expectRevert(abi.encodeWithSelector(Arclaw.Reserved.selector, 0));
+        box.withdraw(bob, 1 ether); // the sealed box's 5 USDC is reserved
+        vm.deal(address(box), address(box).balance + 1 ether); // treasury float
         box.withdraw(bob, 1 ether);
         assertEq(bob.balance, 1001 ether);
         box.sweep(address(nvda), bob, 1 ether);

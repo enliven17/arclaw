@@ -246,9 +246,10 @@ contract A2Handler is Test {
         }
         n = bound(n, 1, bal > 20 ? 20 : bal);
         uint256 value = _vrfTopUp() + bound(extra, 0, 0.01 ether);
+        uint256 shown = box.currentTable(m) - 1;
         vm.recordLogs();
         vm.prank(a);
-        try box.open{value: value}(m, n) returns (uint256 id, uint256 req) {
+        try box.open{value: value}(m, n, shown) returns (uint256 id, uint256 req) {
             openingIds.push(id);
             reqsOf[id].push(req);
         } catch {}
@@ -260,7 +261,7 @@ contract A2Handler is Test {
         _countCall("reveal");
         if (openingIds.length == 0) return;
         uint256 id = openingIds[i % openingIds.length];
-        (address opener, uint32 boxes, uint32 tableId,, Arclaw.OpeningStatus st,, uint256 req, bytes32 w0) =
+        (address opener, uint32 boxes, uint32 tableId,, Arclaw.OpeningStatus st, uint64 at, uint256 req, bytes32 w0) =
             box.openings(id);
         if (st != Arclaw.OpeningStatus.Pending && st != Arclaw.OpeningStatus.Fulfilled) return;
         ID20Coordinator.Request memory r = vrf.getRequest(req);
@@ -268,20 +269,23 @@ contract A2Handler is Test {
         if (st == Arclaw.OpeningStatus.Fulfilled && w0 != r.randomness) _flag(V_REROLL);
 
         uint256 nativeBefore = opener.balance;
-        uint256 creditBefore = box.credit(opener);
+        uint256 creditBefore = box.credit(opener) + box.owed(opener); // a refund is pushed, credited or owed
+        address caller = _a(callerSeed);
+        bool allowed = caller == opener || block.timestamp >= uint256(at) + 1 hours; // PUBLIC_REVEAL_AFTER
         uint256[3] memory tokBefore;
         for (uint256 k; k < 3; ++k) tokBefore[k] = stk[k].balanceOf(opener);
 
         vm.recordLogs();
-        vm.prank(_a(callerSeed));
+        vm.prank(caller);
         try box.reveal(id) {
             if (!ready) _flag(V_REVEAL_NOT_READY);
+            if (!allowed) _flag(V_ACCESS);
             Vm.Log[] memory logs = vm.getRecordedLogs();
             _checkReveal(logs, tableId, r.randomness, opener, nativeBefore, creditBefore, tokBefore);
             revealedBoxes += boxes;
         } catch {
             vm.getRecordedLogs();
-            if (ready) _flag(V_REVEAL_FAILED);
+            if (ready && allowed) _flag(V_REVEAL_FAILED);
         }
         _post();
     }
@@ -321,7 +325,7 @@ contract A2Handler is Test {
             }
         }
         creditAdded += credits;
-        uint256 delivered = (opener.balance - nativeBefore) + (box.credit(opener) - creditBefore);
+        uint256 delivered = (opener.balance - nativeBefore) + (box.credit(opener) + box.owed(opener) - creditBefore);
         if (delivered != refunds) _flag(V_REFUND);
         for (uint256 k; k < 3; ++k) {
             if (stk[k].balanceOf(opener) - tokBefore[k] != paid[k]) _flag(V_PAID);
@@ -684,7 +688,7 @@ contract A2InvariantTest is Test {
     }
 
     /// I8 links: front-run redirection, wrong key, replay and non-sender reclaim never succeed; claims deliver.
-    /// I9 access: only the opener returns boxes.
+    /// I9 access: only the opener returns boxes; only the opener reveals before PUBLIC_REVEAL_AFTER.
     /// forge-config: default.invariant.runs = 256
     /// forge-config: default.invariant.depth = 64
     function invariant_A2_linksAndAccess() public view {
@@ -704,6 +708,7 @@ contract A2InvariantTest is Test {
             (address opener,,,, Arclaw.OpeningStatus st,, uint256 req,) = box.openings(id);
             if (st == Arclaw.OpeningStatus.Revealed || st == Arclaw.OpeningStatus.Returned) continue;
             if (st == Arclaw.OpeningStatus.Fulfilled || vrf.getRequest(req).fulfilled) {
+                vm.prank(opener);
                 uint256 g = gasleft();
                 box.reveal(id);
                 assertLt(g - gasleft(), 15_000_000, "reveal fits half a block");

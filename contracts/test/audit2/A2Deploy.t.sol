@@ -138,14 +138,16 @@ contract A2DeployForkTest is Test {
         box.play{value: 20 ether}(1, 20);
         uint256 fee = d.lens().quoteVrfFee(box);
         console.log("vrf fee in tx", fee);
+        uint256 shown = box.currentTable(1) - 1;
         vm.prank(p);
-        (uint256 id, uint256 req) = box.open(1, 20);
+        (uint256 id, uint256 req) = box.open(1, 20, shown);
         ID20Coordinator.Request memory r = ID20Coordinator(box.vrfCoordinator()).getRequest(req);
         assertEq(r.deadline, block.timestamp + 60, "D20 deadline = now + 60 s (unix seconds)");
         assertEq(r.refundAddress, address(box));
 
         vm.prank(box.vrfCoordinator());
         box.rawFulfillRandomness(req, keccak256("fork word"));
+        vm.prank(p); // the opener reveals (or the keeper, or anyone after an hour)
         uint256 g = gasleft();
         box.reveal(id);
         console.log("reveal(20) gas on fork", g - gasleft());

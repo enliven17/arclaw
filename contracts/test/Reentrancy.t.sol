@@ -45,7 +45,7 @@ contract GreedyOpener is IERC1155Receiver {
 
     function playAndOpen() external payable {
         box.play{value: msg.value}(1, 1);
-        (openingId,) = box.open(1, 1);
+        (openingId,) = box.open(1, 1, box.currentTable(1) - 1);
     }
 
     receive() external payable {

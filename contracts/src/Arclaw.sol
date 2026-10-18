@@ -17,11 +17,12 @@ import {ILuck} from "./LuckVault.sol";
 
 /// @title Arclaw: claw machines that pay sealed packs of tokenized stock on Arc
 /// @notice Each machine is an ERC-1155 id with its own price. Pay the price in native USDC (18 dp) per play, get one
-///         sealed box of that machine. Opening burns boxes and asks the VRF for one word; once it lands anyone can
-///         `reveal`, which draws ONE weighted outcome per box (a pack of 3 cards) from the machine's table frozen at
-///         open time and pays the cards from inventory. A card the inventory cannot cover is first bought just in
-///         time on the allow-listed desk with box revenue; only if that is off or fails is it refunded in USDC at
-///         the lower of its value when the table was set and its current value.
+///         sealed box of that machine. Opening burns boxes and asks the VRF for one word; once it lands the opener
+///         (or a keeper; anyone after an hour) can `reveal`, which draws ONE weighted outcome per box (a pack of 3
+///         cards) from the machine's table frozen at open time and pays the cards from inventory. A card the
+///         inventory cannot cover is first bought just in time on the allow-listed desk with box revenue; only if
+///         that is off or fails is it refunded in USDC at the lower of its value when the table was set and its
+///         value at the latest price read. Refunds come only from the unreserved balance; the rest is an IOU.
 ///         Every table, whoever sets it, must satisfy the machine's rules: each outcome worth at least floorBps and
 ///         at most capBps of the price, and the weighted expected value inside [rtpMinBps, rtpMaxBps].
 contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomness {
@@ -31,16 +32,24 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
 
     uint256 public constant CARDS_PER_BOX = 3;
     uint256 public constant MAX_BOXES_PER_OPEN = 20;
-    uint256 public constant MAX_OUTCOMES = 64; // bounds setPrizes gas and the reveal draw scan
+    uint256 public constant MAX_OUTCOMES = 64; // bounds setPrizes gas and the reveal draw scan (ArclawRules)
     /// Luck boost ceiling: with probability boost/10000 a box draws twice and keeps the better pack. Every table's
     /// RTP band is checked at this maximum, so no holder can push a machine past rtpMaxBps.
     uint256 public constant MAX_BOOST_BPS = 100;
     uint32 public constant MIN_CALLBACK_GAS = 30_000; // D20 bounds
     uint32 public constant MAX_CALLBACK_GAS = 1_000_000;
     /// Sanity bounds on the owner's per-machine rules.
-    uint16 public constant MIN_FLOOR_BPS = 3000; // never less than 30% back
+    uint16 public constant MIN_FLOOR_BPS = 5000; // never less than 50% back (the product promise)
     uint16 public constant MAX_RTP_BPS = 9500; // house edge never under 5%
     uint32 public constant MAX_CAP_BPS = 1_000_000; // 100x
+    uint256 internal constant MAX_TABLE_AGE = 1 days; // upper bound for maxTableAge
+    uint256 internal constant MAX_PRICE_MOVE_BPS = 2000; // upper bound for maxPriceMoveBps
+    /// Reveal is the opener's (or a keeper's) for this long after the request, then anyone's.
+    uint256 internal constant PUBLIC_REVEAL_AFTER = 1 hours;
+    /// An opening still unrevealed this long after its request can be rescued (see rescue).
+    uint256 internal constant RESCUE_AFTER = 7 days;
+    /// Arc's USDC ERC-20 view: the same balance as native USDC, never a card and never sweepable.
+    address internal constant USDC = 0x3600000000000000000000000000000000000000;
 
     // ------------------------------------------------------------------ types
 
@@ -108,6 +117,14 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
     /// When each table was priced; open() refuses tables older than maxTableAge.
     uint256[] public tablePricedAt;
     uint256 public maxTableAge = 1 days;
+    /// open() refuses a table once any card's live price moved more than this from the price it was set at.
+    uint256 public maxPriceMoveBps = 500;
+    /// tableId => card token => USD price (6 dp) the table was set at
+    mapping(uint256 => mapping(address => uint256)) internal tableRefPrice;
+    /// tableId => distinct card tokens, checked against tableRefPrice at open
+    mapping(uint256 => address[]) internal _tableTokens;
+    /// card token => last price this contract read successfully (USD 6 dp); caps refunds behind a stale feed
+    mapping(address => uint256) public lastPrice;
     /// machineId => no new plays or opens (owner switch); reveals, returns and links keep working.
     mapping(uint256 => bool) public machineOff;
 
@@ -118,10 +135,18 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
 
 
     mapping(address => uint256) public credit;
-    /// Liabilities the owner and operator cannot touch (see freeBalance):
-    /// owed credit, plus the price paid for every box still waiting to be revealed or returned.
+    /// Liabilities the owner and operator cannot touch (see freeBalance): owed credit, the price paid for every
+    /// box still waiting to be revealed or returned, and the price paid for every sold box not yet opened.
     uint256 public reservedCredit;
     uint256 public pendingReserve;
+    uint256 public sealedReserve;
+    /// Refunds a reveal could not cover from the unreserved balance: IOUs, claimable as the pool refills.
+    mapping(address => uint256) public owed;
+    uint256 public totalOwed;
+    /// After a reveal, any IOU or an unreserved balance under this pauses new plays and opens (0 = IOUs only).
+    uint256 public minBuffer;
+    /// May reveal any opening right away (openers may always reveal their own).
+    mapping(address => bool) public keepers;
 
     /// Just-in-time restock at reveal: a short card is bought on `jit.desk` (must also be an allow-listed sink)
     /// with box revenue, instead of being refunded. Bounded per card, per reveal and by the free balance.
@@ -136,6 +161,8 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
     /// Float kept for big wins: withdraw and spend leave it alone, JIT buys may use it.
     uint256 public reserveFloor;
     uint256 internal transient _jitBuys;
+    uint256 internal transient _revealRefund; // refunds accumulated so far in this reveal, kept out of JIT buys
+    bool internal transient _cash; // rescue: pay every card at its refund value, never touch the card tokens
 
     /// ARCLAW staking vault read at open (0 = boosts off).
     ILuck public luck;
@@ -222,6 +249,10 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
     event JitBought(uint256 indexed openingId, address indexed token, uint256 cost, uint256 shares);
     event JitConfigSet(address desk, uint256 slippageBps, uint256 maxBuys, uint256 maxPerCard, uint256 reserveFloor);
     event VrfConfigSet(uint32 callbackGasLimit, uint256 maxVrfSubsidy);
+    event RefundOwed(address indexed to, uint256 amount);
+    event OwedClaimed(address indexed to, uint256 amount);
+    event KeeperSet(address keeper, bool allowed);
+    event GuardsSet(uint256 maxPriceMoveBps, uint256 minBuffer);
 
     // ------------------------------------------------------------------ errors
 
@@ -257,6 +288,9 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
     error NoCredit();
     error Reserved(uint256 free);
     error RenounceDisabled();
+    error TableChanged();
+    error RuleLowered();
+    error UsdcAlias();
 
     // ------------------------------------------------------------------ constructor
 
@@ -278,6 +312,7 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
         if (boxes == 0) revert ZeroAmount();
         if (msg.value != boxes * price) revert WrongPayment();
         boxesSold[machineId] += boxes;
+        sealedReserve += msg.value; // backs the sealed box until it is opened
         emit Played(msg.sender, machineId, boxes, msg.value);
         _mint(msg.sender, machineId, boxes, "");
     }
@@ -290,9 +325,10 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
         }
     }
 
-    /// @notice Burn `boxes` of `machineId` and request one random word for all of them.
+    /// @notice Burn `boxes` of `machineId` and request one random word for all of them. `tableId` is the table the
+    ///         player was shown (currentTable - 1): a reprice landing first makes the open revert, never re-rate it.
     /// @dev The contract pays the VRF fee up to `maxVrfSubsidy`; above that the caller tops up via msg.value.
-    function open(uint256 machineId, uint256 boxes)
+    function open(uint256 machineId, uint256 boxes, uint256 tableId)
         external
         payable
         whenNotPaused
@@ -303,14 +339,18 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
         if (boxes > MAX_BOXES_PER_OPEN) revert TooManyBoxes();
         uint256 t = currentTable[machineId];
         if (t == 0) revert NoPrizes();
+        if (t - 1 != tableId) revert TableChanged();
         if (machineOff[machineId]) revert MachineOff();
         if (tablePrice[t - 1] != machines[machineId].price) revert TablePriceMismatch();
         if (block.timestamp > tablePricedAt[t - 1] + maxTableAge) revert TableStale();
+        _checkPrices(tableId);
 
         _burn(msg.sender, machineId, boxes);
         openingId = nextOpeningId++;
         boxesOpened += boxes;
-        pendingReserve += boxes * tablePrice[t - 1];
+        uint256 cost = boxes * tablePrice[tableId]; // == machine price: sealed revenue becomes pending
+        sealedReserve -= cost;
+        pendingReserve += cost;
         Opening storage o = openings[openingId];
         o.opener = msg.sender;
         // forge-lint: disable-next-line(unsafe-typecast)
@@ -329,9 +369,34 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
         emit Opened(openingId, requestId, msg.sender, machineId, boxes, t - 1, fee, boost);
     }
 
-    /// @notice Pay out a fulfilled opening. Anyone may call; cards always go to the opener.
+    /// @notice Pay out a fulfilled opening; cards always go to the opener. The opener or a keeper may call at once,
+    ///         anyone PUBLIC_REVEAL_AFTER the request (so an opener who disappears cannot strand the reserve), which
+    ///         keeps third parties from timing someone else's reveal around their own opens.
     /// @dev Works even if the VRF callback failed: the word is then read from the coordinator.
     function reveal(uint256 openingId) external nonReentrant {
+        Opening storage o = openings[openingId];
+        if (msg.sender != o.opener && !keepers[msg.sender] && block.timestamp < o.requestedAt + PUBLIC_REVEAL_AFTER) {
+            revert NotOpener();
+        }
+        _reveal(openingId);
+    }
+
+    /// @notice Escape for a fulfilled opening whose reveal keeps failing (a card token or desk that reverts or burns
+    ///         gas): RESCUE_AFTER its request the opener or a keeper settles it with every card paid in USDC at its
+    ///         refund value, never touching the card tokens. Not the box price: the word is public once fulfilled,
+    ///         so a price refund would let holders sit on bad draws. A refund value is never more than the stock, so
+    ///         waiting never beats revealing. An opening the VRF never answered has retry and returnBoxes.
+    function rescue(uint256 openingId) external nonReentrant {
+        Opening storage o = openings[openingId];
+        if (msg.sender != o.opener && !keepers[msg.sender]) revert NotOpener();
+        if (block.timestamp < o.requestedAt + RESCUE_AFTER) revert NotExpired();
+        _cash = true; // transient: reset below so a later reveal in the same transaction pays stock
+        _reveal(openingId);
+        _cash = false;
+    }
+
+    /// Settles a fulfilled opening; under `_cash` (rescue) every card is paid at its refund value, no token touched.
+    function _reveal(uint256 openingId) internal {
         Opening storage o = openings[openingId];
         bytes32 word = o.word;
         if (o.status == OpeningStatus.Pending) {
@@ -348,17 +413,15 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
 
         Opening memory m = o;
         uint256 paid;
-        uint256 refund;
-        _jitBuys = 0;
+        (_jitBuys, _revealRefund) = (0, 0);
         for (uint256 b; b < m.boxes; ++b) {
-            (uint256 p, uint256 r) = _payBox(openingId, m, b);
-            paid += p;
-            refund += r;
+            paid += _payBox(openingId, m, b);
         }
+        uint256 refund = _revealRefund;
         cardsPaid += paid;
         cardsRefunded += uint256(m.boxes) * CARDS_PER_BOX - paid;
         emit Revealed(openingId, m.opener, paid, refund);
-        if (refund > 0) _sendNative(m.opener, refund);
+        _settle(m.opener, refund);
     }
 
     /// @notice The request expired unfulfilled (D20: 60 s). Ask again; the boxes stay committed. The expired fee is
@@ -390,7 +453,9 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
         _refundRandomness(o.requestId);
         uint256 boxes = o.boxes;
         boxesOpened -= boxes;
-        pendingReserve -= boxes * tablePrice[o.tableId];
+        uint256 cost = boxes * tablePrice[o.tableId];
+        pendingReserve -= cost;
+        sealedReserve += cost; // sealed again
         emit BoxesReturned(openingId, msg.sender, o.machineId, boxes);
         _mint(msg.sender, o.machineId, boxes, "");
     }
@@ -407,6 +472,21 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
         credit[msg.sender] = 0;
         reservedCredit -= amount;
         emit CreditClaimed(msg.sender, amount);
+        (bool ok,) = to.call{value: amount}("");
+        if (!ok) revert TransferFailed();
+    }
+
+    /// @notice Pull an IOU (a refund a reveal could not cover), as far as the balance above every other reserve
+    ///         allows right now; the rest stays owed. First come, first served.
+    function claimOwed(address to) external nonReentrant {
+        uint256 bal = address(this).balance;
+        uint256 res = reservedCredit + pendingReserve + sealedReserve;
+        uint256 amount = owed[msg.sender];
+        if (bal < res + amount) amount = bal > res ? bal - res : 0;
+        if (amount == 0) revert NoCredit();
+        owed[msg.sender] -= amount;
+        totalOwed -= amount;
+        emit OwedClaimed(msg.sender, amount);
         (bool ok,) = to.call{value: amount}("");
         if (!ok) revert TransferFailed();
     }
@@ -428,11 +508,11 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
         return _tables.length;
     }
 
-    /// @notice Native balance above owed credit, pending boxes and the reserve floor: what withdraw and spend may use.
+    /// @notice Native balance above owed credit, pending and sealed boxes, IOUs and the reserve floor: what withdraw
+    ///         and spend may use.
     function freeBalance() public view returns (uint256) {
-        uint256 bal = address(this).balance;
-        uint256 owed = reservedCredit + pendingReserve + reserveFloor;
-        return bal > owed ? bal - owed : 0;
+        uint256 u = _unreserved();
+        return u > reserveFloor ? u - reserveFloor : 0;
     }
 
     /// @notice Card value in native USDC (18 dp) at the price source's price.
@@ -487,6 +567,9 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
     ///         fungible per id, so a price change would re-rate boxes already sold. A new price is a new machine id.
     ///         Rules apply to tables set from now on; the current table keeps serving until replaced.
     ///         Bounds: floor >= MIN_FLOOR_BPS, floor <= rtpMin <= rtpMax <= min(MAX_RTP_BPS, cap), cap <= MAX_CAP_BPS.
+    ///         Once a machine exists, floor and rtpMin only move up: they are what a sold box was promised. Cap and
+    ///         rtpMax may move either way inside the bounds; with floor and rtpMin locked, a lower one only narrows
+    ///         the tables and a higher one only allows rarer, bigger packs at the same guaranteed minimums.
     function setMachine(
         uint256 machineId,
         uint128 price,
@@ -503,6 +586,7 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
         Machine storage m = machines[machineId];
         if (m.price == 0) _machineIds.push(machineId);
         else if (m.price != price) revert PriceImmutable(); // a new price is a new machine id
+        else if (floorBps < m.floorBps || rtpMinBps < m.rtpMinBps) revert RuleLowered(); // would re-rate sold boxes
         (m.price, m.floorBps, m.capBps, m.rtpMinBps, m.rtpMaxBps) = (price, floorBps, capBps, rtpMinBps, rtpMaxBps);
         emit MachineSet(machineId, price, floorBps, capBps, rtpMinBps, rtpMaxBps);
     }
@@ -518,6 +602,20 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
     function setLuck(ILuck vault) external onlyOwner {
         luck = vault;
         emit LuckSet(address(vault));
+    }
+
+    /// @notice Keepers may reveal any opening at once and rescue stuck ones (the house's reveal bot).
+    function setKeeper(address keeper, bool allowed) external onlyOwner {
+        keepers[keeper] = allowed;
+        emit KeeperSet(keeper, allowed);
+    }
+
+    /// @notice Max live price move per card since its table was set (1 to MAX_PRICE_MOVE_BPS), and the unreserved
+    ///         buffer under which a reveal pauses play.
+    function setGuards(uint256 maxMoveBps, uint256 minBuffer_) external onlyOwner {
+        if (maxMoveBps == 0 || maxMoveBps > MAX_PRICE_MOVE_BPS) revert BadMachine();
+        (maxPriceMoveBps, minBuffer) = (maxMoveBps, minBuffer_);
+        emit GuardsSet(maxMoveBps, minBuffer_);
     }
 
     function setOperator(address op) external onlyOwner {
@@ -552,9 +650,9 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
         emit VrfConfigSet(gasLimit, subsidy);
     }
 
-    /// @notice How long a priced table may keep serving new opens before the operator must reprice it.
+    /// @notice How long a priced table may keep serving new opens before the operator must reprice it (<= 1 day).
     function setMaxTableAge(uint256 maxAge) external onlyOwner {
-        if (maxAge == 0) revert BadMachine();
+        if (maxAge == 0 || maxAge > MAX_TABLE_AGE) revert BadMachine();
         maxTableAge = maxAge;
         emit MaxTableAgeSet(maxAge);
     }
@@ -578,8 +676,13 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
         if (!ok) revert TransferFailed();
     }
 
+    /// @notice Move an ERC-20 out (inventory included). Never Arc's USDC view: on Arc it IS the native balance, which
+    ///         only withdraw moves. Any other token that drains native still may not take more than the free balance.
     function sweep(address token, address to, uint256 amount) external onlyOwner nonReentrant {
+        if (token == USDC) revert UsdcAlias();
+        (uint256 bal, uint256 free) = (address(this).balance, freeBalance());
         IERC20(token).safeTransfer(to, amount);
+        if (bal > address(this).balance + free) revert Reserved(free);
     }
 
     function renounceOwnership() public pure override {
@@ -626,7 +729,8 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
         if (!expired) revert NotExpired();
     }
 
-    function _payBox(uint256 openingId, Opening memory m, uint256 b) internal returns (uint256 paid, uint256 refund) {
+    /// Draws box `b` and pays its cards; returns the cards paid in stock (refunds accumulate in _revealRefund).
+    function _payBox(uint256 openingId, Opening memory m, uint256 b) internal returns (uint256 paid) {
         Outcome[] storage t = _tables[m.tableId];
         uint256 w = tableWeight[m.tableId];
         uint256 idx = _draw(t, w, uint256(keccak256(abi.encode(m.word, b))));
@@ -643,37 +747,49 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
         emit OutcomeDrawn(openingId, m.opener, m.machineId, b, tier, idx, out.value, boosted);
         for (uint256 c; c < CARDS_PER_BOX; ++c) {
             Card memory card = out.cards[c];
-            uint256 have = _balanceOf(card.token);
-            if (have < card.amount && _jitBuy(openingId, card.token, card.amount - have)) {
-                have = _balanceOf(card.token);
+            bool ok;
+            if (!_cash) {
+                uint256 have = _balanceOf(card.token);
+                if (have < card.amount && _jitBuy(openingId, card.token, card.amount - have)) {
+                    have = _balanceOf(card.token);
+                }
+                ok = have >= card.amount && IERC20(card.token).trySafeTransfer(m.opener, card.amount);
             }
-            bool ok = have >= card.amount && IERC20(card.token).trySafeTransfer(m.opener, card.amount);
             emit CardDrawn(openingId, m.opener, card.token, m.machineId, b, c, card.amount, tier, ok);
             if (ok) {
                 ++paid;
                 paidOut[card.token] += card.amount;
             } else {
-                uint256 r = _refundValue(card);
-                refund += r;
+                uint256 r = _refundValue(card, m.tableId);
+                _revealRefund += r;
                 emit Refunded(openingId, m.opener, b, c, r);
             }
         }
     }
 
-    /// Luck boost of `player`, capped at MAX_BOOST_BPS. A missing or failing vault means no boost, never a revert.
+    /// Luck boost of `player`, capped at MAX_BOOST_BPS. A missing, failing or non-conforming vault (an EOA, empty or
+    /// short return data) means no boost, never a revert. The boost belongs to whoever calls open, so a staker can
+    /// open other people's boxes for them (boost renting); accepted, the RTP band already holds at MAX_BOOST_BPS.
     function _boostOf(address player) internal view returns (uint256 bps) {
-        ILuck l = luck;
-        if (address(l) == address(0)) return 0;
-        try l.boostOf(player) returns (uint256 b) {
-            return b > MAX_BOOST_BPS ? MAX_BOOST_BPS : b;
-        } catch {
-            return 0;
-        }
+        bps = _readUint(address(luck), abi.encodeCall(ILuck.boostOf, (player)), 100_000);
+        if (bps > MAX_BOOST_BPS) bps = MAX_BOOST_BPS;
     }
 
-    /// Buys `shares` of `token` on the JIT desk with native above owed credit and pending boxes (reserveFloor may
-    /// be used). Never reverts: any failure (off, cap hit, price unavailable, desk revert) returns false and the
-    /// caller refunds the card instead.
+    /// staticcall returning one word; 0 on revert, no code, or fewer than 32 bytes back (never a decode revert).
+    function _readUint(address target, bytes memory data, uint256 gasLimit) internal view returns (uint256 v) {
+        bool ok;
+        uint256 size;
+        assembly ("memory-safe") {
+            ok := staticcall(gasLimit, target, add(data, 0x20), mload(data), 0x00, 0x20)
+            size := returndatasize()
+            v := mload(0x00)
+        }
+        if (!ok || size < 32) v = 0;
+    }
+
+    /// Buys `shares` of `token` on the JIT desk with native above every reserve, IOU and the refunds already
+    /// accumulated in this reveal (reserveFloor may be used). Never reverts: any failure (off, cap hit, price
+    /// unavailable, desk revert) returns false and the caller refunds the card instead.
     function _jitBuy(uint256 openingId, address token, uint256 shares) internal returns (bool) {
         Jit memory j = jit;
         if (j.desk == address(0) || !sinks[j.desk] || _jitBuys >= j.maxBuys) return false;
@@ -683,28 +799,69 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
         } catch {
             return false;
         }
-        uint256 owed = reservedCredit + pendingReserve;
-        if (cost > j.maxPerCard || address(this).balance < owed + cost) return false;
+        if (cost > j.maxPerCard || _unreserved() < cost + _revealRefund) return false;
         ++_jitBuys;
         uint256 before = _balanceOf(token);
         try IAstockDesk(j.desk).buy{value: cost}(token, shares, address(this)) {}
         catch {
             return false;
         }
-        uint256 got = _balanceOf(token) - before;
+        uint256 got = _balanceOf(token);
+        got = got > before ? got - before : 0;
         emit JitBought(openingId, token, cost, got);
         return got >= shares;
     }
 
-    /// A short card refunds the lower of its value when the table was set and its value now, so a fall in the
-    /// stock between open and reveal cannot be cashed out at the old price. If the price source fails, the
-    /// table-time value is used: a reveal is never blocked by the oracle.
-    function _refundValue(Card memory card) internal view returns (uint256) {
-        try this.valueOf(card.token, card.amount) returns (uint256 v) {
-            return v < card.value ? v : card.value;
-        } catch {
-            return card.value;
+    /// A short card refunds the lower of its value when the table was set and its value at the latest price this
+    /// contract read (now, or the last good read if the source fails), so a fall in the stock cannot be cashed out
+    /// at the old price, even behind a stale feed. A reveal is never blocked by the oracle.
+    function _refundValue(Card memory card, uint256 tableId) internal returns (uint256) {
+        uint256 ref = tableRefPrice[tableId][card.token];
+        uint256 p = lastPrice[card.token];
+        IPriceSource ps = priceSource;
+        if (address(ps) != address(0)) {
+            try ps.priceOf(card.token) returns (uint256 live) {
+                if (live != 0) (p, lastPrice[card.token]) = (live, live);
+            } catch {}
         }
+        return p >= ref ? card.value : card.value * p / ref;
+    }
+
+    /// open() refuses a table once a card's live price moved more than maxPriceMoveBps either way since it was set:
+    /// up, the table is a free option on the house; down, the floor no longer holds.
+    function _checkPrices(uint256 tableId) internal {
+        address[] storage toks = _tableTokens[tableId];
+        IPriceSource ps = priceSource;
+        for (uint256 i; i < toks.length; ++i) {
+            address tok = toks[i];
+            uint256 ref = tableRefPrice[tableId][tok];
+            uint256 p = ps.priceOf(tok);
+            lastPrice[tok] = p;
+            uint256 d = p > ref ? p - ref : ref - p;
+            if (d * 10_000 > ref * maxPriceMoveBps) revert TableStale();
+        }
+    }
+
+    /// Native above every reserve and IOU: what refunds and JIT buys may use (reserveFloor included).
+    function _unreserved() internal view returns (uint256) {
+        uint256 bal = address(this).balance;
+        uint256 res = reservedCredit + pendingReserve + sealedReserve + totalOwed;
+        return bal > res ? bal - res : 0;
+    }
+
+    /// Pays `amount` of refunds to `to` from the unreserved balance; what it cannot cover becomes an IOU (owed), so
+    /// a big win never eats other players' reserves. Any IOU, or a buffer under minBuffer, pauses plays and opens.
+    function _settle(address to, uint256 amount) internal {
+        uint256 cover = _unreserved();
+        if (amount > cover) {
+            uint256 iou = amount - cover;
+            owed[to] += iou;
+            totalOwed += iou;
+            emit RefundOwed(to, iou);
+            amount = cover;
+        }
+        if (amount != 0) _sendNative(to, amount);
+        if (!paused() && (totalOwed != 0 || _unreserved() < minBuffer)) _pause();
     }
 
     function _draw(Outcome[] storage t, uint256 w, uint256 rand) internal view returns (uint256) {
@@ -718,77 +875,22 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
         revert NoPrizes(); // unreachable: weights sum to w
     }
 
+    /// Inventory of `token`; 0 if the call fails or returns short data, so the card goes to the refund path.
     function _balanceOf(address token) internal view returns (uint256) {
-        try IERC20(token).balanceOf(address(this)) returns (uint256 b) {
-            return b;
-        } catch {
-            return 0;
-        }
+        return _readUint(token, abi.encodeCall(IERC20.balanceOf, (address(this))), gasleft());
     }
 
-    /// Prices every card and enforces floor, cap and RTP band. Returns the card values (USDC 18 dp).
-    function _evaluate(uint256 machineId, OutcomeInput[] calldata input)
-        internal
-        view
-        returns (uint256 rtpBps, uint256[3][] memory values)
-    {
+    /// Validation and the outcome writes live in ArclawRules (code size); the per-table arrays stay here.
+    function _setPrizes(uint256 machineId, OutcomeInput[] calldata input) internal {
         Machine memory mc = machines[machineId];
         if (mc.price == 0) revert UnknownMachine();
-        if (input.length == 0) revert NoPrizes();
-        if (input.length > MAX_OUTCOMES) revert TooManyOutcomes();
-        values = new uint256[3][](input.length);
-        uint256[] memory vs = new uint256[](input.length);
-        uint256 w;
-        uint256 ev;
-        for (uint256 i; i < input.length; ++i) {
-            OutcomeInput calldata p = input[i];
-            if (p.weight == 0) revert BadPrize(i);
-            uint256 v;
-            for (uint256 c; c < CARDS_PER_BOX; ++c) {
-                if (p.tokens[c] == address(0) || p.amounts[c] == 0) revert BadPrize(i);
-                values[i][c] = valueOf(p.tokens[c], p.amounts[c]);
-                v += values[i][c];
-            }
-            if (v * 10_000 < uint256(mc.floorBps) * mc.price) revert BelowFloor(i, v * 10_000 / mc.price);
-            if (v * 10_000 > uint256(mc.capBps) * mc.price) revert AboveCap(i, v * 10_000 / mc.price);
-            vs[i] = v;
-            w += p.weight;
-            ev += v * p.weight;
-        }
-        rtpBps = ev * 10_000 / w / mc.price;
-        if (ev * 10_000 < uint256(mc.rtpMinBps) * mc.price * w) revert RtpOutOfBand(rtpBps);
-        // Max-boost EV = (1 - q) EV + q E[max of two draws], q = MAX_BOOST_BPS / 10000. Scaled by 10000 W^2:
-        // (10000 - MAX_BOOST_BPS) * ev * W + MAX_BOOST_BPS * sum_ij w_i w_j max(v_i, v_j)  <=  rtpMax * price * W^2
-        uint256 pairs;
-        for (uint256 i; i < vs.length; ++i) {
-            uint256 wi = input[i].weight;
-            for (uint256 j; j < vs.length; ++j) {
-                pairs += wi * input[j].weight * (vs[i] > vs[j] ? vs[i] : vs[j]);
-            }
-        }
-        uint256 lucky = (10_000 - MAX_BOOST_BPS) * ev * w + MAX_BOOST_BPS * pairs;
-        if (lucky > uint256(mc.rtpMaxBps) * mc.price * w * w) revert RtpOutOfBand(lucky / w / w / mc.price);
-    }
-
-    function _setPrizes(uint256 machineId, OutcomeInput[] calldata input) internal {
-        (uint256 rtpBps, uint256[3][] memory values) = _evaluate(machineId, input);
-        Outcome[] storage t = _tables.push();
-        uint256 tableId = _tables.length - 1;
-        uint256 w;
-        for (uint256 i; i < input.length; ++i) {
-            OutcomeInput calldata p = input[i];
-            Outcome storage o = t.push();
-            uint256 v;
-            for (uint256 c; c < CARDS_PER_BOX; ++c) {
-                o.cards[c] = Card(p.tokens[c], SafeCast.toUint96(values[i][c]), p.amounts[c]);
-                v += values[i][c];
-            }
-            (o.weight, o.tier, o.value) = (p.weight, p.tier, SafeCast.toUint128(v));
-            w += p.weight;
-        }
+        if (address(priceSource) == address(0)) revert NoPriceSource();
+        uint256 tableId = _tables.length;
+        (uint256 rtpBps, uint256 w) =
+            ArclawRules.store(_tables, tableRefPrice, _tableTokens, lastPrice, mc, priceSource, input);
         tableWeight.push(w);
         tableMachine.push(machineId);
-        tablePrice.push(machines[machineId].price);
+        tablePrice.push(mc.price);
         tablePricedAt.push(block.timestamp);
         currentTable[machineId] = tableId + 1;
         emit PrizesSet(machineId, tableId, input.length, rtpBps, msg.sender);
@@ -803,5 +905,68 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
             reservedCredit += amount;
             emit CreditAdded(to, amount);
         }
+    }
+}
+
+/// @title ArclawRules: table validation and storage, an external library linked into Arclaw (24 KB code limit)
+/// @notice Prices every card, enforces floor, cap and RTP band (checked at the maximum luck boost) and appends the
+///         table, recording each card token's reference price for Arclaw's open-time price check. Reverts with
+///         Arclaw's errors. Constants mirror Arclaw's (CARDS_PER_BOX 3, MAX_OUTCOMES 64, MAX_BOOST_BPS 100, USDC).
+library ArclawRules {
+    function store(
+        Arclaw.Outcome[][] storage tables,
+        mapping(uint256 => mapping(address => uint256)) storage refPrice,
+        mapping(uint256 => address[]) storage tokens,
+        mapping(address => uint256) storage last,
+        Arclaw.Machine memory mc,
+        IPriceSource ps,
+        Arclaw.OutcomeInput[] calldata input
+    ) external returns (uint256 rtpBps, uint256 w) {
+        if (input.length == 0) revert Arclaw.NoPrizes();
+        if (input.length > 64) revert Arclaw.TooManyOutcomes();
+        uint256 tableId = tables.length;
+        Arclaw.Outcome[] storage t = tables.push();
+        uint256[] memory vs = new uint256[](input.length);
+        uint256 ev;
+        for (uint256 i; i < input.length; ++i) {
+            Arclaw.OutcomeInput calldata p = input[i];
+            if (p.weight == 0) revert Arclaw.BadPrize(i);
+            Arclaw.Outcome storage o = t.push();
+            uint256 v;
+            for (uint256 c; c < 3; ++c) {
+                address tok = p.tokens[c];
+                // Arc's USDC ERC-20 view is native USDC, never a card
+                if (tok == address(0) || tok == 0x3600000000000000000000000000000000000000 || p.amounts[c] == 0) {
+                    revert Arclaw.BadPrize(i);
+                }
+                uint256 px = ps.priceOf(tok);
+                uint256 cv = p.amounts[c] * px * 1e12 / 10 ** IERC20Metadata(tok).decimals();
+                o.cards[c] = Arclaw.Card(tok, SafeCast.toUint96(cv), p.amounts[c]);
+                v += cv;
+                if (refPrice[tableId][tok] == 0) {
+                    (refPrice[tableId][tok], last[tok]) = (px, px);
+                    tokens[tableId].push(tok);
+                }
+            }
+            if (v * 10_000 < uint256(mc.floorBps) * mc.price) revert Arclaw.BelowFloor(i, v * 10_000 / mc.price);
+            if (v * 10_000 > uint256(mc.capBps) * mc.price) revert Arclaw.AboveCap(i, v * 10_000 / mc.price);
+            (o.weight, o.tier, o.value) = (p.weight, p.tier, SafeCast.toUint128(v));
+            vs[i] = v;
+            w += p.weight;
+            ev += v * p.weight;
+        }
+        rtpBps = ev * 10_000 / w / mc.price;
+        if (ev * 10_000 < uint256(mc.rtpMinBps) * mc.price * w) revert Arclaw.RtpOutOfBand(rtpBps);
+        // Max-boost EV = (1 - q) EV + q E[max of two draws], q = MAX_BOOST_BPS / 10000. Scaled by 10000 W^2:
+        // (10000 - MAX_BOOST_BPS) * ev * W + MAX_BOOST_BPS * sum_ij w_i w_j max(v_i, v_j)  <=  rtpMax * price * W^2
+        uint256 pairs;
+        for (uint256 i; i < vs.length; ++i) {
+            uint256 wi = input[i].weight;
+            for (uint256 j; j < vs.length; ++j) {
+                pairs += wi * input[j].weight * (vs[i] > vs[j] ? vs[i] : vs[j]);
+            }
+        }
+        uint256 lucky = (10_000 - 100) * ev * w + 100 * pairs;
+        if (lucky > uint256(mc.rtpMaxBps) * mc.price * w * w) revert Arclaw.RtpOutOfBand(lucky / w / w / mc.price);
     }
 }

@@ -43,7 +43,7 @@ contract A2PoCTest is Base {
         _forceSingle(M1, address(nvda), 0.8 ether);
         _play(alice, M1, 10);
         vm.expectRevert(Arclaw.PriceImmutable.selector);
-        box.setMachine(M1, 2 ether, 3000, 1_000_000, 8000, 8000);
+        box.setMachine(M1, 2 ether, 5000, 1_000_000, 8000, 8000);
         _openFulfilReveal(alice, M1, 10, keccak256("any"));
         uint256 got = nvda.balanceOf(alice) * 200e6 * 1e12 / 1e18;
         assertEq(got, 8 ether, "10 boxes at 1 USDC pay 0.8 each, inside the band");
@@ -115,7 +115,7 @@ contract A2PoCTest is Base {
         box.setPrizes(M1, _single(M1, address(nvda), 0.75 ether));
         box.sweep(address(nvda), address(1), 100 ether); // pool short: refund path
         w.call(address(box), 1 ether, abi.encodeCall(Arclaw.play, (M1, 1)));
-        bytes memory ret = w.call(address(box), 0, abi.encodeCall(Arclaw.open, (M1, 1)));
+        bytes memory ret = w.call(address(box), 0, abi.encodeCall(Arclaw.open, (M1, 1, box.currentTable(M1) - 1)));
         (uint256 id, uint256 req) = abi.decode(ret, (uint256, uint256));
         vrf.fulfill(req, keccak256("w"));
         box.reveal(id);
