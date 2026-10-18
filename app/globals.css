@@ -607,7 +607,68 @@ html:active-view-transition-type(claw)::view-transition-new(root) {
   animation-timing-function: var(--ease-out-quint);
 }
 
+/* App pages come in, in CSS so it runs on every route mount: each block of the page rises in turn, and on the
+   marketplace the cards slide in from their sides (left from the left, right from the right, the middle rises). */
+@keyframes enter-up {
+  from {
+    opacity: 0;
+    transform: translateY(28px);
+  }
+}
+@keyframes enter-left {
+  from {
+    opacity: 0;
+    transform: translateX(-72px);
+  }
+}
+@keyframes enter-right {
+  from {
+    opacity: 0;
+    transform: translateX(72px);
+  }
+}
+.app-enter {
+  overflow-x: clip; /* the side cards start outside the column */
+}
+.app-enter > * > * {
+  animation: enter-up 720ms var(--ease-out-quint) both;
+}
+.app-enter > * > :nth-child(2) {
+  animation-delay: 70ms;
+}
+.app-enter > * > :nth-child(3) {
+  animation-delay: 140ms;
+}
+.app-enter > * > :nth-child(n + 4) {
+  animation-delay: 210ms;
+}
+.app-enter > * > .enter-cards {
+  animation: none;
+}
+.enter-cards > li {
+  animation: enter-up 820ms var(--ease-out-quint) both;
+  animation-delay: calc(120ms + var(--i, 0) * 90ms);
+}
+.enter-cards > li:nth-child(2) {
+  --i: 1;
+}
+.enter-cards > li:nth-child(3) {
+  --i: 2;
+}
+@media (min-width: 1024px) {
+  .enter-cards > li:nth-child(1) {
+    animation-name: enter-left;
+  }
+  .enter-cards > li:nth-child(3) {
+    animation-name: enter-right;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .app-enter > * > *,
+  .enter-cards > li {
+    animation: none;
+  }
   ::view-transition-group(*),
   ::view-transition-old(*),
   ::view-transition-new(*) {

@@ -108,7 +108,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <WalletProvider>
       <Header />
-      <main id="main" className="min-h-dvh pt-[96px] md:pt-14">
+      <main id="main" className="app-enter min-h-dvh pt-[96px] md:pt-14">
         {children}
       </main>
       <Footer />

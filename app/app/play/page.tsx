@@ -24,7 +24,7 @@ export default function PlayPage() {
         <h1 className="h-section !text-[clamp(40px,5vw,80px)]">Pick a machine.</h1>
         <p className="lede max-w-[24em]">Every play wins a box. Bigger machines pay back more on average.</p>
       </div>
-      <ul className="mt-10 grid gap-4 lg:grid-cols-3">
+      <ul className="enter-cards mt-10 grid gap-4 lg:grid-cols-3">
         {machines.map((m) => {
           const top = m.tiers[m.tiers.length - 1]!;
           return (
