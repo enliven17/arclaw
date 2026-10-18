@@ -7,30 +7,28 @@
  * the opener on the deployed contract, whose OutcomeDrawn has no player field yet).
  */
 import type { Address, Log, PublicClient } from "viem";
-import { arclawAbi } from "@/lib/abi";
-import { ARCLAW, LEGACY_EVENTS, LOG_SPAN, decodeArclaw, tierName, toUsdc, withRetry } from "./contract";
+import { ARCLAW, LOG_SPAN, decodeArclaw, tierName, toUsdc, withRetry } from "./contract";
 
 export type PullRecord = { id: string; openingId: string; boxIndex: number; machineId: number; player: Address; tier: number; tierName: string; valueUsdc: number; blockNumber: number; txHash: string };
 export type PlayRecord = { id: string; player: Address; machineId: number; boxes: number; paidUsdc: number; blockNumber: number };
 
-const eventsNamed = (names: string[]) => [...arclawAbi, ...LEGACY_EVENTS].filter((x) => x.type === "event" && names.includes((x as { name: string }).name));
-
-async function logsBetween(client: PublicClient, names: string[], from: bigint, to: bigint): Promise<Log[]> {
+/** Every arclaw log in a range, one request per 10k-block window (decoded and filtered by the caller). */
+async function logsBetween(client: PublicClient, from: bigint, to: bigint): Promise<Log[]> {
   const address = ARCLAW;
   if (!address) return [];
   const out: Log[] = [];
   for (let a = from; a <= to; a += LOG_SPAN) {
     const b = a + LOG_SPAN - 1n > to ? to : a + LOG_SPAN - 1n;
-    for (const event of eventsNamed(names)) {
-      out.push(...((await withRetry(() => client.getLogs({ address, event: event as never, fromBlock: a, toBlock: b }))) as Log[]));
-    }
+    out.push(...((await withRetry(() => client.getLogs({ address, fromBlock: a, toBlock: b }))) as Log[]));
+    // A short breath between windows: the public RPC rate-limits bursts.
+    if (b < to) await new Promise((r) => setTimeout(r, 250));
   }
   return out;
 }
 
 /** Plays and pulls in a block range, decoded and keyed so re-reading a range is idempotent. */
 export async function readRange(client: PublicClient, from: bigint, to: bigint): Promise<{ plays: PlayRecord[]; pulls: PullRecord[] }> {
-  const logs = await logsBetween(client, ["Played", "OutcomeDrawn", "CardDrawn"], from, to);
+  const logs = await logsBetween(client, from, to);
   const decoded = logs.map((l) => ({ l, e: decodeArclaw([l])[0] })).filter((x): x is { l: Log; e: NonNullable<typeof x.e> } => Boolean(x.e));
   const openers = new Map<string, Address>();
   for (const { e } of decoded) if (e.eventName === "CardDrawn") openers.set(String(e.args.openingId), e.args.opener as Address);
