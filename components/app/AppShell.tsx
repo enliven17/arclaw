@@ -9,7 +9,7 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { Logo } from "@/components/Logo";
 import { SoundToggle } from "@/components/SoundToggle";
-import { ConnectSheet, WalletButton } from "@/components/wallet/ConnectSheet";
+import { WalletButton } from "@/components/wallet/WalletButton";
 import { WalletProvider } from "@/components/wallet/WalletProvider";
 import { ARC } from "@/lib/arc/config";
 import { X_URL } from "@/lib/seo";
@@ -112,7 +112,6 @@ export function AppShell({ children }: { children: ReactNode }) {
         {children}
       </main>
       <Footer />
-      <ConnectSheet />
     </WalletProvider>
   );
 }
