@@ -4,6 +4,7 @@ import { Reveals } from "@/components/motion/SmoothScroll";
 import { SiteHeader } from "@/components/SiteHeader";
 import { AuthorBio } from "@/components/landing/AuthorBio";
 import { Faq } from "@/components/landing/Faq";
+import { BuiltOn } from "@/components/landing/BuiltOn";
 import { Footer } from "@/components/landing/Footer";
 import { GiftShowcase } from "@/components/landing/GiftShowcase";
 import { Hero } from "@/components/landing/Hero";
@@ -42,6 +43,7 @@ export default async function Home() {
       <main id="main">
         <Hero art={ART} machines={machines} />
         <Machines art={ART} machines={machines} />
+        <BuiltOn />
         <HowItWorks machines={machines} />
         <StocksMarquee quotes={quotes} />
         <GiftShowcase />
