@@ -5,7 +5,11 @@
 //   AFTER that transfer is confirmed: a front-run reusing the pending linkKey (audit #2 L-3) makes it revert
 //   with LinkKeyUsed, and that link must not be shared. Generate a fresh key and retry.
 // - VRF fee: quote with coordinator.quoteFeeAt(callbackGasLimit, latest baseFee) plus a buffer (never
-//   quoteFee via eth_call). open() is subsidised; retry() is free only for the opener or operator.
+//   quoteFee via eth_call). open() is subsidised; retry() is free only for the opener, a keeper or the operator.
+//   An opener top-up is paid back when the request expires (openingTopUp). retry() reverts TableStale/BelowFloor
+//   once the pinned table can no longer open; returnBoxes() reverts NotExpired until the table aged out
+//   (tablePricedAt + maxTableAge). refundSealed(machineId, boxes) pays sealed boxes back once the machine has been
+//   off (offSince) or its table stale for 3 days; it reverts NotExpired before that.
 // - Reads that moved off-chain for size: stats and quoteVrfFee live in ArclawLens (lib/abi/arclawLens.ts).
 export const arclawAbi = [
   {
@@ -298,6 +302,19 @@ export const arclawAbi = [
   },
   {
     "type": "function",
+    "name": "claimOwed",
+    "inputs": [
+      {
+        "name": "to",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "credit",
     "inputs": [
       {
@@ -432,6 +449,44 @@ export const arclawAbi = [
   },
   {
     "type": "function",
+    "name": "keepers",
+    "inputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "lastPrice",
+    "inputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "luck",
     "inputs": [],
     "outputs": [
@@ -461,7 +516,7 @@ export const arclawAbi = [
     "name": "machineOff",
     "inputs": [
       {
-        "name": "",
+        "name": "machineId",
         "type": "uint256",
         "internalType": "uint256"
       }
@@ -516,6 +571,19 @@ export const arclawAbi = [
   },
   {
     "type": "function",
+    "name": "maxPriceMoveBps",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "maxTableAge",
     "inputs": [],
     "outputs": [
@@ -542,8 +610,40 @@ export const arclawAbi = [
   },
   {
     "type": "function",
+    "name": "minBuffer",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "nextOpeningId",
     "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "offSince",
+    "inputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
     "outputs": [
       {
         "name": "",
@@ -577,6 +677,11 @@ export const arclawAbi = [
       },
       {
         "name": "boxes",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "tableId",
         "type": "uint256",
         "internalType": "uint256"
       }
@@ -617,6 +722,25 @@ export const arclawAbi = [
   {
     "type": "function",
     "name": "openingOfRequest",
+    "inputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "openingTopUp",
     "inputs": [
       {
         "name": "",
@@ -800,6 +924,25 @@ export const arclawAbi = [
   },
   {
     "type": "function",
+    "name": "owed",
+    "inputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "owner",
     "inputs": [],
     "outputs": [
@@ -927,10 +1070,41 @@ export const arclawAbi = [
   },
   {
     "type": "function",
+    "name": "refundSealed",
+    "inputs": [
+      {
+        "name": "machineId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "boxes",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "renounceOwnership",
     "inputs": [],
     "outputs": [],
     "stateMutability": "pure"
+  },
+  {
+    "type": "function",
+    "name": "rescue",
+    "inputs": [
+      {
+        "name": "openingId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
   },
   {
     "type": "function",
@@ -1071,6 +1245,19 @@ export const arclawAbi = [
   },
   {
     "type": "function",
+    "name": "sealedReserve",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "setApprovalForAll",
     "inputs": [
       {
@@ -1082,6 +1269,24 @@ export const arclawAbi = [
         "name": "approved",
         "type": "bool",
         "internalType": "bool"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "setGuards",
+    "inputs": [
+      {
+        "name": "maxMoveBps",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "minBuffer_",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "outputs": [],
@@ -1115,6 +1320,24 @@ export const arclawAbi = [
         "name": "floor_",
         "type": "uint256",
         "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "setKeeper",
+    "inputs": [
+      {
+        "name": "keeper",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "allowed",
+        "type": "bool",
+        "internalType": "bool"
       }
     ],
     "outputs": [],
@@ -1534,6 +1757,19 @@ export const arclawAbi = [
   },
   {
     "type": "function",
+    "name": "totalOwed",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "transferOwnership",
     "inputs": [
       {
@@ -1852,6 +2088,25 @@ export const arclawAbi = [
   },
   {
     "type": "event",
+    "name": "GuardsSet",
+    "inputs": [
+      {
+        "name": "maxPriceMoveBps",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "minBuffer",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "JitBought",
     "inputs": [
       {
@@ -1914,6 +2169,25 @@ export const arclawAbi = [
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "KeeperSet",
+    "inputs": [
+      {
+        "name": "keeper",
+        "type": "address",
+        "indexed": false,
+        "internalType": "address"
+      },
+      {
+        "name": "allowed",
+        "type": "bool",
+        "indexed": false,
+        "internalType": "bool"
       }
     ],
     "anonymous": false
@@ -2131,6 +2405,25 @@ export const arclawAbi = [
   },
   {
     "type": "event",
+    "name": "OwedClaimed",
+    "inputs": [
+      {
+        "name": "to",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "amount",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "OwnershipTransferStarted",
     "inputs": [
       {
@@ -2269,6 +2562,25 @@ export const arclawAbi = [
   },
   {
     "type": "event",
+    "name": "RefundOwed",
+    "inputs": [
+      {
+        "name": "to",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "amount",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "Refunded",
     "inputs": [
       {
@@ -2359,6 +2671,37 @@ export const arclawAbi = [
       },
       {
         "name": "refund",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "SealedRefunded",
+    "inputs": [
+      {
+        "name": "holder",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "machineId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "boxes",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "amount",
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"
@@ -2837,6 +3180,11 @@ export const arclawAbi = [
   },
   {
     "type": "error",
+    "name": "RuleLowered",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "SafeCastOverflowedUintDowncast",
     "inputs": [
       {
@@ -2880,7 +3228,7 @@ export const arclawAbi = [
   },
   {
     "type": "error",
-    "name": "TablePriceMismatch",
+    "name": "TableChanged",
     "inputs": []
   },
   {
@@ -2915,6 +3263,11 @@ export const arclawAbi = [
   },
   {
     "type": "error",
+    "name": "UsdcAlias",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "VrfFeeTopUp",
     "inputs": [
       {
@@ -2924,6 +3277,17 @@ export const arclawAbi = [
       },
       {
         "name": "sent",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "WeightTooHigh",
+    "inputs": [
+      {
+        "name": "total",
         "type": "uint256",
         "internalType": "uint256"
       }

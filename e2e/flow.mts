@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
 import { createWalletClient, formatEther, http, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { ARC_CHAIN, arcClient } from "@/lib/arc/chain";
-import { STATUS, boxesFromLogs, openCall, openingFromLogs, playCall, readBoxes, readOpening, revealCall, vrfTopUp, toUsdc } from "@/lib/arclaw/contract";
+import { STATUS, boxesFromLogs, openCall, openingFromLogs, playCall, readBoxes, readOpening, readTableId, revealCall, vrfTopUp, toUsdc } from "@/lib/arclaw/contract";
 import { MACHINES } from "@/lib/machines";
 
 const env = readFileSync("contracts/.env", "utf8");
@@ -32,7 +32,7 @@ console.log("played", played.transactionHash);
 console.log("boxes after play", await readBoxes(client, account.address));
 const topUp = await vrfTopUp(client);
 console.log("vrf top-up", formatEther(topUp));
-const opened = await send(openCall(machine.id, 1, topUp));
+const opened = await send(openCall(machine.id, 1, await readTableId(client, machine.id), topUp));
 const o = openingFromLogs(opened.logs);
 console.log("opened", opened.transactionHash, o);
 if (!o) throw new Error("no Opened event");

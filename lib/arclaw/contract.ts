@@ -129,6 +129,24 @@ export async function readOpening(client: PublicClient, openingId: bigint): Prom
   return { opener: r[0] as Address, boxes: Number(r[1]), machineId: Number(r[3]), status: Number(r[4]), requestedAt: Number(r[5]) };
 }
 
+/** The machine's live outcome table: `currentTable` counts tables, so the live one is one below it. */
+export async function readTableId(client: PublicClient, machineId: number): Promise<bigint> {
+  const n = (await retry(() => client.readContract({ address: need(ARCLAW, "arclaw"), abi: arclawAbi, functionName: "currentTable", args: [BigInt(machineId)] }))) as bigint;
+  if (n === 0n) throw new Error("This machine has no prizes set yet.");
+  return n - 1n;
+}
+
+/** Contract reverts the player can hit, in words. Anything else keeps the wallet's own message. */
+export function revertText(e: unknown): string {
+  const m = e instanceof Error ? ((e as { shortMessage?: string }).shortMessage ?? e.message) : String(e);
+  if (/TableChanged/.test(m)) return "The prizes for this machine were just updated. Open again to play the new table.";
+  if (/TableStale|BelowFloor/.test(m)) return "Prices moved since this machine's prizes were set. Opening is paused until they are updated.";
+  if (/EnforcedPause/.test(m)) return "The machines are paused for a moment. Your boxes are safe; try again shortly.";
+  if (/NotExpired/.test(m)) return "Your boxes can come back once this machine's prize table expires. A new draw is usually faster.";
+  if (/reject|denied|cancel/i.test(m)) return "You cancelled it in your wallet.";
+  return m.length > 160 ? `${m.slice(0, 157)}...` : m;
+}
+
 /** Live value of a card in 18 dp USDC at the price source's price. */
 export async function cardValue(client: PublicClient, token: Address, amount: bigint): Promise<bigint> {
   try {
@@ -172,7 +190,8 @@ const arclawCall = (functionName: string, args: readonly unknown[], value?: bigi
 });
 
 export const playCall = (machineId: number, boxes: number, priceUsdc: number) => arclawCall("play", [BigInt(machineId), BigInt(boxes)], priceWei(priceUsdc) * BigInt(boxes));
-export const openCall = (machineId: number, boxes: number, topUp: bigint) => arclawCall("open", [BigInt(machineId), BigInt(boxes)], topUp);
+/** `tableId` is the table the player was shown (readTableId); the contract refuses the open if it changed since. */
+export const openCall = (machineId: number, boxes: number, tableId: bigint, topUp: bigint) => arclawCall("open", [BigInt(machineId), BigInt(boxes), tableId], topUp);
 export const revealCall = (openingId: bigint) => arclawCall("reveal", [openingId]);
 export const retryCall = (openingId: bigint, topUp: bigint) => arclawCall("retry", [openingId], topUp);
 export const returnBoxesCall = (openingId: bigint) => arclawCall("returnBoxes", [openingId]);

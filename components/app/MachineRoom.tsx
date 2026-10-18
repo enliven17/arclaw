@@ -26,6 +26,8 @@ import {
   VRF_EXPIRY_S,
   boxesFromLogs,
   openCall,
+  readTableId,
+  revertText,
   openingFromLogs,
   playCall,
   readBoxes,
@@ -136,7 +138,7 @@ export function MachineRoom({ art, machine }: { art: ClawArt; machine: Machine }
                       setWaiting({ label: "The boxes went back to your wallet." });
                       await refresh();
                     } catch (e) {
-                      setWaiting({ label: e instanceof Error ? e.message : "That did not go through." });
+                      setWaiting({ label: revertText(e) });
                     }
                   }
                 })();
@@ -176,7 +178,7 @@ export function MachineRoom({ art, machine }: { art: ClawArt; machine: Machine }
     setOverlay(true);
     try {
       const client = arcClient();
-      const hash: Hex = await w.send([openCall(machine.id, n, await vrfTopUp(client))]);
+      const hash: Hex = await w.send([openCall(machine.id, n, await readTableId(client, machine.id), await vrfTopUp(client))]);
       const receipt = await client.getTransactionReceipt({ hash });
       const o = openingFromLogs(receipt.logs);
       if (!o) throw new Error("The open went through but no draw was found.");
@@ -185,7 +187,7 @@ export function MachineRoom({ art, machine }: { art: ClawArt; machine: Machine }
       await settle(o.openingId, receipt.blockNumber);
     } catch (e) {
       setOverlay(false);
-      setNote(e instanceof Error ? e.message : "The open did not go through.");
+      setNote(revertText(e));
     } finally {
       setBusy(null);
       void refresh();
