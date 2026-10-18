@@ -10,6 +10,8 @@ import Link from "next/link";
 import { getLenis } from "@/lib/motion";
 
 const KEY = "arclaw:age-ok";
+/** The play screen keeps its own acknowledgement; answering here answers it too. */
+const PLAY_ACK_KEY = "arclaw:ack-18";
 
 export function AgeGate() {
   const dialog = useRef<HTMLDialogElement>(null);
@@ -32,6 +34,7 @@ export function AgeGate() {
   const enter = () => {
     try {
       window.localStorage.setItem(KEY, "1");
+      window.localStorage.setItem(PLAY_ACK_KEY, "1");
     } catch {
       // The answer lasts for this page only.
     }

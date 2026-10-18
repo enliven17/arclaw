@@ -40,6 +40,7 @@ import {
   type DrawnBox,
 } from "@/lib/arclaw/contract";
 import { fmtMultiplier, fmtPct, type Machine } from "@/lib/machines";
+import { useMachineStatus } from "./useMachineStatus";
 import { usdc } from "@/lib/stocks";
 import { cn } from "@/lib/cn";
 
@@ -51,6 +52,10 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export function MachineRoom({ art, machine }: { art: ClawArt; machine: Machine }) {
   const w = useWallet();
+  const status = useMachineStatus(machine.id);
+  // Off and paused are not the player's to fix; a stale table is the keeper's, and clears in seconds.
+  const blocked = status === "off" || status === "paused" || status === "stale";
+  const blockedLabel = status === "off" ? "Opens soon" : status === "paused" ? "Paused for a moment" : "Getting the machine ready";
   const claw = useRef<ClawHandle>(null);
   const [count, setCount] = useState(1);
   const [sealed, setSealed] = useState<number | null>(null);
@@ -270,8 +275,8 @@ export function MachineRoom({ art, machine }: { art: ClawArt; machine: Machine }
           </label>
         ) : null}
 
-        <button type="button" className="btn mt-5 w-full" disabled={!!busy || (!!w.address && !ack)} onClick={() => void onPlay()}>
-          {!w.address ? "Connect to play" : busy === "play" ? "Playing" : <>Play for <span className="money">{usdc(total)} USDC</span></>}
+        <button type="button" className="btn mt-5 w-full" disabled={!!busy || blocked || (!!w.address && !ack)} onClick={() => void onPlay()}>
+          {blocked ? blockedLabel : !w.address ? "Connect to play" : busy === "play" ? "Playing" : <>Play for <span className="money">{usdc(total)} USDC</span></>}
         </button>
 
         <div className="mt-6 flex items-center justify-between gap-4 border-t border-line pt-6">
@@ -280,11 +285,11 @@ export function MachineRoom({ art, machine }: { art: ClawArt; machine: Machine }
             <p className="money mt-1 text-[22px]">{sealed ?? "0"}</p>
           </div>
           <div className="flex gap-2">
-            <button type="button" className="btn-cream" disabled={!openN || !!busy} onClick={() => void onOpen(1)}>
+            <button type="button" className="btn-cream" disabled={!openN || !!busy || status === "stale" || status === "paused"} onClick={() => void onOpen(1)}>
               Open one
             </button>
             {openN > 1 ? (
-              <button type="button" className="btn-ghost" disabled={!!busy} onClick={() => void onOpen(openN)}>
+              <button type="button" className="btn-ghost" disabled={!!busy || status === "stale" || status === "paused"} onClick={() => void onOpen(openN)}>
                 Open {openN}
               </button>
             ) : null}

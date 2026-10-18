@@ -5,6 +5,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Breadcrumbs } from "@/components/seo/Breadcrumbs";
+import { MachineBadge } from "@/components/app/MachineBadge";
 import { ClawMachine } from "@/components/claw/ClawMachine";
 import { clawArt } from "@/components/claw/geometry";
 import { variantOf } from "@/components/claw/view";
@@ -43,7 +44,10 @@ export default function PlayPage() {
                 </div>
                 <div className="flex flex-1 flex-col border-t border-line p-6">
                   <div className="flex items-baseline justify-between gap-4">
-                    <h2 className="text-[clamp(30px,2.8vw,42px)] leading-none tracking-[-0.03em]">{m.name}</h2>
+                    <div className="flex items-center gap-3">
+                      <h2 className="text-[clamp(30px,2.8vw,42px)] leading-none tracking-[-0.03em]">{m.name}</h2>
+                      <MachineBadge machineId={m.id} />
+                    </div>
                     <p className="money text-[clamp(20px,1.8vw,26px)] leading-none">
                       {m.priceUsdc} <span className="text-muted">USDC</span>
                     </p>
