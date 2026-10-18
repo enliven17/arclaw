@@ -54,10 +54,9 @@ const HELP = [
 ].join("\n");
 
 async function start(chat: number) {
-  const video = process.env.TELEGRAM_LAUNCH_VIDEO_URL;
+  const video = process.env.TELEGRAM_LAUNCH_VIDEO_URL || abs("/video/launch-square.mp4");
   // ponytail: no per-user "seen it" state; /start is rare enough that replaying the video every time is fine.
-  if (video) await tg("sendVideo", { chat_id: chat, video, caption: WELCOME, parse_mode: "HTML", supports_streaming: true, reply_markup: PLAY });
-  else await tg("sendPhoto", { chat_id: chat, photo: abs("/api/og/tg?kind=welcome"), caption: WELCOME, parse_mode: "HTML", reply_markup: PLAY });
+  await tg("sendVideo", { chat_id: chat, video, caption: WELCOME, parse_mode: "HTML", supports_streaming: true, reply_markup: PLAY });
 }
 
 async function odds(chat: number) {
