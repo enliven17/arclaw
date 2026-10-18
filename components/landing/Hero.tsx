@@ -64,9 +64,9 @@ export function Hero({ art, machines }: { art: Record<Variant, ClawArt>; machine
 
   return (
     <section ref={root} aria-labelledby="hero-title" className="relative overflow-hidden">
-      <div className="wrap grid min-h-dvh items-center gap-y-6 pb-12 pt-28 md:grid-cols-[minmax(0,7fr)_minmax(0,5fr)] md:gap-x-10 md:pb-8 md:pt-24 lg:gap-x-16">
+      <div className="wrap grid min-h-dvh items-center gap-y-6 pb-12 pt-28 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] md:gap-x-10 md:pb-8 md:pt-24 lg:gap-x-16">
         <div className="flex flex-col items-start">
-          <SplitHeading as="h1" id="hero-title" className="h-display !text-[clamp(46px,5.3vw,92px)]" lines={["Grab a box.", "Pull real stocks."]} />
+          <SplitHeading as="h1" id="hero-title" className="h-display whitespace-nowrap !text-[clamp(46px,6vw,104px)]" lines={["Grab a box.", "Pull real stocks."]} />
           <p className="lede mt-7 max-w-[26em]" data-reveal>
             Every play wins a sealed pack of three tokenized stocks, paid straight to your wallet on Arc.
           </p>
