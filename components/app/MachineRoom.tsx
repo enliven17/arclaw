@@ -148,7 +148,7 @@ export function MachineRoom({ art, machine }: { art: ClawArt; machine: Machine }
         await sleep(1500);
       }
       const unseal = async () => {
-        setWaiting({ label: w.kind === "passkey" ? "Unsealing your cards" : "Confirm once more in your wallet to unseal your cards" });
+        setWaiting({ label: w.kind === "embedded" ? "Unsealing your cards" : "Confirm once more in your wallet to unseal your cards" });
         try {
           const hash = await w.send([revealCall(openingId)]);
           const receipt = await client.getTransactionReceipt({ hash });

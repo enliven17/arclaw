@@ -1,8 +1,8 @@
 "use client";
 
 /**
- * App-wide client providers. Today: smooth scroll. Wallets (wagmi + Circle passkey) and Convex mount here once
- * the app needs them; the packages are installed but nothing connects yet.
+ * App-wide client providers: smooth scroll, the cursor, the splash and sound. Wallets (Privy) mount in the app
+ * shell only (components/app/AppShell.tsx), so the marketing pages never load them.
  */
 import { useEffect, type ReactNode } from "react";
 import { armSound } from "@/lib/sfx";

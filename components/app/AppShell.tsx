@@ -2,7 +2,7 @@
 
 /**
  * The app's frame: a compact fixed header (logo, nav, sound, wallet), the connect sheet, and a quiet footer with
- * the legal links. Wallets (wagmi and the passkey) live here, so the marketing pages never load them.
+ * the legal links. Wallets (Privy) live here, so the marketing pages never load them.
  */
 import Link from "next/link";
 import { usePathname } from "next/navigation";

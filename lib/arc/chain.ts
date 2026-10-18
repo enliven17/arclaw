@@ -4,7 +4,7 @@
  * Native USDC has 18 decimals (what msg.value spends); the ERC-20 view at ARC_USDC has 6. This module only ever
  * deals in the native 18 dp amounts.
  */
-import { createPublicClient, defineChain, fallback, http, type PublicClient, type Transport } from "viem";
+import { createPublicClient, defineChain, fallback, http, type Address, type Hex, type PublicClient, type Transport } from "viem";
 import { ARC, MIN_FEE_PER_GAS, type ArcConfig } from "./config";
 
 export function arcChain(config: ArcConfig = ARC) {
@@ -27,6 +27,9 @@ export function arcChain(config: ArcConfig = ARC) {
 }
 
 export const ARC_CHAIN = arcChain();
+
+/** One contract call for a wallet to send. */
+export type Call = { to: Address; data: Hex; value?: bigint };
 
 /** The configured RPCs in order: the next takes over when one fails. */
 export function arcTransport(config: ArcConfig = ARC): Transport {

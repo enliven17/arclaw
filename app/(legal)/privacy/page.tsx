@@ -6,7 +6,7 @@ export const metadata: Metadata = {
   alternates: { canonical: "/privacy" },
 };
 
-const UPDATED = "17 October 2026";
+const UPDATED = "18 October 2026";
 
 export default function Privacy() {
   return (
@@ -20,6 +20,10 @@ export default function Privacy() {
           <strong>Wallet address and on-chain activity.</strong> When you connect a wallet we see its public address. Plays,
           boxes, prizes, gifts and sales happen on the Arc blockchain, which is public; we read and index those events to
           show your collection and the leaderboard.
+        </li>
+        <li>
+          <strong>Login details.</strong> If you log in with email, Google or X, our wallet provider Privy receives that
+          email address or account so it can send you a code and keep your wallet tied to you.
         </li>
         <li>
           <strong>Gift details.</strong> If you send a gift, the note you write and the machine and number of boxes are
@@ -42,9 +46,9 @@ export default function Privacy() {
 
       <h2>What we do not collect</h2>
       <p>
-        We never ask for or see your private keys or seed phrase. Passkey wallets are created by Circle on your device;
-        the passkey stays on your device and we only learn the public account address. We do not use advertising
-        trackers and we do not sell or rent personal data.
+        We never ask for or see your private keys or seed phrase. Wallets made at login are created and secured by
+        Privy, and we only learn the public address. We do not use advertising trackers and we do not sell or rent
+        personal data.
       </p>
 
       <h2>Why we use it</h2>
@@ -56,7 +60,7 @@ export default function Privacy() {
       <h2>Who else processes it</h2>
       <ul>
         <li>Vercel (hosting) and Convex (database) store and serve the app.</li>
-        <li>Circle provides passkey wallets and the Arc network.</li>
+        <li>Privy provides login and wallets. Circle provides the Arc network.</li>
         <li>Astock provides the tokenized stocks and prices; D20 provides randomness.</li>
         <li>Telegram, if you use the bot.</li>
       </ul>

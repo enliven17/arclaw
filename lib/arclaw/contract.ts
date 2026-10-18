@@ -18,7 +18,7 @@ import { decodeEventLog, encodeAbiParameters, encodeFunctionData, getAddress, pa
 import { arclawAbi, arclawLinksAbi, d20CoordinatorAbi } from "@/lib/abi";
 import testnet from "@/lib/deployments/arc-testnet.json";
 import { ARC } from "@/lib/arc/config";
-import type { Call } from "@/lib/arc/account";
+import type { Call } from "@/lib/arc/chain";
 import { MACHINES } from "@/lib/machines";
 import { stockOf } from "@/lib/stocks";
 
