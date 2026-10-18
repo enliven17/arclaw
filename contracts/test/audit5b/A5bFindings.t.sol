@@ -77,7 +77,7 @@ contract A5bFindingsTest is Base {
         assertEq(box.sealedReserve(), 0);
 
         box.unpause();
-        assertEq(box.pausedSince(), 0, "unpause clears the clock");
+        assertEq(box.pausedSince(), T0, "round 4: kept until a day back in service");
     }
 
     // ------------------------------------------------------------------ M-02
@@ -161,7 +161,8 @@ contract A5bFindingsTest is Base {
     // ------------------------------------------------------------------ L-02
 
     /// L-02 fixed: with an IOU open, the part of an opener's VRF top-up the unreserved balance cannot pay becomes the
-    /// opener's credit (reserved ahead of IOUs), never dropped; it can be claimed.
+    /// opener's credit (reserved ahead of IOUs), never dropped; it can be claimed. Round 4: the top-up is reserved from
+    /// the open (topUpReserve), so it comes back in cash ahead of the IOU.
     function test_fixed_l02_topUpCreditedWhileAnIouIsOpen() public {
         address carol = makeAddr("carol");
         vm.deal(carol, 10 ether);
@@ -185,11 +186,10 @@ contract A5bFindingsTest is Base {
         uint256 before = carol.balance;
         vm.prank(carol);
         box.returnBoxes(carolId);
-        assertEq(carol.balance - before + box.credit(carol), 0.2 ether, "carol's 0.2 top-up paid or credited");
+        // round 4: the top-up sat in topUpReserve, ahead of alice's IOU: paid back in cash, no credit
+        assertEq(carol.balance - before, 0.2 ether, "carol's 0.2 top-up paid back");
         assertEq(box.openingTopUp(carolId), 0);
-        assertGt(box.credit(carol), 0, "the IOU pool absorbed the refund: credited");
-        vm.prank(carol);
-        box.claimCredit();
-        assertEq(carol.balance - before, 0.2 ether, "and claimable in full");
+        assertEq(box.credit(carol), 0);
+        assertEq(box.owed(carol), 0);
     }
 }

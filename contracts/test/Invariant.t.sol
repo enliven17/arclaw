@@ -102,6 +102,48 @@ contract Handler is Test {
         try links.claimLink(id, to, abi.encodePacked(r, ss, v)) {} catch {}
     }
 
+    /// Round 4 (A6a L-01, A6b INFO-01): an open whose VRF fee is above the house subsidy, so the opener tops up.
+    function openWithTopUp(uint256 s) external {
+        address a = _actor(s);
+        uint256 m = _m(s);
+        if (box.balanceOf(a, m) == 0) return;
+        vrf.setFee(0.15 ether); // subsidy 0.1: top-up 0.05
+        uint256 tid = box.currentTable(m) - 1;
+        vm.prank(a);
+        try box.open{value: 0.05 ether}(m, 1, tid) returns (uint256 id, uint256) {
+            openings.push(id);
+        } catch {}
+        vrf.setFee(0.02 ether);
+    }
+
+    /// Anyone calls D20's permissionless refundRequest on an expired request: the fee (top-up included) lands
+    /// before Arclaw knows. Then the owner sweeps whatever freeBalance says is free.
+    function outsideRefundThenWithdraw(uint256 i) external {
+        if (openings.length == 0) return;
+        uint256 id = openings[i % openings.length];
+        (,,,,,, uint256 req,) = box.openings(id);
+        vm.warp(block.timestamp + 61);
+        vm.prank(makeAddr("outsider"));
+        try vrf.refundRequest(req) {} catch {}
+        uint256 free = box.freeBalance();
+        if (free != 0) box.withdraw(makeAddr("treasury"), free);
+    }
+
+    /// The opener takes an expired opening back once its table aged out (top-up paid back).
+    function returnExpired(uint256 i) external {
+        if (openings.length == 0) return;
+        uint256 id = openings[i % openings.length];
+        (address opener,,,, Arclaw.OpeningStatus st,,,) = box.openings(id);
+        if (st != Arclaw.OpeningStatus.Pending) return;
+        vm.warp(block.timestamp + 1 days + 61);
+        vm.prank(opener);
+        try box.returnBoxes(id) {} catch {}
+    }
+
+    function acceptOwnership() external {
+        box.acceptOwnership();
+    }
+
     function reclaimLink(uint256 i) external {
         if (linkIds.length == 0) return;
         uint256 id = linkIds[i % linkIds.length];
@@ -149,8 +191,21 @@ contract ArclawInvariants is Test {
         links = new ArclawLinks(IERC1155(address(box)));
         handler = new Handler(box, links, vrf);
         box.setKeeper(address(handler), true); // the handler reveals like the house bot
+        box.setLimits(2000 ether, 10_000); // keep the miss breaker out of the way: the handler expires a lot
+        // a reserve floor, as on mainnet (500 USDC): withdraw never takes the float VRF subsidies are paid from
+        // (A3a INFO: the subsidy has no free-balance check of its own)
+        box.setJit(address(0), 0, 0, 0, 10 ether);
         vm.deal(address(box), 100 ether); // house float: VRF subsidies are paid from it
+        // the handler is the owner too, so it can withdraw the free balance (outsideRefundThenWithdraw)
+        box.transferOwnership(address(handler));
+        handler.acceptOwnership();
+        excludeSelector(FuzzSelector({addr: address(handler), selectors: _ownerOnly()}));
         targetContract(address(handler));
+    }
+
+    function _ownerOnly() internal pure returns (bytes4[] memory s) {
+        s = new bytes4[](1);
+        s[0] = Handler.acceptOwnership.selector;
     }
 
     /// Escrowed link boxes are exactly the contract's own box balance.
@@ -180,10 +235,12 @@ contract ArclawInvariants is Test {
         assertEq(box.sealedReserve(), sealedValue);
     }
 
-    /// Every liability (credit, pending and sealed boxes) is backed by native at all times.
+    /// Every liability (credit, pending and sealed boxes) is backed by native at all times, and no top-up repayment
+    /// ever turned into an IOU or unbacked credit, however early D20 refunded and whatever the owner withdrew.
     function invariant_liabilitiesBacked() public view {
         assertGe(address(box).balance, box.reservedCredit() + box.pendingReserve() + box.sealedReserve());
         assertEq(box.totalOwed(), 0, "full inventory: no refund, no IOU");
+        assertEq(box.reservedCredit(), 0, "actors take every push: no credit, so none unbacked");
     }
 
     /// Prize tokens out == what the counter says.

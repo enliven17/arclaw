@@ -6,11 +6,15 @@
 //   with LinkKeyUsed, and that link must not be shared. Generate a fresh key and retry.
 // - VRF fee: quote with coordinator.quoteFeeAt(callbackGasLimit, latest baseFee) plus a buffer (never
 //   quoteFee via eth_call). open() is subsidised; retry() is free only for the opener, a keeper or the operator.
-//   An opener top-up is paid back when the request expires (openingTopUp). retry() reverts TableStale/BelowFloor
-//   once the pinned table can no longer open; returnBoxes() reverts NotExpired until the table aged out
-//   (tablePricedAt + maxTableAge); 7 days after the request it also works when the coordinator is dead.
-//   refundSealed(machineId, boxes) pays sealed boxes back once the machine has been off (offSince), its table
-//   stale, or the contract paused (pausedSince) for 3 days, counted from the earliest; NotExpired before that.
+//   An opener top-up is paid back when the request expires (openingTopUp, reserved in topUpReserve). retry()
+//   works once per opening (openingRetries, else RetryLimit) and reverts TableStale/BelowFloor once the pinned
+//   table can no longer open; returnBoxes() reverts NotExpired until the table aged out (tablePricedAt +
+//   maxTableAge); 7 days after the request it also works when the coordinator is dead. Every expired request
+//   retried or returned is a VRF miss (limits().misses); limits().maxMisses in a UTC day pause the contract.
+// - refundSealed(machineId, boxes): read sealedRefundAt(machineId) for when it opens (NotExpired before). Off,
+//   stale table or paused for 3 days; pausedSince is NOT cleared by unpause any more (it lapses after a day back
+//   in service, resumedAt). pauseIfVrfDown() lets anyone pause when the VRF stops taking requests (VrfAlive else).
+// - Paused contract: show play/open as unavailable; guardian() may pause, only the owner unpauses.
 // - Native pushes forward 100k gas; a wallet that needs more (or rejects) gets credit, claimCredit() pulls it.
 // - Reads that moved off-chain for size: stats and quoteVrfFee live in ArclawLens (lib/abi/arclawLens.ts).
 export const arclawAbi = [
@@ -399,6 +403,19 @@ export const arclawAbi = [
   },
   {
     "type": "function",
+    "name": "guardian",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "isApprovedForAll",
     "inputs": [
       {
@@ -483,6 +500,39 @@ export const arclawAbi = [
         "name": "",
         "type": "uint256",
         "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "limits",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "day",
+        "type": "uint32",
+        "internalType": "uint32"
+      },
+      {
+        "name": "misses",
+        "type": "uint16",
+        "internalType": "uint16"
+      },
+      {
+        "name": "maxMisses",
+        "type": "uint16",
+        "internalType": "uint16"
+      },
+      {
+        "name": "jitCap",
+        "type": "uint96",
+        "internalType": "uint96"
+      },
+      {
+        "name": "jitSpent",
+        "type": "uint96",
+        "internalType": "uint96"
       }
     ],
     "stateMutability": "view"
@@ -724,6 +774,25 @@ export const arclawAbi = [
   {
     "type": "function",
     "name": "openingOfRequest",
+    "inputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "openingRetries",
     "inputs": [
       {
         "name": "",
@@ -984,6 +1053,13 @@ export const arclawAbi = [
   },
   {
     "type": "function",
+    "name": "pauseIfVrfDown",
+    "inputs": [],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "paused",
     "inputs": [],
     "outputs": [
@@ -1149,6 +1225,19 @@ export const arclawAbi = [
   },
   {
     "type": "function",
+    "name": "resumedAt",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "retry",
     "inputs": [
       {
@@ -1260,6 +1349,25 @@ export const arclawAbi = [
   },
   {
     "type": "function",
+    "name": "sealedRefundAt",
+    "inputs": [
+      {
+        "name": "machineId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "sealedReserve",
     "inputs": [],
     "outputs": [
@@ -1284,6 +1392,19 @@ export const arclawAbi = [
         "name": "approved",
         "type": "bool",
         "internalType": "bool"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "setGuardian",
+    "inputs": [
+      {
+        "name": "g",
+        "type": "address",
+        "internalType": "address"
       }
     ],
     "outputs": [],
@@ -1353,6 +1474,24 @@ export const arclawAbi = [
         "name": "allowed",
         "type": "bool",
         "internalType": "bool"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "setLimits",
+    "inputs": [
+      {
+        "name": "jitDailyCap",
+        "type": "uint96",
+        "internalType": "uint96"
+      },
+      {
+        "name": "maxMissesPerDay",
+        "type": "uint16",
+        "internalType": "uint16"
       }
     ],
     "outputs": [],
@@ -1772,6 +1911,19 @@ export const arclawAbi = [
   },
   {
     "type": "function",
+    "name": "topUpReserve",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "totalOwed",
     "inputs": [],
     "outputs": [
@@ -2103,6 +2255,19 @@ export const arclawAbi = [
   },
   {
     "type": "event",
+    "name": "GuardianSet",
+    "inputs": [
+      {
+        "name": "guardian",
+        "type": "address",
+        "indexed": false,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "GuardsSet",
     "inputs": [
       {
@@ -2203,6 +2368,25 @@ export const arclawAbi = [
         "type": "bool",
         "indexed": false,
         "internalType": "bool"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "LimitsSet",
+    "inputs": [
+      {
+        "name": "jitDailyCap",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "maxMissesPerDay",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
       }
     ],
     "anonymous": false
@@ -3101,6 +3285,11 @@ export const arclawAbi = [
   },
   {
     "type": "error",
+    "name": "NotGuardian",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "NotOpener",
     "inputs": []
   },
@@ -3181,6 +3370,11 @@ export const arclawAbi = [
         "internalType": "uint256"
       }
     ]
+  },
+  {
+    "type": "error",
+    "name": "RetryLimit",
+    "inputs": []
   },
   {
     "type": "error",
@@ -3279,6 +3473,11 @@ export const arclawAbi = [
   {
     "type": "error",
     "name": "UsdcAlias",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "VrfAlive",
     "inputs": []
   },
   {

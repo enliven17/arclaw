@@ -5,7 +5,7 @@ libs = ["lib"]
 solc = "0.8.28"          # D20 SDK sources pin 0.8.28
 evm_version = "cancun"   # D20 guidance for Arc
 optimizer = true
-optimizer_runs = 50       # Arclaw 24,454 B (100 runs: 24,589, over EIP-170); gas within 0.2% of 100 runs
+optimizer_runs = 50       # Arclaw 24,464 B after round 4 (payout engine in ArclawPayout, clocks in ArclawRules); 100 runs is over EIP-170
 via_ir = true             # keeps Arclaw under 24 KB (22.5 KB vs 25 KB legacy)
 fs_permissions = [{ access = "read-write", path = "../lib" }]
 

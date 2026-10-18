@@ -96,16 +96,18 @@ contract A5aFindings is Base {
         box.refundSealed(M1, 1);
         assertEq(alice.balance - before, P1);
 
-        // the automatic pause after an IOU starts the clock too; unpause clears it
+        // round 4 (A6a L-03): unpause no longer clears the clock; it lapses only after a day back in service
         box.unpause();
-        assertEq(box.pausedSince(), 0);
+        assertEq(box.pausedSince(), T0);
+        assertEq(box.resumedAt(), T0 + 3 days);
     }
 
     // ------------------------------------------------------------------ L-01
 
     /// L-01 fixed: an expired request's VRF top-up is paid from the unreserved balance, and what that cannot cover
     /// while an IOU is outstanding becomes the opener's credit (reserved): never dropped. The automatic pause after
-    /// the IOU also starts the sealed-refund clock.
+    /// the IOU also starts the sealed-refund clock. Round 4: the top-up is reserved from the open (topUpReserve),
+    /// so it is paid back in cash ahead of the IOU instead of as credit.
     function test_fixed_l01_topUpCreditedWhileIousOutstanding() public {
         vm.deal(address(this), 10 ether);
         (bool ok,) = address(box).call{value: 1 ether}(""); // house treasury covers the subsidies
@@ -138,13 +140,13 @@ contract A5aFindings is Base {
         vm.prank(alice);
         box.returnBoxes(aId);
         assertEq(box.balanceOf(alice, M1), 1);
-        assertEq(alice.balance - before + box.credit(alice), 0.05 ether, "top-up paid or credited");
-        assertGt(box.credit(alice), 0, "credited ahead of the IOUs");
+        // round 4 (A6a L-01): the top-up was reserved (topUpReserve) before the IOU opened, so it is paid in cash,
+        // ahead of the IOU, and never as credit the balance does not back
+        assertEq(alice.balance - before, 0.05 ether, "top-up paid back in cash");
+        assertEq(box.credit(alice), 0);
         assertEq(box.owed(alice), 0);
         assertEq(box.openingTopUp(aId), 0);
-        vm.prank(alice);
-        box.claimCredit();
-        assertEq(alice.balance - before, 0.05 ether, "claimable");
+        assertEq(box.topUpReserve(), 0);
     }
 
     // ------------------------------------------------------------------ INFO

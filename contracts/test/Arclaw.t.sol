@@ -655,15 +655,21 @@ contract StuckVrfTest is Base {
     function test_retry_openerFreeAndBalanceNeutral() public {
         uint256 t0 = block.timestamp;
         (uint256 id,) = _open(alice, M1, 1);
+        (uint256 id2,) = _open(alice, M1, 1);
         vm.warp(t0 + 61);
         uint256 bal = address(box).balance;
         vm.prank(alice);
         box.retry(id); // old fee back in, new fee out
         assertEq(address(box).balance, bal);
-        vm.warp(t0 + 122);
         vm.prank(op);
-        box.retry(id); // the operator's keeper retries free too
+        box.retry(id2); // the operator's keeper retries free too
         assertEq(address(box).balance, bal);
+        // one re-request per opening (MAX_RETRIES): a withheld word buys at most one fresh draw
+        vm.warp(t0 + 122);
+        vm.prank(alice);
+        vm.expectRevert(Arclaw.RetryLimit.selector);
+        box.retry(id);
+        assertEq(box.openingRetries(id), 1);
     }
 
     function test_returnBoxes_reclaimsFee() public {

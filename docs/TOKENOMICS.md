@@ -46,7 +46,17 @@ The box price pays for its own pack. When a revealed card's stock is not in inve
 | Legendary | 4x | needs 3x from the float |
 | Jackpot | 9.9x | needs 8.9x from the float |
 
-About three boxes in four leave money behind (that is the house edge), and that surplus refills the float. Only Epic and better (3.45% of boxes) draw on it, so the treasury does not need deep pre-bought inventory: a `reserveFloor` of roughly one Vault jackpot plus one Legendary (about 120 USDC) covers the tail. `withdraw` and `spend` can never touch the floor; just in time buys can.
+About three boxes in four leave money behind (that is the house edge), and that surplus refills the float. Only Epic and better (3.45% of boxes) draw on it, so the treasury does not need deep pre-bought inventory.
+
+There is no big up-front bankroll: payouts come out of what players paid, and the float (`reserveFloor`) is a small cushion that grows with sales. Size it at about 10x the price of the biggest machine that is switched on. Bankroll simulation (30 day runs): Single only with a 10 USDC float auto-pauses on an IOU in 0.4% of runs; all three machines need about 50 USDC. `withdraw` and `spend` can never touch the floor; just in time buys can.
+
+| Enabled machines | Float (`reserveFloor` plus free balance) |
+|---|---|
+| Single (launch) | about 10 USDC (deploy default `RESERVE_FLOOR` is 5 USDC; top it up before unpausing) |
+| Single and Stack | about 50 USDC |
+| Single, Stack and Vault | about 300 USDC |
+
+Launch is Single only: the deploy script leaves Stack and Vault switched off (`LAUNCH_MACHINES=1`, the mainnet default). To add one later, the operator reprices it, the owner raises `reserveFloor` (`setJit`) and calls `setMachineActive(id, true)`.
 
 ## Treasury rules
 
@@ -54,9 +64,10 @@ About three boxes in four leave money behind (that is the house edge), and that 
 2. **Liabilities first.** Owed credits and pending refunds are reserved; `withdraw` and `spend` can only touch the free balance. (Audit #1 M-02.)
 3. **Fresh tables only.** A table records when it was priced. `open` refuses a table older than `maxTableAge` (24 h default), and pricing refuses stale oracle reads (`isStale`). A keeper reprices every few hours and after big market moves.
 4. **Reveal fast.** A keeper reveals fulfilled openings within seconds, so nobody holds a free option on a stale table.
-5. **Native float, not stock hoard.** Keep `reserveFloor` (about 120 USDC) in native USDC for Epic and better; cards are bought just in time at reveal. Pre-buying stock with `spend` is optional (it saves the desk spread on hot tickers). Desk capacity is 500 USDC per stock per trade.
+5. **Native float, not stock hoard.** Keep `reserveFloor` (about 10x the biggest enabled price, see above) in native USDC for Epic and better; cards are bought just in time at reveal, at most `limits.jitCap` per UTC day (2000 USDC default), so a broken desk cannot drain more than that a day. Pre-buying stock with `spend` is optional (it saves the desk spread on hot tickers), capped at 500 USDC a day (one full desk trade). Desk capacity is 500 USDC per stock per trade.
 6. **Inventory is market exposure.** Held stock moves with the market; keep any pre-bought inventory small and reprice tables instead of hoarding it.
-7. **Retries cost the caller.** Only the opener or the operator retries an expired VRF request for free; the old request is refunded before a new one is made. (Audit #1 L-01, M-01.)
+7. **Retries cost the caller.** Only the opener, a keeper or the operator retries an expired VRF request for free; the old request is refunded before a new one is made. (Audit #1 L-01, M-01.) One retry per opening, and 10 expired requests in a day pause the contract: the VRF operator can withhold a word it dislikes, and this bounds that re-roll.
+8. **Pause is cheap, unpause is not.** A guardian hot key can pause but never unpause; anyone can pause if the VRF coordinator stops taking requests (`pauseIfVrfDown`). Three days into a pause, sealed boxes refund at their price, and that clock only resets after a full day back in service.
 
 ## ARCLAW holders
 

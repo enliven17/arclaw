@@ -238,11 +238,15 @@ contract A4bFindingsTest is Base {
 
         vm.warp(block.timestamp + 1 days); // expired again, table aged out
         uint256 free0 = box.freeBalance();
+        uint256 bal0 = address(box).balance;
         vm.prank(alice);
         box.returnBoxes(id);
         assertEq(a0, alice.balance, "the top-up came back with the box");
         assertEq(box.openingTopUp(id), 0);
-        assertEq(box.freeBalance() - free0, 0.1 ether, "the house keeps only its own subsidy back");
+        assertEq(address(box).balance - bal0, 0.1 ether, "the house keeps only its own subsidy back");
+        // round 4: the top-up was reserved (topUpReserve) while D20 held it, so freeBalance also gets those 0.2 back
+        assertEq(box.freeBalance() - free0, 0.3 ether);
+        assertEq(box.topUpReserve(), 0);
     }
 
     /// L-03 fixed: a keeper retry pays the opener's top-up back to the opener (the keeper tops up itself).

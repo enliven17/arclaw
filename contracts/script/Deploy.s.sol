@@ -15,6 +15,7 @@ import {MockPriceSource} from "../src/mocks/MockPriceSource.sol";
 import {MockAstockDesk} from "../src/mocks/MockAstockDesk.sol";
 import {IPriceSource} from "../src/interfaces/IPriceSource.sol";
 import {IAstockOracle} from "../src/interfaces/IAstock.sol";
+import {ID20VRF} from "../src/vrf/d20/interfaces/ID20VRF.sol";
 
 /// Chain constants, the featured stock list and the machines.json reader.
 /// Odds, multipliers, prices and rules come ONLY from ../lib/machines.json.
@@ -295,17 +296,30 @@ abstract contract OddsWriter is ArcConfig {
 ///   forge script script/Deploy.s.sol --tc Deploy --rpc-url https://rpc.testnet.arc.io --private-key $PRIVATE_KEY \
 ///     --broadcast --with-gas-price 30gwei --priority-gas-price 1gwei
 /// Mainnet (5042): AstockPriceSource + Arclaw on the real coordinator and desk, tables priced from the live oracle,
-///   deployed PAUSED until inventory is bought (operator `spend`) and the owner multisig unpauses.
-///   OWNER=<multisig> OPERATOR=<treasury agent> forge script script/Deploy.s.sol --tc Deploy \
+///   deployed PAUSED. Launch is Single only: LAUNCH_MACHINES (default "1") stay on, every other machine is switched
+///   off at deploy (tables are still set, they age out). Before unpausing, the owner sends the small float
+///   (RESERVE_FLOOR, about 10x the biggest enabled price) and the keeper bot runs. Later, to enable Stack (about
+///   50 USDC of float) or Vault (about 300): the operator reprices it, then the owner calls setMachineActive(id, true).
+///   OWNER=<owner> OPERATOR=<treasury agent> GUARDIAN=<hot key> forge script script/Deploy.s.sol --tc Deploy \
 ///     --rpc-url https://rpc.mainnet.arc.io --private-key $DEPLOYER_KEY --broadcast \
 ///     --with-gas-price 30gwei --priority-gas-price 1gwei --verify --verifier blockscout \
 ///     --verifier-url https://explorer.arc.io/api/
 ///   Arc drops transactions with maxFeePerGas under 20 gwei, and forge overestimates (hundreds of gwei) without
-///   --with-gas-price. Afterwards the multisig calls acceptOwnership() on Arclaw and AstockPriceSource.
+///   --with-gas-price. If OWNER is not the deployer, OWNER calls acceptOwnership() on Arclaw, AstockPriceSource and
+///   LuckVault (Ownable2Step).
 /// Env:
-///   OWNER         final owner (multisig). Mainnet: required. Ownable2Step: it must acceptOwnership().
-///   OPERATOR      treasury agent (reprices, restocks). Mainnet: required and must differ from the deployer.
-///   RESERVE_FLOOR (wei, float for big wins, default 0), BOX_URI, DAILY_CAP (wei, default 50 USDC), MAX_TABLE_AGE (seconds; default 1 day on both chains, the Arclaw maximum),
+///   OWNER          owner. Default the deployer. Should be a Safe; a single fresh hot wallet is accepted with a loud
+///                  warning (move it to a Safe later via transferOwnership + acceptOwnership). STRICT_OWNER=1 makes
+///                  an EOA owner or owner == deployer a hard error.
+///   OPERATOR       treasury agent (reprices, restocks). Mainnet: required and must differ from the deployer.
+///   KEEPER         reveal / retry bot (default OPERATOR). GUARDIAN: pause-only key (default OWNER).
+///   RESERVE_FLOOR  float in wei, untouchable by withdraw and spend (default 5 USDC). Size it about 10x the price of
+///                  the biggest enabled machine (docs/TOKENOMICS.md) and raise it as machines are switched on.
+///   LAUNCH_MACHINES machine ids left on at deploy, comma separated (mainnet default 1; testnet default all).
+///   DAILY_CAP      operator spend cap per UTC day (default 500 USDC). JIT_DAILY_CAP (default 2000 USDC),
+///   MAX_MISSES     VRF misses per day before the automatic pause (default 10). MAX_VRF_SUBSIDY (mainnet default
+///                  2x the live D20 quote at the current base fee, at least 0.04 USDC).
+///   BOX_URI, MAX_TABLE_AGE (seconds; default 1 day on both chains, the Arclaw maximum),
 ///   POOL_USD (testnet seed per stock, USD 6 dp, default $2000), MOCK_PRICES=1 (testnet: fixed prices, no fork).
 /// Deployment files (lib/deployments/arc-<chain>.json, lib/machines.resolved*.json) are written only on --broadcast.
 contract Deploy is OddsWriter {
@@ -358,7 +372,7 @@ contract Deploy is OddsWriter {
         src.setRelayer(operator);
         // Tables live at most a day (Arclaw.MAX_TABLE_AGE): the operator must reprice testnet tables daily too.
         box.setMaxTableAge(vm.envOr("MAX_TABLE_AGE", uint256(1 days)));
-        _configure();
+        _configure(vm.envOr("LAUNCH_MACHINES", ",", new uint256[](0))); // testnet default: every machine on
         if (owner != msg.sender) box.transferOwnership(owner);
         vm.stopBroadcast();
 
@@ -367,10 +381,16 @@ contract Deploy is OddsWriter {
 
     function _mainnet() internal {
         operator = vm.envAddress("OPERATOR");
-        owner = vm.envAddress("OWNER");
         vm.startBroadcast();
+        owner = vm.envOr("OWNER", msg.sender);
         require(operator != msg.sender, "OPERATOR must not be the deployer");
         require(owner != address(0) && operator != address(0), "OWNER and OPERATOR required");
+        _checkOwner();
+        // House VRF subsidy matched to the live fee: 2x today's quote (base-fee headroom), at least 0.04 USDC. At
+        // 20 gwei the D20 mainnet fee is 3 x 20 gwei x (300k + 100k gas) = 0.024 USDC.
+        uint256 quote = ID20VRF(D20_MAINNET).quoteFeeAt(100_000, block.basefee);
+        uint256 subsidy = vm.envOr("MAX_VRF_SUBSIDY", quote * 2 > 0.04 ether ? quote * 2 : 0.04 ether);
+        console.log("D20 quote (wei) / house subsidy (wei)", quote, subsidy);
         AstockPriceSource src = new AstockPriceSource(ASTOCK_ORACLE);
         priceSource = address(src);
         desk = ASTOCK_DESK;
@@ -385,13 +405,15 @@ contract Deploy is OddsWriter {
         for (uint256 i; i < 8; ++i) {
             prices[i] = src.priceOf(tokens[i]);
         }
-        box = new Arclaw(vm.envOr("BOX_URI", string("")), D20_MAINNET, 0.05 ether);
+        box = new Arclaw(vm.envOr("BOX_URI", string("")), D20_MAINNET, subsidy);
         lens = new ArclawLens();
         links = new ArclawLinks(IERC1155(address(box)));
-        box.pause(); // no inventory yet: every card would refund
+        box.pause(); // until the float is in and the keeper runs; the owner unpauses
         uint256 age = vm.envOr("MAX_TABLE_AGE", uint256(0));
         if (age != 0) box.setMaxTableAge(age);
-        _configure();
+        uint256[] memory single = new uint256[](1);
+        single[0] = 1;
+        _configure(vm.envOr("LAUNCH_MACHINES", ",", single));
         if (owner != msg.sender) {
             box.transferOwnership(owner);
             src.transferOwnership(owner);
@@ -399,26 +421,50 @@ contract Deploy is OddsWriter {
         vm.stopBroadcast();
 
         _publish("../lib/deployments/arc-mainnet.json", "../lib/machines.resolved.mainnet.json", D20_MAINNET);
-        console.log("PAUSED. Owner accepts ownership; operator restocks via spend(); owner unpauses.");
+        console.log("PAUSED. Owner accepts ownership (if not the deployer), sends the RESERVE_FLOOR float, starts the");
+        console.log("keeper, then unpauses. Machines not in LAUNCH_MACHINES are off: reprice, then setMachineActive.");
     }
 
-    /// Machines, rules and tables, all from machines.json.
-    function _configure() internal {
+    /// The owner should be a contract (a Safe) and not the deployer key. A fresh single hot wallet is allowed with a
+    /// loud warning unless STRICT_OWNER=1.
+    function _checkOwner() internal view {
+        if (owner.code.length != 0 && owner != msg.sender) return;
+        require(!vm.envOr("STRICT_OWNER", false), "STRICT_OWNER: OWNER must be a contract and not the deployer");
+        console.log("################################################################################");
+        console.log("WARNING: the owner is a plain EOA and/or the deployer key:", owner);
+        console.log("It can withdraw the free balance, sweep stock, swap the price source and pause for good.");
+        console.log("Move it to a Safe soon: transferOwnership(safe) then the Safe calls acceptOwnership().");
+        console.log("################################################################################");
+    }
+
+    /// Machines, rules and tables, all from machines.json; machines not in `launch` are switched off.
+    function _configure(uint256[] memory launch) internal {
         string memory json = vm.readFile(MACHINES);
         Policy memory p = readPolicy(json);
         MachineCfg[] memory ms = readMachines(json);
-        box.setPolicy(IPriceSource(priceSource), vm.envOr("DAILY_CAP", uint256(50 ether)));
+        // Operator spend (pre-buying stock for hot tickers) per UTC day: 500 USDC is one full desk trade (desk
+        // capacity is 500 USDC per stock per trade). spend only buys allow-listed stock into this contract out of
+        // the free balance, so the cap bounds what a stolen operator key can push through desk slippage in a day.
+        box.setPolicy(IPriceSource(priceSource), vm.envOr("DAILY_CAP", uint256(500 ether)));
         box.setSink(desk, true);
         box.setOperator(operator);
         // The reveal bot: may reveal any opening at once (openers always can; anyone after an hour).
         box.setKeeper(vm.envOr("KEEPER", operator), true);
+        // Pause-only hot key (the keeper host can trip it on alerts); it can never unpause.
+        box.setGuardian(vm.envOr("GUARDIAN", owner));
         // ARCLAW luck: the vault ships with no token and no tiers (boosts off) until ARCLAW exists on Arguspad.
         luck = new LuckVault();
         box.setLuck(luck);
         if (owner != msg.sender) luck.transferOwnership(owner);
-        // Short cards are bought on the desk at reveal from box revenue: 1% slippage, at most 20 buys per reveal,
-        // 60 USDC per card (a Vault jackpot card is ~49.5). RESERVE_FLOOR keeps a float for Epic and better.
-        box.setJit(desk, 100, 20, 60 ether, vm.envOr("RESERVE_FLOOR", uint256(0)));
+        // Short cards are bought on the desk at reveal from box revenue: 1% slippage, up to 60 buys per reveal (a
+        // 20-box reveal has 60 cards), 60 USDC per card (a Vault jackpot card is about 49.5). RESERVE_FLOOR is the
+        // small float (no up-front bankroll: payouts come from what players paid, the float grows with sales).
+        box.setJit(desk, 100, 60, 60 ether, vm.envOr("RESERVE_FLOOR", uint256(5 ether)));
+        // JIT spend per UTC day: 2000 USDC covers a 20-box Vault reveal of all jackpots (20 x 99), so a broken or
+        // hostile desk costs at most that a day. MAX_MISSES expired VRF requests a day pause the contract.
+        box.setLimits(
+            uint96(vm.envOr("JIT_DAILY_CAP", uint256(2000 ether))), uint16(vm.envOr("MAX_MISSES", uint256(10)))
+        );
         for (uint256 i; i < ms.length; ++i) {
             checkRules(ms[i], p.floorBps);
             box.setMachine(
@@ -430,7 +476,20 @@ contract Deploy is OddsWriter {
                 uint16(ms[i].rtpMaxBps)
             );
             box.setPrizes(ms[i].id, buildTable(ms[i], p.floorBps, tokens, prices));
+            if (!_launched(launch, ms[i].id)) {
+                box.setMachineActive(ms[i].id, false); // no plays or opens until the owner switches it on
+                console.log("machine switched off at launch:", ms[i].id);
+            }
         }
+    }
+
+    /// Empty `launch` = every machine on.
+    function _launched(uint256[] memory launch, uint256 id) internal pure returns (bool) {
+        if (launch.length == 0) return true;
+        for (uint256 i; i < launch.length; ++i) {
+            if (launch[i] == id) return true;
+        }
+        return false;
     }
 
     /// Prints the odds; writes the deployment and resolved-odds files only on a real broadcast.

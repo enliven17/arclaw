@@ -63,30 +63,33 @@ contract Audit1Test is Base {
     // ------------------------------------------------------------------ L: retry subsidy drain
 
     /// Fixed: a stranger's retry pays the full fee, and the expired fee is reclaimed first, so the treasury never
-    /// pays for someone else's retries. The opener keeps a free retry.
+    /// pays for someone else's retries. Round 4: one re-request per opening (MAX_RETRIES), so a retry loop is gone
+    /// altogether; the opener's free retry is shown on a second opening.
     function test_fixed_retryCostsStranger() public {
         box.setPrizes(M1, _table(address(nvda), P1));
         vm.deal(address(box), 10 ether);
-        _play(alice, M1, 1);
+        _play(alice, M1, 2);
         uint256 t0 = block.timestamp;
         (uint256 id,) = _open(alice, M1, 1);
+        (uint256 id2,) = _open(alice, M1, 1);
         uint256 start = address(box).balance;
         address griefer = makeAddr("griefer");
         vm.deal(griefer, 1 ether);
         uint256 fee = vrf.fee();
-        for (uint256 i = 1; i <= 5; ++i) {
-            vm.warp(t0 + 61 * i); // D20 outage: nothing fulfils
-            vm.prank(griefer);
-            vm.expectRevert(abi.encodeWithSelector(Arclaw.VrfFeeTopUp.selector, fee, 0));
-            box.retry(id);
-            vm.prank(griefer);
-            box.retry{value: fee}(id);
-        }
-        assertEq(address(box).balance, start + 5 * fee, "treasury got every expired fee back; griefer paid");
-        vm.warp(t0 + 61 * 6);
+        vm.warp(t0 + 61); // D20 outage: nothing fulfils
+        vm.prank(griefer);
+        vm.expectRevert(abi.encodeWithSelector(Arclaw.VrfFeeTopUp.selector, fee, 0));
+        box.retry(id);
+        vm.prank(griefer);
+        box.retry{value: fee}(id);
+        assertEq(address(box).balance, start + fee, "treasury got the expired fee back; griefer paid");
+        vm.warp(t0 + 122);
+        vm.prank(griefer);
+        vm.expectRevert(Arclaw.RetryLimit.selector);
+        box.retry{value: fee}(id);
         vm.prank(alice);
-        box.retry(id); // the opener's retry is free and balance-neutral
-        assertEq(address(box).balance, start + 5 * fee);
+        box.retry(id2); // the opener's retry is free and balance-neutral
+        assertEq(address(box).balance, start + fee);
     }
 
     // ------------------------------------------------------------------ I: unreserved liabilities

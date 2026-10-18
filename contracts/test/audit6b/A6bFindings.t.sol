@@ -5,7 +5,7 @@ import {Base} from "../Base.t.sol";
 import {Arclaw} from "../../src/Arclaw.sol";
 import {ID20VRF} from "../../src/vrf/d20/interfaces/ID20VRF.sol";
 
-/// audit6b: independent review of 268a1f7.
+/// audit6b: independent review of 268a1f7. L-01, L-02 and INFO-01 flipped in round 4 to assert the fixed behaviour.
 contract A6bFindings is Base {
     uint256 constant M3 = 3; // the Vault machine as Deploy.s.sol configures it: 10 USDC, band 6000..8800
     uint256 constant P3 = 10 ether;
@@ -51,60 +51,91 @@ contract A6bFindings is Base {
         assertEq(rtpMin, 6000);
     }
 
-    /// L-01: refundSealed's clock (pause / off / stale) is meant to be unresettable, but `unpause` and
-    /// `setMachineActive(true)` clear it. An owner batch [setPrizes (fresh), unpause, pause] or
-    /// [setPrizes, setMachineActive(true), setMachineActive(false)] every < 3 days restarts it with no window in which
-    /// anyone can open: sealed boxes stay locked for good. With a swapped price source (junk table) this turns into a
-    /// "open into junk or wait forever" squeeze on every holder.
-    function test_l01_ownerBatchResetsSealedRefundClock() public {
+    /// L-01 fixed: the owner batch [setPrizes (fresh), unpause, pause, setMachineActive(true), setMachineActive(false)]
+    /// no longer restarts refundSealed's clock: unpause and a switch back on keep the pause and off clocks until the
+    /// contract / machine has been back in service a full day, so 3 days after the first pause the boxes refund.
+    function test_fixed_l01_ownerBatchCannotResetSealedRefundClock() public {
         box.setPrizes(M1, _table(address(nvda), P1));
         _play(alice, M1, 3);
         box.pause();
         box.setMachineActive(M1, false);
 
-        for (uint256 i = 1; i <= 4; ++i) {
-            vm.warp(T0 + i * (2 days + 23 hours));
-            // one multisig batch: fresh table, clocks cleared and restarted in the same transaction
-            box.setPrizes(M1, _table(address(nvda), P1));
-            box.unpause();
-            box.pause();
-            box.setMachineActive(M1, true);
-            box.setMachineActive(M1, false);
-            vm.warp(T0 + i * (2 days + 23 hours) + 2 hours); // past 3 days since the previous pause and switch-off
-            vm.prank(alice);
-            vm.expectRevert(Arclaw.NotExpired.selector);
-            box.refundSealed(M1, 3);
-        }
-        // last check at T0 + 4 x 71 h + 2 h = T0 + 286 h: ~12 days locked, off and paused the whole time
-        assertEq(box.balanceOf(alice, M1), 3);
+        vm.warp(T0 + 2 days + 23 hours);
+        // one multisig batch: fresh table, clocks "cleared" and restarted in the same transaction
+        box.setPrizes(M1, _table(address(nvda), P1));
+        box.unpause();
+        box.pause();
+        box.setMachineActive(M1, true);
+        box.setMachineActive(M1, false);
+        assertEq(box.pausedSince(), T0, "pause clock kept");
+        assertEq(box.sealedRefundAt(M1), T0 + 3 days);
+        vm.warp(T0 + 2 days + 23 hours + 2 hours); // past 3 days since the pause and switch-off
+        uint256 a0 = alice.balance;
+        vm.prank(alice);
+        box.refundSealed(M1, 3);
+        assertEq(alice.balance - a0, 3 * P1, "refunded on time");
     }
 
-    /// L-02: a dead or paused VRF coordinator stops every open, but sealed boxes keep no exit while the operator's
-    /// bot keeps repricing (fresh table) and the owner has not paused or switched the machine off: refundSealed has no
-    /// clock for "cannot be opened".
-    function test_l02_deadCoordinatorTrapsSealedBoxesWhileTablesStayFresh() public {
+    /// L-01 fixed, machine clock alone (contract not paused): on+off in one batch keeps the off clock.
+    function test_fixed_l01_machineOnOffBatchKeepsOffClock() public {
+        box.setPrizes(M1, _table(address(nvda), P1));
+        _play(alice, M1, 1);
+        box.setMachineActive(M1, false);
+        vm.warp(T0 + 2 days);
+        box.setPrizes(M1, _table(address(nvda), P1)); // table fresh: only the off clock runs
+        box.setMachineActive(M1, true);
+        box.setMachineActive(M1, false);
+        assertEq(box.sealedRefundAt(M1), T0 + 3 days, "off clock kept");
+        vm.warp(T0 + 3 days);
+        vm.prank(alice);
+        box.refundSealed(M1, 1);
+
+        // a full day on resets it: the next switch-off starts a new clock
+        box.setPrizes(M1, _table(address(nvda), P1));
+        box.setMachineActive(M1, true);
+        _play(alice, M1, 1);
+        vm.warp(T0 + 4 days);
+        box.setPrizes(M1, _table(address(nvda), P1));
+        box.setMachineActive(M1, false);
+        assertEq(box.sealedRefundAt(M1), T0 + 7 days, "new clock after a day of service");
+        vm.prank(alice);
+        vm.expectRevert(Arclaw.NotExpired.selector);
+        box.refundSealed(M1, 1);
+    }
+
+    /// L-02 fixed: a dead or paused VRF coordinator no longer traps sealed boxes behind fresh tables: the guardian
+    /// (a hot key, pause only) or anyone with pauseIfVrfDown pauses, which starts the refundSealed clock.
+    function test_fixed_l02_deadCoordinatorGuardianPausesAndBoxesRefund() public {
+        address guard = makeAddr("guardian");
+        box.setGuardian(guard);
         box.setPrizes(M1, _table(address(nvda), P1));
         _play(alice, M1, 2);
         vm.mockCallRevert(address(vrf), abi.encodeWithSelector(ID20VRF.requestRandomness.selector), "dead");
-        for (uint256 d = 1; d <= 10; ++d) {
+        vm.prank(guard);
+        box.pause();
+        for (uint256 d = 1; d <= 3; ++d) {
             vm.warp(T0 + d * 1 days - 1 hours);
             Arclaw.OutcomeInput[] memory fresh = _table(address(nvda), P1);
             vm.prank(op);
             box.operatorSetPrizes(M1, fresh); // reprice bot keeps running
-            uint256 tid = box.currentTable(M1) - 1;
-            vm.prank(alice);
-            vm.expectRevert();
-            box.open(M1, 1, tid);
             vm.prank(alice);
             vm.expectRevert(Arclaw.NotExpired.selector);
             box.refundSealed(M1, 2);
         }
+        vm.warp(T0 + 3 days);
+        uint256 a0 = alice.balance;
+        vm.prank(alice);
+        box.refundSealed(M1, 2);
+        assertEq(alice.balance - a0, 2 * P1);
+        // the guardian cannot undo it
+        vm.prank(guard);
+        vm.expectRevert();
+        box.unpause();
     }
 
-    /// INFO-01: an expired request's fee comes back as FREE balance (anyone may call D20 refundRequest), while the
-    /// opener's top-up it contains is owed but not reserved. Refund the fee early, withdraw the free balance, then
-    /// returnBoxes credits the top-up with nothing behind it: reserves go under water by the top-up.
-    function test_info01_topUpRefundIsFreeBalanceUntilRepaid() public {
+    /// INFO-01 fixed: the top-up D20 refunds early lands in topUpReserve, not the free balance: the owner's withdraw
+    /// leaves it, returnBoxes pays it back in cash and the reserves stay backed.
+    function test_fixed_info01_topUpReservedUntilRepaid() public {
         box.setPrizes(M1, _table(address(nvda), P1));
         vrf.setFee(0.3 ether); // subsidy 0.1, alice tops up 0.2
         _play(alice, M1, 1);
@@ -112,17 +143,20 @@ contract A6bFindings is Base {
         vm.prank(alice);
         (uint256 id, uint256 req) = box.open{value: 0.2 ether}(M1, 1, tid);
         assertEq(box.openingTopUp(id), 0.2 ether);
+        assertEq(box.topUpReserve(), 0.2 ether);
 
-        vm.warp(block.timestamp + 61);
-        vrf.refundRequest(req); // anyone; 0.3 lands as unreserved
-        box.withdraw(address(this), box.freeBalance()); // owner takes it, alice's 0.2 included
+        vm.warp(T0 + 61);
+        vrf.refundRequest(req); // anyone; 0.3 lands
+        box.withdraw(address(this), box.freeBalance()); // owner takes the free balance, alice's 0.2 is not in it
 
-        vm.warp(block.timestamp + 1 days + 1); // table aged out: returnBoxes allowed
+        vm.warp(T0 + 1 days + 62); // table aged out: returnBoxes allowed
+        uint256 a0 = alice.balance;
         vm.prank(alice);
         box.returnBoxes(id);
         uint256 reserves = box.reservedCredit() + box.pendingReserve() + box.sealedReserve() + box.totalOwed();
-        assertEq(box.credit(alice), 0.2 ether, "top-up became credit");
-        assertEq(reserves - address(box).balance, 0.2 ether, "reserves under water by the top-up");
+        assertEq(alice.balance - a0, 0.2 ether, "top-up paid back");
+        assertEq(box.credit(alice), 0);
+        assertGe(address(box).balance, reserves, "reserves backed");
     }
 
     receive() external payable {}

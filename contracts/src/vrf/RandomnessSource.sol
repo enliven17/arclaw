@@ -27,6 +27,10 @@ abstract contract RandomnessSource {
     ///      no sense (no deadline). Must never revert.
     function _randomnessLost(uint256 requestId) internal view virtual returns (bool);
 
+    /// @dev Probe: true when quoting or sending a request (each call given `gasLimit`) reverts right now. When the
+    ///      request goes through it returns false and the CALLER MUST REVERT, which undoes the request and its fee.
+    function _randomnessDown(uint32 callbackGasLimit, uint256 gasLimit) internal virtual returns (bool);
+
     /// @dev Best effort: reclaim the fee of an expired request into this contract. Must never revert.
     function _refundRandomness(uint256 requestId) internal virtual;
 
