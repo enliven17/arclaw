@@ -20,6 +20,7 @@ import { SealedBox } from "@/components/pack/SealedBox";
 import { StockCard } from "@/components/landing/StockCard";
 import { variantOf } from "@/components/claw/view";
 import { toUsdc, type DrawnBox } from "@/lib/arclaw/contract";
+import { requestShareLink } from "@/lib/share-client";
 import { usdc } from "@/lib/stocks";
 import { cn } from "@/lib/cn";
 
@@ -29,15 +30,6 @@ export type RevealWaiting = { label: string; action?: { label: string; onClick: 
 
 const BIG = new Set(["Legendary", "Jackpot"]);
 const RARE = new Set(["Rare", "Epic"]);
-
-export function pullUrl(box: DrawnBox): string {
-  const p = new URLSearchParams({
-    tickers: box.cards.map((c) => c.ticker).join(","),
-    amounts: box.cards.map((c) => toUsdc(c.valueWei).toFixed(2)).join(","),
-    tier: box.tierName,
-  });
-  return `/pull?${p.toString()}`;
-}
 
 export function RevealOverlay({
   open,
@@ -293,7 +285,7 @@ export function RevealOverlay({
                     {box.tierName} <span className="money text-cream">{usdc(box.cards.reduce((t, c) => t + toUsdc(c.valueWei), 0))} USDC</span>
                   </p>
                   <div className="flex flex-wrap justify-center gap-2">
-                    <ShareButton url={pullUrl(box)} />
+                    <ShareButton box={box} />
                     {index + 1 < count ? (
                       <button type="button" className="btn-cream" onClick={() => setIndex(index + 1)}>
                         Next box
@@ -329,24 +321,29 @@ export function RevealOverlay({
   );
 }
 
-function ShareButton({ url }: { url: string }) {
-  const [copied, setCopied] = useState(false);
+function ShareButton({ box }: { box: DrawnBox }) {
+  const [state, setState] = useState<"idle" | "busy" | "copied" | "failed">("idle");
   const share = async () => {
-    const full = `${window.location.origin}${url}`;
+    if (!box.txHash) return setState("failed");
+    setState("busy");
     try {
-      if (navigator.share) await navigator.share({ url: full, title: "My arclaw pull" });
-      else {
+      const full = `${window.location.origin}${await requestShareLink(box.txHash, box.boxIndex)}`;
+      if (navigator.share) {
+        setState("idle");
+        await navigator.share({ url: full, title: "My arclaw pull" });
+      } else {
         await navigator.clipboard.writeText(full);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1600);
+        setState("copied");
+        setTimeout(() => setState("idle"), 1600);
       }
-    } catch {
-      // Share sheet dismissed.
+    } catch (e) {
+      // A dismissed share sheet is not a failure; anything else is.
+      setState(e instanceof DOMException && e.name === "AbortError" ? "idle" : "failed");
     }
   };
   return (
-    <button type="button" className="btn-ghost" onClick={() => void share()}>
-      {copied ? "Link copied" : "Share"}
+    <button type="button" className="btn-ghost" disabled={state === "busy"} onClick={() => void share()}>
+      {state === "copied" ? "Link copied" : state === "failed" ? "Could not share" : "Share"}
     </button>
   );
 }

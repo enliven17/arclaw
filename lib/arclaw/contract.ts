@@ -266,18 +266,19 @@ export function linkFromLogs(logs: readonly Log[]): { linkId: bigint; expiresAt:
 }
 
 export type DrawnCard = { ticker: string; name: string; token: Address; amount: bigint; paid: boolean; valueWei: bigint };
-export type DrawnBox = { machineId: number; boxIndex: number; tier: number; tierName: string; valueWei: bigint; boosted: boolean; cards: DrawnCard[] };
+export type DrawnBox = { machineId: number; boxIndex: number; tier: number; tierName: string; valueWei: bigint; boosted: boolean; cards: DrawnCard[]; /** The reveal transaction, what a share link is signed from. */ txHash?: `0x${string}` };
 
 /** The boxes a reveal() paid, from its receipt: one OutcomeDrawn per box, three CardDrawn per box. */
 export async function boxesFromLogs(client: PublicClient, logs: readonly Log[]): Promise<DrawnBox[]> {
   const events = decode(logs, arclawAbi, ARCLAW);
+  const txHash = logs.find((l) => l.transactionHash)?.transactionHash ?? undefined;
   const boxes = new Map<number, DrawnBox>();
   for (const e of events) {
     if (e.eventName !== "OutcomeDrawn") continue;
     const b = Number(e.args.boxIndex);
     const machineId = Number(e.args.machineId);
     const tier = Number(e.args.tier);
-    boxes.set(b, { machineId, boxIndex: b, tier, tierName: tierName(machineId, tier), valueWei: e.args.valueUsdc as bigint, boosted: Boolean(e.args.boosted), cards: [] });
+    boxes.set(b, { machineId, boxIndex: b, tier, tierName: tierName(machineId, tier), valueWei: e.args.valueUsdc as bigint, boosted: Boolean(e.args.boosted), cards: [], txHash });
   }
   const cards = events.filter((e) => e.eventName === "CardDrawn");
   await Promise.all(
@@ -330,7 +331,7 @@ export async function revealedBoxes(client: PublicClient, openingId: bigint, fro
   return boxesFromLogs(client, logs);
 }
 
-export type Pull = { key: string; openingId: bigint; boxIndex: number; machineId: number; tier: number; tierName: string; blockNumber: bigint; cards: DrawnCard[] };
+export type Pull = { key: string; openingId: bigint; boxIndex: number; machineId: number; tier: number; tierName: string; blockNumber: bigint; cards: DrawnCard[]; txHash?: `0x${string}` };
 
 /** Every pack the address opened, newest first, from CardDrawn logs (opener is indexed). Card values are live. */
 export async function pullsOf(client: PublicClient, owner: Address): Promise<Pull[]> {
@@ -342,7 +343,7 @@ export async function pullsOf(client: PublicClient, owner: Address): Promise<Pul
     const key = `${e.args.openingId}-${e.args.boxIndex}`;
     const machineId = Number(e.args.machineId);
     const tier = Number(e.args.tier);
-    const p = packs.get(key) ?? { key, openingId: e.args.openingId as bigint, boxIndex: Number(e.args.boxIndex), machineId, tier, tierName: tierName(machineId, tier), blockNumber: l?.blockNumber ?? 0n, cards: [] };
+    const p = packs.get(key) ?? { key, openingId: e.args.openingId as bigint, boxIndex: Number(e.args.boxIndex), machineId, tier, tierName: tierName(machineId, tier), blockNumber: l?.blockNumber ?? 0n, cards: [], txHash: l?.transactionHash ?? undefined };
     const token = e.args.token as Address;
     const ticker = tickerOf(token);
     p.cards[Number(e.args.cardIndex)] = { ticker, name: stockOf(ticker).name, token, amount: e.args.amount as bigint, paid: Boolean(e.args.paid), valueWei: 0n };
