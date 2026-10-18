@@ -3,8 +3,10 @@
  * (`testnet` default | `mainnet`), picks the chain, the RPCs and our contract addresses (lib/deployments/*.json).
  * Pure and isomorphic: strings only, no SDK imports.
  *
- * Mainnet has no deployment yet: `contracts` is null there and the app says so instead of pointing anywhere.
+ * Until a deployment record exists for a network (lib/deployments/arc-<network>.json, written by the deploy script),
+ * `contracts` is null there and the app says so instead of pointing anywhere.
  */
+import mainnetFile from "@/lib/deployments/arc-mainnet.json";
 import testnet from "@/lib/deployments/arc-testnet.json";
 
 export type ArcNetwork = "testnet" | "mainnet";
@@ -34,6 +36,13 @@ export const ARC_USDC = "0x3600000000000000000000000000000000000000" as const;
 /** Arc drops transactions priced under 20 gwei. */
 export const MIN_FEE_PER_GAS = 20_000_000_000n;
 
+/** The record as the deploy script writes it; null while the file is the empty placeholder. */
+function recordOf(d: Partial<typeof testnet>): Contracts | null {
+  const address = /^0x[0-9a-fA-F]{40}$/;
+  if (!d.arclaw || !address.test(d.arclaw) || !d.desk || !d.priceSource || !d.vrfCoordinator || d.deployBlock == null || !d.stocks) return null;
+  return contractsOf(d as typeof testnet);
+}
+
 function contractsOf(d: typeof testnet): Contracts {
   const stocks = Object.fromEntries(Object.entries(d.stocks).map(([k, v]) => [k.replace(/\.arc$/i, ""), v as `0x${string}`]));
   const sell = (d as { sellDesk?: string }).sellDesk;
@@ -55,7 +64,7 @@ export function arcConfig(network: string | undefined = process.env.NEXT_PUBLIC_
     return {
       network: n,
       chain: { id: 5042, name: "Arc", rpcUrls: rpc.length ? rpc : ["https://rpc.mainnet.arc.io"], explorer: "https://explorer.arc.io" },
-      contracts: null,
+      contracts: recordOf(mainnetFile as Partial<typeof testnet>),
     };
   }
   return {

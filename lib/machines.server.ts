@@ -8,6 +8,7 @@
 import "server-only";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { ARC } from "./arc/config";
 import { MACHINES, type Machine } from "./machines";
 import { stockOf, type PullCard } from "./stocks";
 
@@ -24,7 +25,7 @@ function cardOf(c: unknown): PullCard | null {
 }
 
 export function withResolved(): Machine[] {
-  const file = join(process.cwd(), "lib/machines.resolved.json");
+  const file = join(process.cwd(), ARC.network === "mainnet" ? "lib/machines.resolved.mainnet.json" : "lib/machines.resolved.json");
   if (!existsSync(file)) return [...MACHINES];
   try {
     const json: unknown = JSON.parse(readFileSync(file, "utf8"));
