@@ -21,7 +21,7 @@ Bigger machine, better odds. Rarity of the top three tiers is the same everywher
 
 These are the values deployed. The Common pack is built 5.3% above the 0.5x floor (0.5265x) so a price dip inside the 5% guard never pushes it under the floor between reprices; `lib/machines.json` states it at that value, so its weights give the realised RTP directly. The Jackpot is listed at the 10x cap in `lib/machines.json` and built 1% under it (9.9x) so a one tick oracle move cannot push it over the cap; that costs 0.015 points of RTP.
 
-Guarantees, enforced on-chain per machine: every box is worth at least 0.5x (floor, checked again at live prices on every open), never more than 10x (cap), and the table's expected return, including the maximum luck boost, sits inside the band (60 to 88%).
+Guarantees, enforced on-chain per machine: every box is worth at least 0.5x (floor, checked again at live prices on every open), never more than 10x (cap), and the table's expected return, including the maximum luck boost, sits inside that machine's own band: Single 74 to 76%, Stack 79 to 81%, Vault 84 to 86%. The lower edge can only go up after deploy, so no reprice can take a machine more than one point under its advertised return.
 
 ## Margin after costs
 

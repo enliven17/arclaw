@@ -10,8 +10,16 @@ import raw from "./machines.json";
 import { stockOf, type PullCard } from "./stocks";
 
 type RawTier = { name: string; multiplierBps: number; weight: number };
-type RawMachine = { id: number; name: string; priceUsdc: number; capBps: number; tiers: RawTier[] };
-type Raw = { policy: { floorBps: number; rtpMinBps: number; rtpMaxBps: number; cardsPerBox: number }; machines: RawMachine[] };
+type RawMachine = {
+  id: number;
+  name: string;
+  priceUsdc: number;
+  capBps: number;
+  rtpMinBps: number;
+  rtpMaxBps: number;
+  tiers: RawTier[];
+};
+type Raw = { policy: { floorBps: number; cardsPerBox: number }; machines: RawMachine[] };
 
 export type Tier = {
   name: string;
@@ -33,15 +41,17 @@ export type Machine = {
   floor: number;
   /** Expected return as a fraction of the price, from the table. */
   rtp: number;
+  /** On-chain RTP band of this machine (fractions). rtpMin only moves up after deploy: it is what a sold box keeps. */
+  rtpMin: number;
+  rtpMax: number;
   tiers: Tier[];
 };
 
 const data = raw as Raw;
 
+/** Rules shared by every machine. The RTP band is per machine: `Machine.rtpMin` and `Machine.rtpMax`. */
 export const POLICY = {
   floor: data.policy.floorBps / 10_000,
-  rtpMin: data.policy.rtpMinBps / 10_000,
-  rtpMax: data.policy.rtpMaxBps / 10_000,
   cardsPerBox: data.policy.cardsPerBox,
 } as const;
 
@@ -63,6 +73,8 @@ function build(m: RawMachine): Machine {
     // The promise on chain (every box is worth at least this much of the price), not the lowest tier, which is built a little above it.
     floor: POLICY.floor,
     rtp: tiers.reduce((s, t) => s + t.multiplier * t.probability, 0),
+    rtpMin: m.rtpMinBps / 10_000,
+    rtpMax: m.rtpMaxBps / 10_000,
     tiers,
   };
 }

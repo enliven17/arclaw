@@ -41,14 +41,21 @@ abstract contract ArcConfig is Script {
         string name;
         uint256 priceUsdc;
         uint256 capBps;
+        /// Per machine RTP band (audit 6b M-01). rtpMin only moves up after deploy, so it is the promise a sold box
+        /// keeps: about 1 point under the advertised return. rtpMax about 1 point over it, above the max-boost RTP.
+        uint256 rtpMinBps;
+        uint256 rtpMaxBps;
         Tier[] tiers;
     }
 
+    /// Rules shared by every machine. The RTP band is per machine (MachineCfg).
     struct Policy {
         uint256 floorBps;
-        uint256 rtpMinBps;
-        uint256 rtpMaxBps;
     }
+
+    /// Mirrors Arclaw.MAX_RTP_BPS and MAX_PRICE_MOVE_BPS: setMachine requires rtpMax * (1 + 5%) <= 95%.
+    uint256 constant MAX_RTP_BPS = 9500;
+    uint256 constant MAX_PRICE_MOVE_BPS = 500;
 
     // NVDA TSLA AAPL AMZN META GOOGL SPY QQQ (pandock/web/src/config.ts FEATURED)
     function symbols() internal pure returns (string[8] memory) {
@@ -94,8 +101,6 @@ abstract contract ArcConfig is Script {
 
     function readPolicy(string memory json) internal pure returns (Policy memory p) {
         p.floorBps = vm.parseJsonUint(json, ".policy.floorBps");
-        p.rtpMinBps = vm.parseJsonUint(json, ".policy.rtpMinBps");
-        p.rtpMaxBps = vm.parseJsonUint(json, ".policy.rtpMaxBps");
         require(vm.parseJsonUint(json, ".policy.cardsPerBox") == 3, "cardsPerBox must be 3");
     }
 
@@ -109,8 +114,21 @@ abstract contract ArcConfig is Script {
             ms[i].name = vm.parseJsonString(json, string.concat(k, ".name"));
             ms[i].priceUsdc = vm.parseJsonUint(json, string.concat(k, ".priceUsdc"));
             ms[i].capBps = vm.parseJsonUint(json, string.concat(k, ".capBps"));
+            ms[i].rtpMinBps = vm.parseJsonUint(json, string.concat(k, ".rtpMinBps"));
+            ms[i].rtpMaxBps = vm.parseJsonUint(json, string.concat(k, ".rtpMaxBps"));
             ms[i].tiers = abi.decode(vm.parseJson(json, string.concat(k, ".tiers")), (Tier[]));
         }
+    }
+
+    /// setMachine's bounds for a machine's own band, checked before any transaction so a bad machines.json fails the
+    /// dry run with a readable reason.
+    function checkRules(MachineCfg memory m, uint256 floorBps) internal pure {
+        require(floorBps >= 5000 && floorBps <= m.rtpMinBps, "floor must be in [5000, rtpMin]");
+        require(m.rtpMinBps < m.rtpMaxBps, "rtpMin must be under rtpMax");
+        require(m.rtpMaxBps <= m.capBps, "rtpMax above cap");
+        require(
+            m.rtpMaxBps * (10_000 + MAX_PRICE_MOVE_BPS) <= MAX_RTP_BPS * 10_000, "rtpMax x 1.05 above MAX_RTP_BPS"
+        );
     }
 
     /// Safety margin, in bps of a pack's value, for tiers sitting on the floor or the cap. The contract re-prices
@@ -287,7 +305,7 @@ abstract contract OddsWriter is ArcConfig {
 /// Env:
 ///   OWNER         final owner (multisig). Mainnet: required. Ownable2Step: it must acceptOwnership().
 ///   OPERATOR      treasury agent (reprices, restocks). Mainnet: required and must differ from the deployer.
-///   RESERVE_FLOOR (wei, float for big wins, default 0), BOX_URI, DAILY_CAP (wei, default 50 USDC), MAX_TABLE_AGE (seconds; testnet default 30 days, mainnet 24 h),
+///   RESERVE_FLOOR (wei, float for big wins, default 0), BOX_URI, DAILY_CAP (wei, default 50 USDC), MAX_TABLE_AGE (seconds; default 1 day on both chains, the Arclaw maximum),
 ///   POOL_USD (testnet seed per stock, USD 6 dp, default $2000), MOCK_PRICES=1 (testnet: fixed prices, no fork).
 /// Deployment files (lib/deployments/arc-<chain>.json, lib/machines.resolved*.json) are written only on --broadcast.
 contract Deploy is OddsWriter {
@@ -402,13 +420,14 @@ contract Deploy is OddsWriter {
         // 60 USDC per card (a Vault jackpot card is ~49.5). RESERVE_FLOOR keeps a float for Epic and better.
         box.setJit(desk, 100, 20, 60 ether, vm.envOr("RESERVE_FLOOR", uint256(0)));
         for (uint256 i; i < ms.length; ++i) {
+            checkRules(ms[i], p.floorBps);
             box.setMachine(
                 ms[i].id,
                 uint128(ms[i].priceUsdc * 1e18),
                 uint16(p.floorBps),
                 uint32(ms[i].capBps),
-                uint16(p.rtpMinBps),
-                uint16(p.rtpMaxBps)
+                uint16(ms[i].rtpMinBps),
+                uint16(ms[i].rtpMaxBps)
             );
             box.setPrizes(ms[i].id, buildTable(ms[i], p.floorBps, tokens, prices));
         }

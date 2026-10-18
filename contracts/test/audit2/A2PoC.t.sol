@@ -167,7 +167,7 @@ contract A2PoCTest is Base {
         Arclaw b2 = new Arclaw("", address(new MockVRFCoordinator()), 0.05 ether);
         b2.setPolicy(IPriceSource(address(ps)), 0);
         ArcConfig.MachineCfg memory m = ms[0];
-        b2.setMachine(m.id, uint128(m.priceUsdc * 1e18), uint16(pol.floorBps), uint32(m.capBps), uint16(pol.rtpMinBps), uint16(pol.rtpMaxBps));
+        b2.setMachine(m.id, uint128(m.priceUsdc * 1e18), uint16(pol.floorBps), uint32(m.capBps), uint16(m.rtpMinBps), uint16(m.rtpMaxBps));
         Arclaw.OutcomeInput[] memory table = bld.buildFor(m, tok, px);
 
         uint256 snap = vm.snapshotState();

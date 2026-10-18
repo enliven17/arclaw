@@ -7,7 +7,7 @@
  */
 import { useMemo, useState } from "react";
 import { SplitHeading } from "@/components/motion/SmoothScroll";
-import { POLICY, fmtMultiplier, fmtPct, pickTier, seeded, type Machine } from "@/lib/machines";
+import { fmtMultiplier, fmtPct, pickTier, seeded, type Machine } from "@/lib/machines";
 import { usdc } from "@/lib/stocks";
 import { MachineSwitch } from "./MachineSwitch";
 
@@ -101,7 +101,7 @@ export function Odds({ machines }: { machines: Machine[] }) {
             {[
               { k: "Never less than", v: fmtPct(m.floor, 0), d: `Every box pays at least ${usdc(m.priceUsdc * m.floor)} USDC back in stocks.` },
               { k: "Never more than", v: fmtMultiplier(m.cap), d: `The cap is set per machine and checked on every payout.` },
-              { k: "Expected return", v: fmtPct(m.rtp), d: `Computed from this table. The contract keeps it between ${fmtPct(POLICY.rtpMin, 0)} and ${fmtPct(POLICY.rtpMax, 0)}.` },
+              { k: "Expected return", v: fmtPct(m.rtp), d: `Computed from this table. The contract keeps it between ${fmtPct(m.rtpMin, 0)} and ${fmtPct(m.rtpMax, 0)}.` },
               { k: "The draw", v: "VRF", d: "Every box comes from a verifiable random draw you can check on the explorer." },
             ].map((g) => (
               <div key={g.k} className="flex flex-col rounded-[18px] border border-line bg-panel p-5 md:p-6">

@@ -189,8 +189,8 @@ contract A5aFindings is Base {
     }
 
     /// INFO-3 fixed: machines.json writes the floor tier as deployed (5265) and its weights are retuned, so the
-    /// tables land at 75.0 / 80.0 / 85.0% realised RTP (max boost +0.16) inside the on-chain band. rtpMinBps stays
-    /// 6000: floor and rtpMin only move up on chain, the realised targets are tested here and in MachinesJson.t.sol.
+    /// tables land at 75.0 / 80.0 / 85.0% realised RTP (max boost +0.16) inside the on-chain band. Since audit 6b
+    /// M-01 each machine has its own band (about target +- 1 point), tested here and in MachinesJson.t.sol.
     function test_fixed_info_machinesJsonOnProductTargets() public {
         Builder b = new Builder();
         Arclaw x = new Arclaw("", address(new MockVRFCoordinator()), 0.1 ether);
@@ -212,8 +212,8 @@ contract A5aFindings is Base {
         for (uint256 i; i < 3; ++i) {
             ArcConfig.MachineCfg memory m = ms[i];
             x.setMachine(
-                m.id, uint128(m.priceUsdc * 1e18), uint16(pol.floorBps), uint32(m.capBps), uint16(pol.rtpMinBps),
-                uint16(pol.rtpMaxBps)
+                m.id, uint128(m.priceUsdc * 1e18), uint16(pol.floorBps), uint32(m.capBps), uint16(m.rtpMinBps),
+                uint16(m.rtpMaxBps)
             );
             x.setPrizes(m.id, b.buildFor(m, tok, px));
             (uint256 rtp, uint256 minBps,,) = l.stats(x, m.id);

@@ -1,8 +1,6 @@
 {
   "policy": {
     "floorBps": 5000,
-    "rtpMinBps": 6000,
-    "rtpMaxBps": 8800,
     "cardsPerBox": 3
   },
   "machines": [
@@ -11,6 +9,8 @@
       "name": "Single",
       "priceUsdc": 1,
       "capBps": 100000,
+      "rtpMinBps": 7400,
+      "rtpMaxBps": 7600,
       "tiers": [
         {
           "name": "Common",
@@ -49,6 +49,8 @@
       "name": "Stack",
       "priceUsdc": 5,
       "capBps": 100000,
+      "rtpMinBps": 7900,
+      "rtpMaxBps": 8100,
       "tiers": [
         {
           "name": "Common",
@@ -87,6 +89,8 @@
       "name": "Vault",
       "priceUsdc": 10,
       "capBps": 100000,
+      "rtpMinBps": 8400,
+      "rtpMaxBps": 8600,
       "tiers": [
         {
           "name": "Common",
