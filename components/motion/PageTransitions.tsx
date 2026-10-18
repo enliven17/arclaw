@@ -43,15 +43,24 @@ export function TransitionClaw() {
   return (
     <div className="transition-claw" aria-hidden="true">
       <div className="transition-claw-cable" />
-      <svg viewBox={`0 1 ${MARK_SIZE} 23`} width={MARK_SIZE * 3} height={23 * 3}>
+      <svg viewBox={`0 1 ${MARK_SIZE} 23`} width={MARK_SIZE * SCALE} height={23 * SCALE}>
         <path fill="var(--color-cream)" d={MARK_BODY} />
-        <path fill="none" stroke="var(--color-claw)" strokeWidth={PRONG_W} strokeLinejoin="miter" d={MARK_PRONGS} />
+        <g fill="none" stroke="var(--color-claw)" strokeWidth={PRONG_W} strokeLinejoin="miter">
+          <path className="prong-l" d={LEFT} />
+          <path d={MID} />
+          <path className="prong-r" d={RIGHT} />
+        </g>
       </svg>
     </div>
   );
 }
 
-const DROP_MS = 200;
+// Same scale as the splash claw (24 units to 144px), prongs split so the outer two can swing (order: left, right, mid).
+const SCALE = 6;
+const [LEFT, RIGHT, MID] = MARK_PRONGS.split("M").filter(Boolean).map((d) => `M${d}`);
+// The claw drops to the middle of the screen with its prongs open, then they shut on the page.
+const DROP_MS = 380;
+const GRIP_MS = 160;
 
 /** A link between the landing and the app: the claw drops, grips, and the navigation hauls the page away. */
 export function ClawLink({ href, onClick, children, ...rest }: ComponentProps<typeof Link> & { href: string }) {
@@ -65,11 +74,17 @@ export function ClawLink({ href, onClick, children, ...rest }: ComponentProps<ty
         if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
         if (!("startViewTransition" in document) || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
         e.preventDefault();
-        document.documentElement.dataset.claw = "grip";
+        const html = document.documentElement;
+        html.dataset.claw = "drop";
         play("drop");
+        router.prefetch(href);
         window.setTimeout(() => {
-          play("motor");
-          router.push(href, { transitionTypes: ["claw"] });
+          html.dataset.claw = "grip";
+          play("grip");
+          window.setTimeout(() => {
+            play("motor");
+            router.push(href, { transitionTypes: ["claw"] });
+          }, GRIP_MS);
         }, DROP_MS);
       }}
     >
