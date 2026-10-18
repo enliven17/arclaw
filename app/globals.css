@@ -502,64 +502,71 @@ html:not(.js) .how-step {
   pointer-events: none;
 }
 
-/* ---------- Page transitions (components/motion/PageTransitions.tsx) ---------- */
+/* ---------- Page transitions (components/motion/PageTransitions.tsx, ClawCurtain.tsx) ---------- */
 
-/* The claw that hauls the page between the landing and the app: parked above the screen, dropped by html[data-claw]. */
-.transition-claw {
+/* The claw curtain (components/motion/ClawCurtain.tsx): hidden until a ClawLink runs it, then it blocks the page. The
+   panel waits below the frame; the claw rides on its top edge. All motion is transform, set from script. */
+.curtain {
+  display: none;
   position: fixed;
-  left: 50%;
-  top: 0;
-  z-index: 400;
-  pointer-events: none;
-  transform: translate(-50%, -110%);
-  view-transition-name: claw-rig;
+  inset: 0;
+  z-index: 500;
+  overflow: hidden;
 }
-/* The cable runs off the top of the screen wherever the claw hangs; 12px matches the splash claw's cable. */
-.transition-claw-cable {
+.curtain[data-on] {
+  display: block;
+}
+.curtain-panel {
+  position: absolute;
+  inset: 0;
+  background: var(--color-ink);
+  transform: translateY(100%);
+  will-change: transform;
+}
+/* 138px tall claw; its prong tips hang 36px below the panel edge, as if gripping it. */
+.curtain-rig {
+  position: absolute;
+  left: 50%;
+  top: -102px;
+  width: 144px;
+  height: 138px;
+  margin-left: -72px;
+  transform: translateY(-115vh);
+  will-change: transform;
+}
+.curtain-rig svg {
+  display: block;
+  overflow: visible;
+}
+/* The cable runs off the top of the screen wherever the claw hangs; 12px matches the splash claw. */
+.curtain-cable {
   position: absolute;
   left: 50%;
   bottom: calc(100% - 1px);
   width: 12px;
-  height: 100vh;
+  height: 160vh;
   transform: translateX(-50%);
   background: var(--color-cream);
 }
-.transition-claw svg {
-  display: block;
-  overflow: visible;
-}
-.transition-claw .prong-l,
-.transition-claw .prong-r {
+.curtain .prong-l,
+.curtain .prong-r {
   transform-box: view-box;
-  transition: transform 140ms cubic-bezier(0.5, 0, 0.75, 0);
+  transition: transform 120ms cubic-bezier(0.5, 0, 0.75, 0);
 }
-/* Prongs open on the way down, shut on the grip. */
-.transition-claw .prong-l {
+/* Prongs open on the way down, shut from the grip on. */
+.curtain .prong-l {
   transform-origin: 9px 10.5px;
   transform: rotate(22deg);
 }
-.transition-claw .prong-r {
+.curtain .prong-r {
   transform-origin: 15px 10.5px;
   transform: rotate(-22deg);
 }
-html[data-claw="grip"] .transition-claw .prong-l,
-html[data-claw="grip"] .transition-claw .prong-r {
+.curtain:not([data-phase="drop"]) .prong-l,
+.curtain:not([data-phase="drop"]) .prong-r {
   transform: rotate(0deg);
 }
-/* Down to the middle of the screen: decelerates into place with a small settle. */
-html[data-claw] .transition-claw {
-  transform: translate(-50%, calc(50vh - 60%));
-  transition: transform 380ms cubic-bezier(0.22, 1, 0.36, 1.08);
-}
 
-@keyframes vt-haul {
-  from {
-    transform: translateY(0);
-  }
-  to {
-    transform: translateY(-110vh);
-  }
-}
 @keyframes vt-fade-out {
   to {
     opacity: 0;
@@ -572,22 +579,10 @@ html[data-claw] .transition-claw {
   }
 }
 
-/* Claw: the old viewport (with the claw gripping it) is hauled up, over the new page, which waits still underneath. */
-html:active-view-transition-type(claw)::view-transition-old(root) {
-  z-index: 2;
-  animation: vt-haul 480ms cubic-bezier(0.55, 0, 0.75, 0.15) both;
-}
+/* Claw: the swap happens under the black curtain, with no animation of its own. */
+html:active-view-transition-type(claw)::view-transition-old(root),
 html:active-view-transition-type(claw)::view-transition-new(root) {
-  z-index: 1;
   animation: none;
-}
-::view-transition-group(claw-rig) {
-  z-index: 3;
-  animation: none;
-}
-::view-transition-old(claw-rig),
-::view-transition-new(claw-rig) {
-  animation: vt-haul 480ms cubic-bezier(0.55, 0, 0.75, 0.15) both;
 }
 
 /* Everything else: the old page leaves fast, the new one rises in a little after. */
@@ -664,6 +659,12 @@ html:active-view-transition-type(claw)::view-transition-new(root) {
   }
 }
 
+/* Under the claw curtain the new page waits (paused at its first frame) until the reveal. */
+html[data-curtain] .app-enter > * > *,
+html[data-curtain] .enter-cards > li {
+  animation-play-state: paused;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .app-enter > * > *,
   .enter-cards > li {
@@ -674,7 +675,7 @@ html:active-view-transition-type(claw)::view-transition-new(root) {
   ::view-transition-new(*) {
     animation: none !important;
   }
-  .transition-claw {
-    display: none;
+  .curtain {
+    display: none !important;
   }
 }
