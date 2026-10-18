@@ -4,8 +4,8 @@ const nextConfig: NextConfig = {
   devIndicators: false,
   // A stray lockfile in the home directory would otherwise be taken as the workspace root.
   turbopack: { root: process.cwd() },
-  // Cabinet backs (scripts/cabinet-svgs.tsx) are on every page with a machine: cache them for a day, revalidate
-  // in the background for a week. Not immutable: the file names carry no hash.
+  // Cabinet backs (scripts/cabinet-bake.tsx) are on every page with a machine: cache them for a day, revalidate in
+  // the background for a week. Not immutable: the file names carry no hash.
   async headers() {
     return [{ source: "/cabinet/:file", headers: [{ key: "Cache-Control", value: "public, max-age=86400, stale-while-revalidate=604800" }] }];
   },

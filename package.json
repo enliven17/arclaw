@@ -4,10 +4,11 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "tsx scripts/cabinet-svgs.tsx && next build",
+    "build": "next build",
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
+    "cabinet": "tsx scripts/cabinet-bake.tsx",
     "brand": "node brand/render.mjs",
     "shots": "node scripts/shots.mjs"
   },

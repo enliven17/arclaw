@@ -77,18 +77,18 @@
 .claw-fig .iso-line[data-tone="faint"] {
   stroke: var(--anatomy-faint);
 }
-.claw-fig .iso-dots > * {
+.claw-fig .iso-dots circle {
   fill: var(--anatomy-dot);
   stroke: none;
   opacity: 0.32;
 }
-.claw-fig .iso-dots[data-tone="hi"] > * {
+.claw-fig .iso-dots[data-tone="hi"] circle {
   opacity: 0.85;
 }
-.claw-fig .iso-dots[data-tone="mid"] > * {
+.claw-fig .iso-dots[data-tone="mid"] circle {
   opacity: 0.45;
 }
-.claw-fig .iso-dots[data-tone="lo"] > * {
+.claw-fig .iso-dots[data-tone="lo"] circle {
   opacity: 0.2;
 }
 .claw-fig .iso-face-text {
