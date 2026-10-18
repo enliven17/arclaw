@@ -9,6 +9,7 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { Logo } from "@/components/Logo";
 import { SoundToggle } from "@/components/SoundToggle";
+import { AgeGate } from "@/components/app/AgeGate";
 import { WalletButton } from "@/components/wallet/WalletButton";
 import { WalletProvider } from "@/components/wallet/WalletProvider";
 import { ARC } from "@/lib/arc/config";
@@ -107,6 +108,7 @@ function Footer() {
 export function AppShell({ children }: { children: ReactNode }) {
   return (
     <WalletProvider>
+      <AgeGate />
       <Header />
       <main id="main" className="app-enter min-h-dvh pt-[96px] md:pt-14">
         {children}
