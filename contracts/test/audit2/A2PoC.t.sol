@@ -183,7 +183,7 @@ contract A2PoCTest is Base {
         b2.setPrizes(m.id, table);
 
         vm.revertToState(snap);
-        (t[0], p[0]) = (tok[6], px[6] * 95 / 100); // a real 5% SPY drop (2% of the pack) still reverts: floor holds
+        (t[0], p[0]) = (tok[6], px[6] * 80 / 100); // a real 20% SPY drop (8% of the pack, over the 5.3% floor margin) still reverts: floor holds
         ps.setPrices(t, p);
         vm.expectRevert();
         b2.setPrizes(m.id, table);
@@ -199,7 +199,7 @@ contract A2PoCTest is Base {
         box.setPrizes(M1, _table(address(nvda), P1));
         _play(alice, M1, 1);
         (uint256 id, uint256 req) = _open(alice, M1, 1);
-        vm.warp(block.timestamp + 61);
+        vm.warp(block.timestamp + 1 days + 1); // VRF expired and the table aged out
         vm.prank(alice);
         box.returnBoxes(id); // opener front-runs the (hypothetical) late fulfilment
         vrf.fulfillStarved(req, keccak256("late word")); // lands after: callback reverts, ignored

@@ -28,7 +28,7 @@ contract A3aJitTest is Base {
     /// an IOU (owed) the winner claims later, and the IOU pauses play and open. Refunds already accumulated in the
     /// reveal are kept out of JIT buys. Same scenario: bob's 3 pending boxes stay fully backed.
     function test_fixed_l01_bigWinCannotUnbackOtherPendingBoxes() public {
-        box.setMachine(M1, uint128(P1), 5000, 1_000_000, 6000, 9500);
+        box.setMachine(M1, uint128(P1), 5000, 1_000_000, 6000, 9000); // rtpMax <= 9047 (MAX_RTP_BPS after a 5% move)
         Arclaw.OutcomeInput[] memory t = new Arclaw.OutcomeInput[](2);
         t[0] = _pack(address(nvda), 90, 0, 0.5 ether);
         t[1] = _pack(address(nvda), 10, 3, 3 ether); // cards 1.2 / 1.2 / 0.6

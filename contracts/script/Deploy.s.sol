@@ -117,8 +117,12 @@ abstract contract ArcConfig is Script {
     /// a table at inclusion; without slack a 1-tick oracle move between simulation and broadcast (or between an
     /// operator's quote and its transaction) would revert setPrizes with BelowFloor or AboveCap.
     uint256 constant EDGE_MARGIN_BPS = 100; // 1%
+    /// Arclaw checks the floor again at open, at live prices, inside a 5% band (maxPriceMoveBps <= 500). A floor tier
+    /// built 5.3% above the floor (floor / 0.95 = +5.27%) can never fall under it before the price guard trips first,
+    /// so a small dip does not halt opens until the next reprice. Costs about 1 point of RTP (still inside the band).
+    uint256 constant FLOOR_MARGIN_BPS = 530;
 
-    /// One outcome per tier: a 3-card pack worth multiplier x price. A tier at (or under) the floor is built 1% above
+    /// One outcome per tier: a 3-card pack worth multiplier x price. A tier at (or under) the floor is built 5.3% above
     /// it and a tier at (or over) the cap 1% under it. Card amounts round up, except at the cap, where they round down.
     function buildTable(MachineCfg memory m, uint256 floorBps, address[8] memory tok, uint256[8] memory px)
         internal
@@ -131,7 +135,7 @@ abstract contract ArcConfig is Script {
             Tier memory tier = m.tiers[k];
             bool atCap = tier.multiplierBps >= m.capBps;
             uint256 mult = tier.multiplierBps <= floorBps
-                ? floorBps * (10_000 + EDGE_MARGIN_BPS) / 10_000
+                ? floorBps * (10_000 + FLOOR_MARGIN_BPS) / 10_000
                 : atCap ? m.capBps * (10_000 - EDGE_MARGIN_BPS) / 10_000 : tier.multiplierBps;
             uint256 target = price * mult / 10_000; // USDC 18 dp
             bool roundDown = atCap;

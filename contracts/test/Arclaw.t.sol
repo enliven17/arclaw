@@ -480,7 +480,7 @@ contract RulesTest is Base {
         _play(alice, M1, 3);
         (uint256 id,) = _open(alice, M1, 3);
         assertEq(box.pendingReserve(), 3 * P1);
-        vm.warp(block.timestamp + 61);
+        vm.warp(block.timestamp + 1 days + 1); // VRF expired and the table aged out: returnBoxes is open
         vm.prank(alice);
         box.returnBoxes(id);
         assertEq(box.pendingReserve(), 0);
@@ -668,7 +668,7 @@ contract StuckVrfTest is Base {
 
     function test_returnBoxes_reclaimsFee() public {
         (uint256 id, uint256 req) = _open(alice, M1, 1);
-        vm.warp(block.timestamp + 61);
+        vm.warp(block.timestamp + 1 days + 1); // VRF expired and the table aged out: returnBoxes is open
         uint256 bal = address(box).balance;
         vm.prank(alice);
         box.returnBoxes(id);
@@ -695,7 +695,7 @@ contract StuckVrfTest is Base {
         vm.prank(alice);
         vm.expectRevert(Arclaw.NotExpired.selector);
         box.returnBoxes(id);
-        vm.warp(block.timestamp + 61);
+        vm.warp(block.timestamp + 1 days + 1); // VRF expired and the table aged out: returnBoxes is open
         vm.prank(bob);
         vm.expectRevert(Arclaw.NotOpener.selector);
         box.returnBoxes(id);

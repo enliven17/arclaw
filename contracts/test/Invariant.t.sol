@@ -24,7 +24,9 @@ contract Handler is Test {
     constructor(Arclaw b, ArclawLinks l, MockVRFCoordinator v) {
         (box, links, vrf) = (b, l, v);
         actors = [makeAddr("a0"), makeAddr("a1"), makeAddr("a2")];
-        for (uint256 i; i < 3; ++i) vm.deal(actors[i], 1e30);
+        for (uint256 i; i < 3; ++i) {
+            vm.deal(actors[i], 1e30);
+        }
     }
 
     function _actor(uint256 s) internal view returns (address) {
@@ -60,6 +62,16 @@ contract Handler is Test {
         if (st != Arclaw.OpeningStatus.Pending) return;
         try vrf.fulfill(req, w) {} catch {}
         try box.reveal(id) {} catch {}
+    }
+
+    /// The operator went offline: tables age out, and three days later sealed boxes refund at their price.
+    function staleAndRefundSealed(uint256 s, uint256 n) external {
+        address a = _actor(s);
+        uint256 bal = box.balanceOf(a, _m(s));
+        if (bal == 0) return;
+        vm.warp(block.timestamp + 4 days + 1);
+        vm.prank(a);
+        box.refundSealed(_m(s), bound(n, 1, bal));
     }
 
     function expireAndRetry(uint256 i) external {

@@ -16,7 +16,11 @@ const notes = {
     '  AFTER that transfer is confirmed: a front-run reusing the pending linkKey (audit #2 L-3) makes it revert',
     '  with LinkKeyUsed, and that link must not be shared. Generate a fresh key and retry.',
     '- VRF fee: quote with coordinator.quoteFeeAt(callbackGasLimit, latest baseFee) plus a buffer (never',
-    '  quoteFee via eth_call). open() is subsidised; retry() is free only for the opener or operator.',
+    '  quoteFee via eth_call). open() is subsidised; retry() is free only for the opener, a keeper or the operator.',
+    '  An opener top-up is paid back when the request expires (openingTopUp). retry() reverts TableStale/BelowFloor',
+    '  once the pinned table can no longer open; returnBoxes() reverts NotExpired until the table aged out',
+    '  (tablePricedAt + maxTableAge). refundSealed(machineId, boxes) pays sealed boxes back once the machine has been',
+    '  off (offSince) or its table stale for 3 days; it reverts NotExpired before that.',
     '- Reads that moved off-chain for size: stats and quoteVrfFee live in ArclawLens (lib/abi/arclawLens.ts).',
   ],
 }

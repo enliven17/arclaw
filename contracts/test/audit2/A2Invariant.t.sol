@@ -705,7 +705,7 @@ contract A2InvariantTest is Test {
         uint256 snap = vm.snapshotState();
         for (uint256 i; i < h.openingCount(); ++i) {
             uint256 id = h.openingIds(i);
-            (address opener,,,, Arclaw.OpeningStatus st,, uint256 req,) = box.openings(id);
+            (address opener,, uint32 tableId,, Arclaw.OpeningStatus st,, uint256 req,) = box.openings(id);
             if (st == Arclaw.OpeningStatus.Revealed || st == Arclaw.OpeningStatus.Returned) continue;
             if (st == Arclaw.OpeningStatus.Fulfilled || vrf.getRequest(req).fulfilled) {
                 vm.prank(opener);
@@ -715,6 +715,9 @@ contract A2InvariantTest is Test {
             } else {
                 uint64 dl = vrf.getRequest(req).deadline;
                 if (block.timestamp <= dl) vm.warp(dl + 1);
+                // audit 4b M-01: returnBoxes opens once the pinned table aged out (until then the keeper retries)
+                uint256 aged = box.tablePricedAt(tableId) + box.maxTableAge();
+                if (block.timestamp <= aged) vm.warp(aged + 1);
                 vm.prank(opener);
                 box.returnBoxes(id);
             }
