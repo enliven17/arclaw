@@ -75,16 +75,24 @@ ${line}
 2. WHAT TO FUND (USDC on Arc mainnet)
 ${line}
 
-Send everything to the DEPLOYER address only. The deploy script spreads it:
+Send it all to the DEPLOYER address only. The deploy script spreads it.
 
-  deployer          25 USDC   gas for the deployment and the Safes (it stays on the deployer)
-  operator          50 USDC   gas for hourly reprices (about 2 USDC a day)
-  keeper            50 USDC   gas for reveals and retries
-  guardian           5 USDC   gas for an emergency pause
-  signer1/2/3        5 USDC   each, gas for Safe transactions
-  contract float   500 USDC   the reserve floor inside the Arclaw contract (pays the big wins)
+  MINIMUM (to deploy and test):     2 USDC
+    the whole mainnet setup measured 21.6M gas on a fork: about 0.3 to 0.9 USDC depending on the gas price,
+    plus two Safes and the transfers to the other wallets (a few cents).
+  RECOMMENDED (to run for days):   12 USDC
+    deployer           2 USDC   deployment, Safes (what is left stays as spare gas)
+    operator           2 USDC   reprices; one full reprice of three machines is about 0.2 USDC at 40 gwei
+    keeper             3 USDC   reveals and retries (about 0.01 to 0.05 USDC each)
+    guardian         0.3 USDC   an emergency pause
+    signer1/2/3      0.2 USDC   each, for Safe transactions
+    contract float     5 USDC   a first cushion inside the Arclaw contract
 
-  total to send to the deployer: 640 USDC
+There is no big up-front bankroll: a play pays for its own pack, so winners are paid out of what players paid. The
+float only covers the early big wins. Launching with ONE machine (Single, biggest prize 9.9 USDC) keeps that cushion
+small; Stack and Vault are switched on from the Owner Safe as the contract balance grows (about 50 USDC for Stack,
+about 300 USDC for Vault). A win the contract cannot pay at once becomes a claim and the machines pause until it is
+funded: nobody loses money, it just stops.
 
 Test plays on mainnet are paid from your own wallet and are extra.
 
