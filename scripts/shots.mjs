@@ -32,7 +32,7 @@ const page = await context.newPage();
 const errors = [];
 page.on("console", (m) => m.type() === "error" && errors.push(m.text()));
 page.on("pageerror", (e) => errors.push(String(e)));
-await page.goto(url, { waitUntil: "networkidle" });
+await page.goto(url, { waitUntil: process.env.WAIT || "networkidle", timeout: 180000 });
 await page.waitForTimeout(Number(flag("settle", 900)));
 
 const plan = flag("plan") ? JSON.parse(readFileSync(flag("plan"), "utf8")) : [{ out, scroll: flag("scroll"), eval: flag("eval"), wait: flag("wait"), selector: flag("selector"), full: has("full") }];
