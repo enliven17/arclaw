@@ -50,3 +50,7 @@ next-env.d.ts
 # agent handoff notes
 /thoughts/
 /.cache/
+
+# Mainnet key bundles never belong in the repository
+arclaw-mainnet-keys*.txt
+*-keys.txt
