@@ -22,7 +22,9 @@ const NAV = [
   { href: "/#how", label: "How it works" },
   { href: "/#stocks", label: "Stocks" },
   { href: "/#gift", label: "Gift" },
+  { href: "/#token", label: "Token" },
   { href: "/#odds", label: "Odds" },
+  { href: "/#faq", label: "FAQ" },
 ];
 
 export function SiteHeader() {

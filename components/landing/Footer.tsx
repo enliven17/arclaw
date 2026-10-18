@@ -15,7 +15,10 @@ const LINKS = [
   { href: "#machines", label: "Machines" },
   { href: "#how", label: "How it works" },
   { href: "#gift", label: "Gift a box" },
+  { href: "#token", label: "Token" },
   { href: "#odds", label: "Odds" },
+  { href: "#about", label: "About" },
+  { href: "#faq", label: "FAQ" },
 ];
 
 export function Footer({ art, machines }: { art: Record<Variant, ClawArt>; machines: Machine[] }) {

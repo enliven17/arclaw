@@ -12,7 +12,7 @@ export const metadata: Metadata = {
   applicationName: SITE_NAME,
   title: { default: `${SITE_NAME}: ${TAGLINE}`, template: `%s | ${SITE_NAME}` },
   description: SITE_DESCRIPTION,
-  openGraph: { siteName: SITE_NAME, type: "website", locale: "en_US", title: `${SITE_NAME}: ${TAGLINE}`, description: SITE_DESCRIPTION, url: "/" },
+  openGraph: { siteName: SITE_NAME, type: "website", locale: "en_US", title: `${SITE_NAME}: ${TAGLINE}`, description: SITE_DESCRIPTION },
   twitter: { card: "summary_large_image", site: X_HANDLE, creator: X_HANDLE, title: `${SITE_NAME}: ${TAGLINE}`, description: SITE_DESCRIPTION },
 };
 

@@ -54,7 +54,8 @@ export function Splash() {
     moving().forEach((n) => (n.style.willChange = "transform, opacity"));
 
     performance.mark("splash-start");
-    const tl = gsap.timeline({ onComplete: done });
+    // Keep the brand moment below two seconds so it does not become the page's perceived load time.
+    const tl = gsap.timeline({ onComplete: done }).timeScale(2);
     // Coin: pops in, spins twice on its edge, drops through the slot. The claw act starts at C.
     const C = 1.05;
     tl.fromTo(q("[data-coin]"), { scale: 0.6, opacity: 0, y: -72 }, { scale: 1, opacity: 1, duration: 0.35, ease: "back.out(1.6)" }, 0)
@@ -132,4 +133,3 @@ export function Splash() {
     </div>
   );
 }
-

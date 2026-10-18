@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Breadcrumbs } from "@/components/seo/Breadcrumbs";
 
 export const metadata: Metadata = {
   title: "Risk disclaimer",
@@ -11,6 +12,7 @@ const UPDATED = "17 October 2026";
 export default function Disclaimer() {
   return (
     <>
+      <Breadcrumbs className="mb-10" items={[{ label: "Home", href: "/" }, { label: "Risk disclaimer", href: "/disclaimer" }]} />
       <h1>Risk disclaimer</h1>
       <p className="lede">Last updated {UPDATED}. Please read this before you play.</p>
 

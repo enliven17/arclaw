@@ -4,6 +4,7 @@
  */
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Breadcrumbs } from "@/components/seo/Breadcrumbs";
 import { ClawMachine } from "@/components/claw/ClawMachine";
 import { clawArt } from "@/components/claw/geometry";
 import { variantOf } from "@/components/claw/view";
@@ -12,7 +13,11 @@ import { fmtMultiplier, fmtPct } from "@/lib/machines";
 import { withResolved } from "@/lib/machines.server";
 import { usdc } from "@/lib/stocks";
 
-export const metadata: Metadata = { title: "Machines" };
+export const metadata: Metadata = {
+  title: "Machines",
+  description: "Compare arclaw's Single, Stack, and Vault machines, their play prices, expected returns, and prize ranges.",
+  alternates: { canonical: "/app/play" },
+};
 
 const ART = { single: clawArt("single"), stack: clawArt("stack"), vault: clawArt("vault") };
 
@@ -20,6 +25,7 @@ export default function PlayPage() {
   const machines = withResolved();
   return (
     <div className="wrap py-10 md:py-14">
+      <Breadcrumbs className="mb-8" items={[{ label: "Home", href: "/" }, { label: "Machines", href: "/app/play" }]} />
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <h1 className="h-section !text-[clamp(40px,5vw,80px)]">Pick a machine.</h1>
         <p className="lede max-w-[24em]">Every play wins a box. Bigger machines pay back more on average.</p>

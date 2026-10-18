@@ -3,13 +3,18 @@
  * Fed by the Convex indexer (or the chain directly until it is configured); refreshed every minute.
  */
 import type { Metadata } from "next";
+import { Breadcrumbs } from "@/components/seo/Breadcrumbs";
 import { getLeaderboard } from "@/lib/leaderboard.server";
 import { MACHINES } from "@/lib/machines";
 import { usdc } from "@/lib/stocks";
 import { explorerTx } from "@/lib/arc/config";
 import { cn } from "@/lib/cn";
 
-export const metadata: Metadata = { title: "Leaderboard" };
+export const metadata: Metadata = {
+  title: "Leaderboard",
+  description: "See the biggest arclaw pulls and the players who have opened the most tokenized stock packs on Arc.",
+  alternates: { canonical: "/app/leaderboard" },
+};
 export const revalidate = 60;
 
 const short = (a: string) => `${a.slice(0, 6)}...${a.slice(-4)}`;
@@ -20,6 +25,7 @@ export default async function LeaderboardPage() {
   const board = data?.board;
   return (
     <div className="wrap py-10 md:py-14">
+      <Breadcrumbs className="mb-8" items={[{ label: "Home", href: "/" }, { label: "Leaderboard", href: "/app/leaderboard" }]} />
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <h1 className="h-section !text-[clamp(40px,5vw,80px)]">Leaderboard.</h1>
         <p className="lede max-w-[26em]">Who has pulled the most, and the biggest packs so far. Updated every minute.</p>

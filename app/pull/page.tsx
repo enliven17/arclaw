@@ -25,7 +25,14 @@ export async function generateMetadata({ searchParams }: { searchParams: Search 
   const total = cards.reduce((s, c) => s + c.amount, 0);
   const title = `${tier} pack, ${usdc(total)} USDC`;
   const image = { url: `/api/og/pull?${p.toString()}`, width: 1200, height: 630, alt: `${title}: ${cards.map((c) => c.ticker).join(", ")}` };
-  return { title, robots: { index: false }, openGraph: { title, images: [image] }, twitter: { card: "summary_large_image", title, images: [image] } };
+  return {
+    title,
+    description: `A ${tier.toLowerCase()} arclaw pack containing ${cards.map((c) => c.name).join(", ")}.`,
+    alternates: { canonical: "/pull" },
+    robots: { index: false, follow: true },
+    openGraph: { title, images: [image] },
+    twitter: { card: "summary_large_image", title, images: [image] },
+  };
 }
 
 export default async function PullPage({ searchParams }: { searchParams: Search }) {

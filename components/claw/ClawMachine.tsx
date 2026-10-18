@@ -312,7 +312,7 @@ export function ClawMachine({ art, ref, label = "A claw machine: a glass cabinet
 
   return (
     <div className={className ? `claw-fig ${className}` : "claw-fig"} data-machine={machine}>
-      <svg ref={root} viewBox={`0 0 ${W} ${H}`} role="img" aria-label={label} focusable="false">
+      <svg ref={root} width={W} height={H} viewBox={`0 0 ${W} ${H}`} role="img" aria-label={label} focusable="false">
         <defs>
           <clipPath id={CLIP_ID}>
             <path d={CHUTE_CLIP} />

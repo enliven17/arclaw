@@ -19,7 +19,7 @@ function Item({ s, q }: { s: Stock; q?: Quote }) {
   return (
     <li className="flex items-center gap-5 pr-[clamp(40px,6vw,96px)]">
       <span className="flex size-[clamp(56px,6vw,84px)] shrink-0 items-center justify-center rounded-[14px] border border-line bg-panel">
-        {logo ? <img src={logo} alt="" className="size-[52%]" /> : null}
+        {logo ? <img src={logo} alt={`${s.name} logo`} width={64} height={64} className="size-[52%]" /> : null}
       </span>
       <span className="flex flex-col">
         <span className="money text-[clamp(44px,6.4vw,96px)] leading-[0.9] tracking-[-0.05em] text-cream">{s.ticker}</span>

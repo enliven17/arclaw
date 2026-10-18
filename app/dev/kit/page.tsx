@@ -3,11 +3,14 @@
  * Development only; production builds answer 404.
  */
 import { notFound } from "next/navigation";
+import type { Metadata } from "next";
 import { BoosterPack } from "@/components/pack/BoosterPack";
 import { SealedBox } from "@/components/pack/SealedBox";
 import { StockCard } from "@/components/landing/StockCard";
 import { MACHINES, examplePack } from "@/lib/machines";
 import { VARIANTS } from "@/components/claw/view";
+
+export const metadata: Metadata = { title: "Reveal kit", description: "Internal arclaw visual QA page.", robots: { index: false, follow: false } };
 
 export default function Kit() {
   if (process.env.NODE_ENV === "production") notFound();

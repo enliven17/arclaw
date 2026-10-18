@@ -80,7 +80,7 @@ export function Collection() {
               const logo = logoOf(h.ticker);
               return (
                 <li key={h.ticker} className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-4 rounded-[14px] border border-line bg-panel p-4 md:grid-cols-[auto_minmax(0,2fr)_1fr_1fr_auto]">
-                  <span className="flex size-11 items-center justify-center rounded-[10px] border border-line bg-panel-2">{logo ? <img src={logo} alt="" className="size-6" /> : null}</span>
+                  <span className="flex size-11 items-center justify-center rounded-[10px] border border-line bg-panel-2">{logo ? <img src={logo} alt={`${h.name} logo`} width={24} height={24} className="size-6" /> : null}</span>
                   <span className="min-w-0">
                     <span className="money block text-[17px]">{h.ticker}</span>
                     <span className="block truncate text-[13px] text-muted">{h.name}</span>

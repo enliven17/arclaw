@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Breadcrumbs } from "@/components/seo/Breadcrumbs";
 
 export const metadata: Metadata = {
   title: "Privacy policy",
@@ -11,6 +12,7 @@ const UPDATED = "18 October 2026";
 export default function Privacy() {
   return (
     <>
+      <Breadcrumbs className="mb-10" items={[{ label: "Home", href: "/" }, { label: "Privacy policy", href: "/privacy" }]} />
       <h1>Privacy policy</h1>
       <p className="lede">Last updated {UPDATED}. We collect as little as we can and never sell what we have.</p>
 

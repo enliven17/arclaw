@@ -33,7 +33,7 @@ export function StockCard({ card, tier, className, index }: { card: PullCard; ti
             <span className="text-[6.2cqw] leading-none text-prize">{tier}</span>
           </div>
           <div className="my-[4.8cqw] flex flex-1 items-center justify-center rounded-[10px] border border-line">
-            {logo ? <img src={logo} alt="" className="size-[45cqw]" /> : <span className="money text-[16cqw]">{card.ticker}</span>}
+            {logo ? <img src={logo} alt={`${card.name} logo`} width={96} height={96} className="size-[45cqw]" /> : <span className="money text-[16cqw]">{card.ticker}</span>}
           </div>
           <div className="flex items-baseline justify-between gap-2">
             <span className="truncate text-[7.1cqw] leading-none text-muted">{card.name}</span>

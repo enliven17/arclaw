@@ -22,7 +22,14 @@ export async function generateMetadata({ searchParams }: { searchParams: Search 
   const g = parseGift(p);
   const title = g.count === 1 ? `A sealed ${g.machine.name} box for you` : `${g.count} sealed ${g.machine.name} boxes for you`;
   const image = { url: `/api/og/gift?${p.toString()}`, width: 1200, height: 630, alt: title };
-  return { title, robots: { index: false }, openGraph: { title, images: [image] }, twitter: { card: "summary_large_image", title, images: [image] } };
+  return {
+    title,
+    description: `Claim ${g.count === 1 ? "a sealed box" : `${g.count} sealed boxes`} from an arclaw gift link on Arc.`,
+    alternates: { canonical: "/claim" },
+    robots: { index: false, follow: true },
+    openGraph: { title, images: [image] },
+    twitter: { card: "summary_large_image", title, images: [image] },
+  };
 }
 
 export default async function ClaimPage({ searchParams }: { searchParams: Search }) {

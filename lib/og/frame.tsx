@@ -22,8 +22,8 @@ export function OgFrame({ eyebrow, children, footer }: { eyebrow: string; childr
     <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", backgroundColor: INK, color: CREAM, fontFamily: "Geist" }}>
       <div style={{ display: "flex", flexDirection: "column", flexGrow: 1, padding: "52px 64px 0" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          {/* eslint-disable-next-line @next/next/no-img-element, jsx-a11y/alt-text -- Satori draws <img>, not next/image */}
-          <img src={LOCKUP_URI} width={LOCKUP_W * 1.1} height={LOCKUP_H * 1.1} />
+          {/* eslint-disable-next-line @next/next/no-img-element -- Satori draws <img>, not next/image */}
+          <img src={LOCKUP_URI} alt="arclaw" width={LOCKUP_W * 1.1} height={LOCKUP_H * 1.1} />
           <div style={{ display: "flex", fontFamily: "Geist Mono", fontSize: 20, letterSpacing: 2, color: MUTED }}>{eyebrow.toUpperCase()}</div>
         </div>
         <div style={{ display: "flex", flexGrow: 1 }}>{children}</div>
@@ -85,8 +85,8 @@ export function OgCard({ card, tier, width = 210, rotate = 0 }: { card: PullCard
       </div>
       <div style={{ display: "flex", flexGrow: 1, alignItems: "center", justifyContent: "center", margin: `${10 * k}px 0`, borderRadius: 10, border: `1.5px solid ${LINE}` }}>
         {logo ? (
-          // eslint-disable-next-line @next/next/no-img-element, jsx-a11y/alt-text
-          <img src={logo} width={96 * k} height={96 * k} />
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={logo} alt={`${card.name} logo`} width={96 * k} height={96 * k} />
         ) : (
           <span style={{ fontFamily: "Geist Mono", fontSize: 40 * k, color: CREAM }}>{card.ticker}</span>
         )}
@@ -119,8 +119,8 @@ export function OgBox({ size = 300 }: { size?: number }) {
           border: `2px solid ${LINE}`,
         }}
       >
-        {/* eslint-disable-next-line @next/next/no-img-element, jsx-a11y/alt-text */}
-        <img src={MARK_URI} width={size * 0.22} height={size * 0.22} />
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={MARK_URI} alt="arclaw mark" width={size * 0.22} height={size * 0.22} />
       </div>
     </div>
   );
