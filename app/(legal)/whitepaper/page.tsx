@@ -124,7 +124,7 @@ export default function Whitepaper() {
             <tbody>
               {m.tiers.map((t) => (
                 <tr key={t.name} className="border-b border-line last:border-b-0">
-                  <th scope="row" className={`${td} font-normal`}>
+                  <th scope="row" className={`${td} text-left font-normal`}>
                     {t.name}
                   </th>
                   <td className={`${td} money text-right`}>{fmtMultiplier(t.multiplier)}</td>
@@ -144,7 +144,7 @@ export default function Whitepaper() {
           the floor (52.65 percent) so ordinary price moves never break it.
         </li>
         <li>
-          <strong>A cap.</strong> No outcome is worth more than 10 times the price.
+          <strong>A cap.</strong> No outcome is worth more than 10 times the price. The jackpot is built 1 percent under the cap (9.9 times) so a price move between the table and the open cannot push it over.
         </li>
         <li>
           <strong>A return band.</strong> Each machine has its own narrow band for the expected return (for example 74 to 76
@@ -333,7 +333,7 @@ export default function Whitepaper() {
                   ] as const
                 ).map(([name, address]) => (
                   <tr key={name} className="border-b border-line last:border-b-0">
-                    <th scope="row" className={`${td} font-normal text-muted`}>
+                    <th scope="row" className={`${td} text-left font-normal text-muted`}>
                       {name}
                     </th>
                     <td className={`${td} money break-all`}>
@@ -345,7 +345,7 @@ export default function Whitepaper() {
                 ))}
                 {ARCLAW_TOKEN ? (
                   <tr className="border-b border-line last:border-b-0">
-                    <th scope="row" className={`${td} font-normal text-muted`}>
+                    <th scope="row" className={`${td} text-left font-normal text-muted`}>
                       {ARCLAW_SYMBOL}
                     </th>
                     <td className={`${td} money break-all`}>
