@@ -1,7 +1,7 @@
 /**
  * One-time bot setup: webhook, commands, descriptions.
- *   node --env-file=.env.local scripts/telegram-setup.mjs            (texts and commands)
- *   APP_ORIGIN=https://arclaw.app node --env-file=.env.local scripts/telegram-setup.mjs   (plus the webhook)
+ *   node --env-file=.env.local scripts/ops/telegram-setup.mjs            (texts and commands)
+ *   APP_ORIGIN=https://arclaw.app node --env-file=.env.local scripts/ops/telegram-setup.mjs   (plus the webhook)
  * The profile photo is set by hand in @BotFather (/setuserpic) with brand/social/profile.png.
  */
 const token = process.env.TELEGRAM_BOT_TOKEN;

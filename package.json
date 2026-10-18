@@ -8,9 +8,14 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "cabinet": "tsx scripts/cabinet-bake.tsx",
+    "cabinet": "tsx scripts/assets/cabinet-bake.tsx",
     "brand": "node brand/render.mjs",
-    "shots": "node scripts/shots.mjs"
+    "shots": "node scripts/dev/shots.mjs",
+    "keeper": "tsx scripts/keeper/cli.ts",
+    "keeper:e2e": "tsx scripts/keeper-e2e.ts",
+    "keeper:test": "tsx --test lib/keeper/*.test.ts",
+    "keeper:fixture": "tsx scripts/keeper/fixture.ts",
+    "keeper:simulate": "tsx scripts/keeper/simulate.ts"
   },
   "packageManager": "pnpm@10.33.0",
   "dependencies": {

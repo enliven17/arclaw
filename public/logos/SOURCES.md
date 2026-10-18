@@ -5,9 +5,9 @@ identify the stock a card pays. The marks remain trademarks of their owners.
 
 Brand marks from simple-icons (CC0 path data): NVDA, TSLA, AAPL, META, GOOGL, AMD, INTC, RDDT, RBLX, DELL, AVGO,
 SPCX (SpaceX), CRCL (Circle, simple-icons source circle.com). MSFT is drawn here as the four squares.
-Written by `scripts/logos.mjs`.
+Written by `scripts/assets/logos.mjs`.
 
-Fetched and recoloured by `scripts/fetch-logos.mjs`:
+Fetched and recoloured by `scripts/assets/fetch-logos.mjs`:
 
 | Ticker | Source |
 |---|---|

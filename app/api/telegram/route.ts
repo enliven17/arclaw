@@ -1,5 +1,5 @@
 /**
- * Telegram webhook. Telegram sends the secret set in scripts/telegram-setup.mjs in a header; anything without it
+ * Telegram webhook. Telegram sends the secret set in scripts/ops/telegram-setup.mjs in a header; anything without it
  * is rejected before the body is read. Always answers 200 once authenticated so Telegram doesn't retry forever.
  */
 import { timingSafeEqual } from "node:crypto";

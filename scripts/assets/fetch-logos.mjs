@@ -1,6 +1,6 @@
 /**
  * Fetches official logos for the stocks simple-icons does not carry, recolours them to one cream tone and writes
- * public/logos/<TICKER>.svg plus public/logos/SOURCES.md. Run after scripts/logos.mjs: `node scripts/fetch-logos.mjs`.
+ * public/logos/<TICKER>.svg plus public/logos/SOURCES.md. Run after scripts/assets/logos.mjs: `node scripts/assets/fetch-logos.mjs`.
  *
  * Recolouring: every fill, stroke and gradient becomes cream (#ECE6DA); near-white parts (knockouts such as text on
  * a coloured block) become the card panel tone (#141417) so they still read as cut-outs on the logo window.
@@ -11,7 +11,7 @@ import { mkdirSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const CACHE = join(ROOT, ".cache/logos");
 const OUT = join(ROOT, "public/logos");
 mkdirSync(CACHE, { recursive: true });
@@ -111,9 +111,9 @@ const lines = [
   "",
   "Brand marks from simple-icons (CC0 path data): NVDA, TSLA, AAPL, META, GOOGL, AMD, INTC, RDDT, RBLX, DELL, AVGO,",
   "SPCX (SpaceX), CRCL (Circle, simple-icons source circle.com). MSFT is drawn here as the four squares.",
-  "Written by `scripts/logos.mjs`.",
+  "Written by `scripts/assets/logos.mjs`.",
   "",
-  "Fetched and recoloured by `scripts/fetch-logos.mjs`:",
+  "Fetched and recoloured by `scripts/assets/fetch-logos.mjs`:",
   "",
   "| Ticker | Source |",
   "|---|---|",

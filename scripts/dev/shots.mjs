@@ -1,7 +1,7 @@
 /**
  * Screenshots with playwright-core and the locally installed Chromium.
  *
- *   node scripts/shots.mjs <url> <out.png> [--w 1440] [--h 900] [--scroll 1200] [--eval "js"] [--wait 800]
+ *   node scripts/dev/shots.mjs <url> <out.png> [--w 1440] [--h 900] [--scroll 1200] [--eval "js"] [--wait 800]
  *                          [--selector "#how"] [--full] [--reduced] [--scale 1] [--mobile]
  *
  * Several shots in one browser: pass a JSON plan with --plan plan.json ([{ out, scroll, eval, wait, selector }]).

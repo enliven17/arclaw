@@ -42,7 +42,7 @@ const BY_TICKER = new Map(STOCKS.map((s) => [s.ticker, s]));
 export const stockOf = (ticker: string): Stock =>
   BY_TICKER.get(ticker.toUpperCase()) ?? { ticker: ticker.toUpperCase(), name: "Tokenized stock", kind: "stock", price: 0 };
 
-/** Local logo path (public/logos, written by scripts/logos.mjs). */
+/** Local logo path (public/logos, written by scripts/assets/logos.mjs). */
 export const logoOf = (ticker: string) => (BY_TICKER.has(ticker.toUpperCase()) ? `/logos/${ticker.toUpperCase()}.svg` : null);
 
 /** One card of a pack: a stock and the USDC value it pays. */

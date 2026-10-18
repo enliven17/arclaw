@@ -12,8 +12,8 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { chromium } from "playwright-core";
-import { cabinetBack } from "../components/claw/geometry";
-import { H, VARIANTS, W } from "../components/claw/view";
+import { cabinetBack } from "../../components/claw/geometry";
+import { H, VARIANTS, W } from "../../components/claw/view";
 
 async function main() {
 const css = readFileSync("components/claw/claw.css", "utf8");

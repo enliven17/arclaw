@@ -318,7 +318,7 @@ export function ClawMachine({ art, ref, label = "A claw machine: a glass cabinet
             <path d={CHUTE_CLIP} />
           </clipPath>
         </defs>
-        {/* The static back of the cabinet: one cached svg per finish (scripts/cabinet-bake.tsx). */}
+        {/* The static back of the cabinet: one cached svg per finish (scripts/assets/cabinet-bake.tsx). */}
         <use href={`/cabinet/${variantOf(machine)}.svg#back`} />
 
         <g ref={farTruck}>{art.farTruck}</g>
