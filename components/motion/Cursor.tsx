@@ -37,6 +37,8 @@ export function Cursor() {
     };
     const onMove = (e: PointerEvent) => {
       if (e.pointerType !== "mouse") return;
+      // Moving the node in the DOM (React reordering siblings) closes a popover without an event.
+      if (!el.matches(":popover-open")) el.showPopover();
       x(e.clientX);
       y(e.clientY);
       const t = e.target as Element | null;
