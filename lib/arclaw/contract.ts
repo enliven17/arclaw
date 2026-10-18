@@ -336,3 +336,8 @@ export async function pullsOf(client: PublicClient, owner: Address): Promise<Pul
 
 export const allowance = (client: PublicClient, token: Address, owner: Address, spender: Address) =>
   client.readContract({ address: token, abi: erc20Abi, functionName: "allowance", args: [owner, spender] }) as Promise<bigint>;
+
+/** Decode arclaw logs with the current and the deployed event shapes (for the indexer and the leaderboard). */
+export const decodeArclaw = (logs: readonly Log[]) => decode(logs, arclawAbi, ARCLAW);
+export const LEGACY_EVENTS = legacyAbi;
+export { retry as withRetry, LOG_SPAN };
