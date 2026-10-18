@@ -88,7 +88,9 @@ export const sync = internalActionGeneric({
 /** The leaderboard the app reads: top players by value pulled, the biggest pulls, the biggest per machine. */
 export const leaderboard = queryGeneric({
   args: { limit: v.optional(v.number()) },
-  handler: async (ctx, { limit = 20 }) => {
+  handler: async (ctx, args) => {
+    // Public query: the page size is capped here, whatever the caller asks for.
+    const limit = Math.min(Math.max(Math.floor(args.limit ?? 20), 1), 50);
     const players = await ctx.db.query("players").withIndex("by_total").order("desc").take(limit);
     const biggest = await ctx.db.query("pulls").withIndex("by_value").order("desc").take(limit);
     const byMachine: Record<number, unknown[]> = {};
