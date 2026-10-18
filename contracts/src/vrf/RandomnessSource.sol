@@ -23,6 +23,10 @@ abstract contract RandomnessSource {
         virtual
         returns (bool fulfilled, bool expired, bytes32 word);
 
+    /// @dev True when the request can no longer be fulfilled: expired, or the provider's status read reverts or makes
+    ///      no sense (no deadline). Must never revert.
+    function _randomnessLost(uint256 requestId) internal view virtual returns (bool);
+
     /// @dev Best effort: reclaim the fee of an expired request into this contract. Must never revert.
     function _refundRandomness(uint256 requestId) internal virtual;
 

@@ -8,8 +8,10 @@
 //   quoteFee via eth_call). open() is subsidised; retry() is free only for the opener, a keeper or the operator.
 //   An opener top-up is paid back when the request expires (openingTopUp). retry() reverts TableStale/BelowFloor
 //   once the pinned table can no longer open; returnBoxes() reverts NotExpired until the table aged out
-//   (tablePricedAt + maxTableAge). refundSealed(machineId, boxes) pays sealed boxes back once the machine has been
-//   off (offSince) or its table stale for 3 days; it reverts NotExpired before that.
+//   (tablePricedAt + maxTableAge); 7 days after the request it also works when the coordinator is dead.
+//   refundSealed(machineId, boxes) pays sealed boxes back once the machine has been off (offSince), its table
+//   stale, or the contract paused (pausedSince) for 3 days, counted from the earliest; NotExpired before that.
+// - Native pushes forward 100k gas; a wallet that needs more (or rejects) gets credit, claimCredit() pulls it.
 // - Reads that moved off-chain for size: stats and quoteVrfFee live in ArclawLens (lib/abi/arclawLens.ts).
 export const arclawAbi = [
   {
@@ -989,6 +991,19 @@ export const arclawAbi = [
         "name": "",
         "type": "bool",
         "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "pausedSince",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "stateMutability": "view"

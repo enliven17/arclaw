@@ -29,8 +29,11 @@ contract GasBurner {
     }
 }
 
-/// Auditor 5b. Every test shows the code as it stands at 6f692fb.
+/// Auditor 5b. Scenarios from 6f692fb, flipped to assert the fixed behaviour.
 contract A5bFindingsTest is Base {
+    /// Base.setUp warps here. Warps are absolute: under via-IR a block.timestamp read can be re-evaluated after
+    /// vm.warp, so neither `warp(block.timestamp + x)` loops nor a local copy of block.timestamp are reliable.
+    uint256 constant T0 = 1_800_000_000;
     function setUp() public override {
         super.setUp();
         box.setPrizes(M1, _table(address(nvda), P1)); // 0.5x (w3) / 1.5x (w1), EV 0.75x
@@ -46,73 +49,100 @@ contract A5bFindingsTest is Base {
 
     // ------------------------------------------------------------------ M-01
 
-    /// M-01: refundSealed only opens on table age or the machine being off. A pause (owner, or the automatic one any
-    /// IOU triggers in _settle) while the operator bot keeps repricing leaves sealed boxes with no exit at all.
-    function test_m01_pauseWithFreshTablesTrapsSealedBoxes() public {
+    /// M-01 fixed: a pause (owner, or the automatic one any IOU triggers in _settle) starts refundSealed's clock, so
+    /// fresh tables from the repricing bot no longer keep sealed boxes locked.
+    function test_fixed_m01_pauseOpensSealedRefund() public {
         _play(alice, M1, 3);
         box.pause(); // same state as the auto-pause after any IOU
-        for (uint256 d; d < 30; ++d) {
-            vm.warp(block.timestamp + 1 days - 1);
+        assertEq(box.pausedSince(), T0);
+        for (uint256 d = 1; d <= 30; ++d) {
+            vm.warp(T0 + d * 1 days - 1);
             Arclaw.OutcomeInput[] memory tb = _table(address(nvda), P1);
             vm.prank(op);
             box.operatorSetPrizes(M1, tb); // the repricing bot keeps running
+            if (d == 2) {
+                vm.prank(alice);
+                vm.expectRevert(Arclaw.NotExpired.selector); // under 3 days paused
+                box.refundSealed(M1, 3);
+            }
         }
         uint256 t = box.currentTable(M1) - 1;
         vm.prank(alice);
         vm.expectRevert(Pausable.EnforcedPause.selector);
         box.open(M1, 1, t);
+        uint256 before = alice.balance;
         vm.prank(alice);
-        vm.expectRevert(Arclaw.NotExpired.selector);
         box.refundSealed(M1, 3);
-        assertEq(box.sealedReserve(), 3 * P1, "30 days on, the 3 USDC is still locked");
+        assertEq(alice.balance - before, 3 * P1, "30 days on, the 3 USDC is back");
+        assertEq(box.sealedReserve(), 0);
+
+        box.unpause();
+        assertEq(box.pausedSince(), 0, "unpause clears the clock");
     }
 
     // ------------------------------------------------------------------ M-02
 
-    /// M-02: every exit of a Pending opening (reveal, retry, returnBoxes, rescue) needs the coordinator's getRequest.
-    /// A dead, paused or upgraded coordinator (or one that never reports `expired`) strands the boxes and their
-    /// price in pendingReserve forever; there is no contract-side timeout.
-    function test_m02_deadCoordinatorStrandsPendingOpenings() public {
+    /// M-02 fixed: with the coordinator dead (every getRequest reverts), reveal, retry and rescue still need it, but
+    /// RESCUE_AFTER the request returnBoxes treats the revert as expired and gives the opener the boxes back.
+    function test_fixed_m02_deadCoordinatorReturnsBoxes() public {
         _play(alice, M1, 2);
         (uint256 id,) = _open(alice, M1, 2);
         vm.mockCallRevert(address(vrf), abi.encodeWithSelector(ID20Coordinator.getRequest.selector), "dead");
-        vm.warp(block.timestamp + 60 days);
 
+        vm.warp(T0 + 7 days); // not yet past RESCUE_AFTER: the status read still has to work
+        vm.prank(alice);
+        vm.expectRevert();
+        box.returnBoxes(id);
+
+        vm.warp(T0 + 60 days);
         vm.startPrank(alice);
         vm.expectRevert();
         box.reveal(id);
         vm.expectRevert();
         box.retry(id);
-        vm.expectRevert();
-        box.returnBoxes(id);
         vm.expectRevert(); // rescue reaches _reveal, which also reads the coordinator
         box.rescue(id);
+        box.returnBoxes(id);
         vm.stopPrank();
-        assertEq(box.pendingReserve(), 2 * P1, "2 USDC locked with no exit");
+        assertEq(box.pendingReserve(), 0, "nothing stranded");
+        assertEq(box.sealedReserve(), 2 * P1, "sealed again");
+        assertEq(box.balanceOf(alice, M1), 2);
     }
 
-    /// Coordinator that answers but never marks the request expired (deadline 0): same dead end.
+    /// Coordinator that answers but never marks the request expired (deadline 0): counts as lost after RESCUE_AFTER.
     function _unfulfilled() internal pure returns (ID20Coordinator.Request memory r) {}
 
-    function test_m02_neverExpiringRequestStrandsOpening() public {
+    function test_fixed_m02_neverExpiringRequestReturnsBoxes() public {
         _play(alice, M1, 1);
         (uint256 id,) = _open(alice, M1, 1);
         vm.mockCall(address(vrf), abi.encodeWithSelector(ID20Coordinator.getRequest.selector), abi.encode(_unfulfilled()));
-        vm.warp(block.timestamp + 60 days);
+        vm.warp(T0 + 60 days);
         vm.startPrank(alice);
-        vm.expectRevert(Arclaw.NotExpired.selector);
-        box.returnBoxes(id);
         vm.expectRevert(Arclaw.NotReady.selector);
         box.reveal(id);
+        box.returnBoxes(id);
         vm.stopPrank();
+        assertEq(box.balanceOf(alice, M1), 1);
+        assertEq(box.pendingReserve(), 0);
+    }
+
+    /// A fulfilled word is never thrown away by the RESCUE_AFTER path: the coordinator answers, so returnBoxes still
+    /// refuses (AlreadyFulfilled) and the opening has to be revealed.
+    function test_fixed_m02_fulfilledWordStillBlocksReturn() public {
+        _play(alice, M1, 1);
+        (uint256 id, uint256 req) = _open(alice, M1, 1);
+        vrf.fulfillStarved(req, _wordFor(0)); // fulfilled at the coordinator, our callback never ran
+        vm.warp(T0 + 60 days);
+        vm.prank(alice);
+        vm.expectRevert(Arclaw.AlreadyFulfilled.selector);
+        box.returnBoxes(id);
     }
 
     // ------------------------------------------------------------------ L-01
 
-    /// L-01: _call forwards all gas. An opener whose receive burns gas makes the keeper's reveal (and rescue, and the
-    /// top-up leg of a keeper retry) burn ~63/64 of the gas limit, and OOG-revert under ~3M gas, since the credit
-    /// fallback must fit in the last 1/64. The opener thereby takes the reveal timing away from the keeper.
-    function test_l01_openerBurnsKeeperGasOnRefund() public {
+    /// L-01 fixed: pushes forward PUSH_GAS (100k). A gas-burning opener costs the keeper about that, the reveal
+    /// settles with 2M gas, and the refund is parked as credit.
+    function test_fixed_l01_gasBurnerCannotTaxKeeper() public {
         vm.deal(address(box), 10 ether); // float so the refund is paid, not owed
         box.sweep(address(nvda), address(this), nvda.balanceOf(address(box))); // cards short: refund leg runs
         GasBurner g = new GasBurner(box);
@@ -120,21 +150,19 @@ contract A5bFindingsTest is Base {
         (,,,,,, uint256 req,) = box.openings(id);
         vrf.fulfill(req, _wordFor(0));
 
-        (bool ok,) = address(box).call{gas: 2_000_000}(abi.encodeCall(Arclaw.reveal, (id)));
-        assertFalse(ok, "keeper reveal with 2M gas runs out");
-
         uint256 g0 = gasleft();
-        box.reveal{gas: 10_000_000}(id);
+        (bool ok,) = address(box).call{gas: 2_000_000}(abi.encodeCall(Arclaw.reveal, (id)));
         uint256 used = g0 - gasleft();
-        assertGt(used, 9_000_000, "one 1-USDC reveal cost the keeper > 9M gas");
+        assertTrue(ok, "keeper reveal with 2M gas settles");
+        assertLt(used, 1_000_000, "the burner costs the keeper about PUSH_GAS");
         assertGt(box.credit(address(g)), 0, "refund parked as credit");
     }
 
     // ------------------------------------------------------------------ L-02
 
-    /// L-02: _payTopUp pays at most the unreserved balance, and IOUs count as reserved. With any IOU open, an
-    /// opener's VRF top-up refunded by D20 is absorbed into the IOU pool and openingTopUp is deleted: lost for good.
-    function test_l02_topUpLostWhileAnIouIsOpen() public {
+    /// L-02 fixed: with an IOU open, the part of an opener's VRF top-up the unreserved balance cannot pay becomes the
+    /// opener's credit (reserved ahead of IOUs), never dropped; it can be claimed.
+    function test_fixed_l02_topUpCreditedWhileAnIouIsOpen() public {
         address carol = makeAddr("carol");
         vm.deal(carol, 10 ether);
         box.sweep(address(nvda), address(this), nvda.balanceOf(address(box))); // reveals refund, so an IOU appears
@@ -153,11 +181,15 @@ contract A5bFindingsTest is Base {
         box.reveal(aliceId);
         assertGt(box.totalOwed(), 0, "alice holds an IOU");
 
-        vm.warp(block.timestamp + 1 days + 61); // carol's request expired, her table aged out
+        vm.warp(T0 + 1 days + 61); // carol's request expired, her table aged out
         uint256 before = carol.balance;
         vm.prank(carol);
         box.returnBoxes(carolId);
-        assertEq(carol.balance - before, 0, "carol's 0.2 top-up is gone");
-        assertEq(box.openingTopUp(carolId), 0, "and nothing records it any more");
+        assertEq(carol.balance - before + box.credit(carol), 0.2 ether, "carol's 0.2 top-up paid or credited");
+        assertEq(box.openingTopUp(carolId), 0);
+        assertGt(box.credit(carol), 0, "the IOU pool absorbed the refund: credited");
+        vm.prank(carol);
+        box.claimCredit();
+        assertEq(carol.balance - before, 0.2 ether, "and claimable in full");
     }
 }

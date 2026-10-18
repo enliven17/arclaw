@@ -50,12 +50,15 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
     uint256 internal constant MAX_TABLE_AGE = 1 days; // upper bound for maxTableAge
     /// Upper bound for maxPriceMoveBps; setMachine keeps rtpMax * (1 + this) <= MAX_RTP_BPS (rtpMax <= 9047).
     uint256 internal constant MAX_PRICE_MOVE_BPS = 500;
-    /// Sealed boxes of a machine that is off, or whose table went stale, this long can be refunded at their price.
+    /// Sealed boxes of a machine that is off, or whose table went stale, or of a paused contract, this long can be
+    /// refunded at their price.
     uint256 internal constant SEALED_REFUND_AFTER = 3 days;
     /// Reveal is the opener's (or a keeper's) for this long after the request, then anyone's.
     uint256 internal constant PUBLIC_REVEAL_AFTER = 1 hours;
     /// An opening still unrevealed this long after its request can be rescued (see rescue).
     uint256 internal constant RESCUE_AFTER = 7 days;
+    /// Gas forwarded on pushed native payments; a receiver that needs more gets pull credit instead.
+    uint256 internal constant PUSH_GAS = 100_000;
     /// Arc's USDC ERC-20 view: the same balance as native USDC, never a card and never sweepable.
     address internal constant USDC = 0x3600000000000000000000000000000000000000;
 
@@ -136,6 +139,8 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
     /// machineId => when the owner switched it off (0 = on). Off: no new plays or opens; reveals, returns, links and
     /// refundSealed keep working. machineOff(id) reads it as a bool.
     mapping(uint256 => uint256) public offSince;
+    /// When the contract was paused (owner, or the automatic pause in _settle); 0 while running. Feeds refundSealed.
+    uint256 public pausedSince;
 
     mapping(uint256 => Opening) public openings;
     /// requestId => openingId + 1 (0 = unknown or superseded)
@@ -466,13 +471,17 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
 
     /// @notice The request expired unfulfilled: the opener takes the sealed boxes back (and any VRF top-up) instead of
     ///         a retry. Only once the pinned table has aged out (maxTableAge): until then the keeper retries, so taking
-    ///         the boxes back never depends on a price move the opener has watched.
+    ///         the boxes back never depends on a price move the opener has watched. RESCUE_AFTER the request, a
+    ///         coordinator whose status read reverts or reports no deadline counts as expired, so a dead VRF never
+    ///         strands the boxes (the pinned table aged out long before: maxTableAge <= 1 day).
     function returnBoxes(uint256 openingId) external nonReentrant {
         Opening storage o = openings[openingId];
         if (o.status != OpeningStatus.Pending) revert NotPending();
         if (msg.sender != o.opener) revert NotOpener();
-        _requireExpired(o.requestId);
-        if (block.timestamp <= tablePricedAt[o.tableId] + maxTableAge) revert NotExpired();
+        if (block.timestamp <= o.requestedAt + RESCUE_AFTER || !_randomnessLost(o.requestId)) {
+            _requireExpired(o.requestId);
+            if (block.timestamp <= tablePricedAt[o.tableId] + maxTableAge) revert NotExpired();
+        }
         o.status = OpeningStatus.Returned;
         delete openingOfRequest[o.requestId];
         _refundRandomness(o.requestId);
@@ -488,14 +497,18 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
         _payTopUp(msg.sender, back);
     }
 
-    /// @notice Exit for sealed boxes of a machine that stopped serving them: switched off, or its table stale (not
-    ///         repriced in time), for SEALED_REFUND_AFTER. Burns `boxes` and pays back their price (fixed per machine,
-    ///         so exactly what was paid). Works while paused.
+    /// @notice Exit for sealed boxes of a machine that stopped serving them: switched off, its table stale (not
+    ///         repriced in time), or the contract paused, for SEALED_REFUND_AFTER. Burns `boxes` and pays back their
+    ///         price (fixed per machine, so exactly what was paid). Works while paused.
+    /// @dev The clock starts at the earliest of the three, so toggling the machine cannot restart it while a pause or
+    ///      a stale table is running.
     function refundSealed(uint256 machineId, uint256 boxes) external nonReentrant {
         if (boxes == 0) revert ZeroAmount();
         uint256 t = currentTable[machineId];
         uint256 since = t == 0 ? 0 : tablePricedAt[t - 1] + maxTableAge; // no table yet: refundable at once
         uint256 off = offSince[machineId];
+        if (off != 0 && off < since) since = off;
+        off = pausedSince;
         if (off != 0 && off < since) since = off;
         if (block.timestamp < since + SEALED_REFUND_AFTER) revert NotExpired();
         uint256 amount = boxes * machines[machineId].price;
@@ -709,6 +722,7 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
     }
 
     function unpause() external onlyOwner {
+        delete pausedSince;
         _unpause();
     }
 
@@ -881,11 +895,15 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
         );
     }
 
-    /// Pays an expired request's top-up back to the opener, from the unreserved balance (where D20's refund landed).
+    /// Pays an expired request's top-up back to the opener from the unreserved balance (where D20's refund landed);
+    /// what that cannot cover (open IOUs absorb it) becomes the opener's credit, never dropped.
     function _payTopUp(address to, uint256 amount) internal {
-        if (amount == 0) return;
         uint256 u = _unreserved();
-        _sendNative(to, amount < u ? amount : u);
+        if (amount > u) {
+            _credit(to, amount - u);
+            amount = u;
+        }
+        if (amount != 0) _sendNative(to, amount);
     }
 
     /// Native above every reserve and IOU: what refunds and JIT buys may use (reserveFloor included).
@@ -908,6 +926,12 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
         }
         if (amount != 0) _sendNative(to, amount);
         if (!paused() && (totalOwed != 0 || _unreserved() < minBuffer)) _pause();
+    }
+
+    /// Every pause, owner or automatic, starts the sealed-refund clock (unpause clears it).
+    function _pause() internal override {
+        pausedSince = block.timestamp;
+        super._pause();
     }
 
     function _draw(Outcome[] storage t, uint256 w, uint256 rand) internal view returns (uint256) {
@@ -939,26 +963,29 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
         emit PrizesSet(machineId, tableId, input.length, rtpBps, msg.sender);
     }
 
-    /// Push native USDC; if the receiver rejects it or the pool is short, keep it as pull credit so a reveal
-    /// is never blocked. No returndata is copied: a receiver answering with a huge revert (return bomb) cannot make
-    /// the caller run out of memory gas, so keeper and public reveals and rescue always settle.
+    /// Push native USDC with PUSH_GAS; if the receiver rejects it, needs more gas or the pool is short, keep it as
+    /// pull credit so a reveal is never blocked. No returndata is copied and the gas is capped: a receiver answering
+    /// with a huge revert (return bomb) or burning its gas costs the caller at most PUSH_GAS, so keeper and public
+    /// reveals and rescue always settle.
     function _sendNative(address to, uint256 amount) internal {
-        if (!_call(to, amount)) {
-            credit[to] += amount;
-            reservedCredit += amount;
-            emit CreditAdded(to, amount);
-        }
+        if (!_call(to, amount, PUSH_GAS)) _credit(to, amount);
     }
 
-    /// Pays `amount` to `to` or reverts (claims and withdraw: the caller chose `to`).
+    function _credit(address to, uint256 amount) internal {
+        credit[to] += amount;
+        reservedCredit += amount;
+        emit CreditAdded(to, amount);
+    }
+
+    /// Pays `amount` to `to` with all gas or reverts (claims and withdraw: the caller chose `to` and pays the gas).
     function _pay(address to, uint256 amount) internal {
-        if (!_call(to, amount)) revert TransferFailed();
+        if (!_call(to, amount, gasleft())) revert TransferFailed();
     }
 
-    /// Native transfer with all gas and no returndata copy, so a return bomb costs the caller nothing.
-    function _call(address to, uint256 amount) internal returns (bool ok) {
+    /// Native transfer with `gasLimit` and no returndata copy, so a return bomb costs the caller nothing.
+    function _call(address to, uint256 amount, uint256 gasLimit) internal returns (bool ok) {
         assembly ("memory-safe") {
-            ok := call(gas(), to, amount, 0, 0, 0, 0)
+            ok := call(gasLimit, to, amount, 0, 0, 0, 0)
         }
     }
 }

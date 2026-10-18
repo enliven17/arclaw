@@ -60,7 +60,8 @@ function build(m: RawMachine): Machine {
     slug: m.name.toLowerCase(),
     priceUsdc: m.priceUsdc,
     cap: m.capBps / 10_000,
-    floor: Math.min(...tiers.map((t) => t.multiplier)),
+    // The promise on chain (every box is worth at least this much of the price), not the lowest tier, which is built a little above it.
+    floor: POLICY.floor,
     rtp: tiers.reduce((s, t) => s + t.multiplier * t.probability, 0),
     tiers,
   };

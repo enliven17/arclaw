@@ -62,6 +62,27 @@ abstract contract D20Randomness is RandomnessSource, D20VRFConsumer {
         expired = !r.fulfilled && r.deadline != 0 && block.timestamp > r.deadline;
     }
 
+    /// getRequest read without a revert path: a call that reverts or answers short (dead, paused, upgraded or
+    /// misbehaving coordinator) counts as lost, and so does an unfulfilled request with no deadline. Reads `fulfilled`
+    /// and `deadline` straight from the 17-word static return, no returndata copy.
+    function _randomnessLost(uint256 requestId) internal view override returns (bool) {
+        bytes memory data = abi.encodeCall(ID20Coordinator.getRequest, (requestId));
+        address c = vrfCoordinator;
+        bool ok;
+        uint256 size;
+        uint256 deadline;
+        uint256 fulfilled;
+        assembly ("memory-safe") {
+            let out := mload(0x40)
+            ok := staticcall(gas(), c, add(data, 0x20), mload(data), out, 0x220)
+            size := returndatasize()
+            deadline := mload(add(out, 0x80)) // word 4
+            fulfilled := mload(add(out, 0x180)) // word 12
+        }
+        if (!ok || size < 0x220) return true;
+        return fulfilled == 0 && (deadline == 0 || block.timestamp > deadline);
+    }
+
     /// D20 pays the escrowed fee back to the refund address (this contract) once the deadline has passed.
     /// Anyone may call it; a failure (already refunded, not enough gas) is ignored.
     function _refundRandomness(uint256 requestId) internal override {

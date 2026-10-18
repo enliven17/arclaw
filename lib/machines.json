@@ -14,8 +14,8 @@
       "tiers": [
         {
           "name": "Common",
-          "multiplierBps": 5000,
-          "weight": 5310
+          "multiplierBps": 5265,
+          "weight": 5606
         },
         {
           "name": "Uncommon",
@@ -25,7 +25,7 @@
         {
           "name": "Rare",
           "multiplierBps": 10000,
-          "weight": 2000
+          "weight": 1704
         },
         {
           "name": "Epic",
@@ -52,8 +52,8 @@
       "tiers": [
         {
           "name": "Common",
-          "multiplierBps": 5000,
-          "weight": 3980
+          "multiplierBps": 5265,
+          "weight": 4199
         },
         {
           "name": "Uncommon",
@@ -63,7 +63,7 @@
         {
           "name": "Rare",
           "multiplierBps": 10000,
-          "weight": 2500
+          "weight": 2281
         },
         {
           "name": "Epic",
@@ -90,8 +90,8 @@
       "tiers": [
         {
           "name": "Common",
-          "multiplierBps": 5000,
-          "weight": 2647
+          "multiplierBps": 5265,
+          "weight": 2791
         },
         {
           "name": "Uncommon",
@@ -101,7 +101,7 @@
         {
           "name": "Rare",
           "multiplierBps": 10000,
-          "weight": 3000
+          "weight": 2856
         },
         {
           "name": "Epic",

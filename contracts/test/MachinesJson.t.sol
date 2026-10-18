@@ -27,6 +27,11 @@ contract Builder is ArcConfig {
     {
         return buildTable(m, readPolicy(vm.readFile(MACHINES)).floorBps, tok, px);
     }
+
+    /// The floor tier as deployed (floor x 1.053, see FLOOR_MARGIN_BPS).
+    function liftedFloor(uint256 floorBps) external pure returns (uint256) {
+        return floorBps * (10_000 + FLOOR_MARGIN_BPS) / 10_000;
+    }
 }
 
 /// Builds every machine in ../lib/machines.json with the deploy script's code and lands it under the on-chain rules.
@@ -74,5 +79,16 @@ contract MachinesJsonTest is Test {
         assertLe(maxBps, m.capBps);
         assertGe(rtp, pol.rtpMinBps);
         assertLe(rtp, pol.rtpMaxBps);
+        // the product: 75 / 80 / 85% RTP (15 to 25% house edge), realised on chain within 0.1 point
+        uint256 target = m.id == 1 ? 7500 : m.id == 2 ? 8000 : 8500;
+        assertApproxEqAbs(rtp, target, 10, "realised RTP on the product target");
+        // machines.json states what is deployed: no tier is lifted at build time, only the cap tier trimmed 1%
+        uint256 lifted = b.liftedFloor(pol.floorBps);
+        assertEq(m.tiers[0].multiplierBps, lifted, "floor tier written at floor x 1.053");
+        for (uint256 k; k < m.tiers.length; ++k) {
+            assertGe(m.tiers[k].multiplierBps, lifted, "no tier under the lifted floor");
+        }
+        // setMachine's bound: rtpMax x 1.05 <= MAX_RTP_BPS
+        assertLe(pol.rtpMaxBps * 10_500, 9500 * 10_000);
     }
 }
