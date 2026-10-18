@@ -41,7 +41,7 @@ crown jewels: two offline backups, deleted from the machine that made it.
 ## What was reviewed
 
 Six rounds, each by two independent AI-assisted reviewers writing exploit tests (`contracts/test/audit1` to `audit6*`),
-plus a red-team pass over the economics, the keys, the web app and the API (July to October 2026 build log, findings in the
+plus a red-team pass over the economics, the keys, the web app and the API (October 2026; findings are in the
 commit history). Every finding became a test. The suite also has invariant tests (liabilities always backed, reserves
 match). This is **not** a professional audit firm's work; one should be commissioned before large volumes.
 
@@ -56,7 +56,7 @@ match). This is **not** a professional audit firm's work; one should be commissi
 | Legal (gambling, securities, sanctions) | Region gate and age confirmation exist; counsel must set the real list (`BLOCKED_COUNTRIES`). Holder distribution wording reviewed in the disclaimer. |
 | Web: XSS, clickjacking, fake share cards | CSP and framing denied, signed share links, no user HTML. Embedded wallets sign without a prompt by design (the play button is the confirmation). |
 | Supply chain (Privy, wagmi, WalletConnect tree) | Lockfile installs, review upgrades, `pnpm audit` on release. |
-| Telegram bot token | Rotate before mainnet (it was shared in a chat once); webhook has a secret header. |
+| Telegram bot token | It was shared in a chat once, so rotate it when convenient; the webhook has a secret header. |
 
 ## Incidents
 
