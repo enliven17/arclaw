@@ -50,12 +50,25 @@ export function Cursor() {
     const onLeave = () => delete el.dataset.on;
     const onDown = () => (el.dataset.grab = "");
     const onUp = () => delete el.dataset.grab;
+    // A modal <dialog> sits in the top layer, above any z-index. The cursor is a manual popover so it lives there too,
+    // and it is shown again whenever a dialog opens, which puts it back on top.
+    const raise = () => {
+      if (el.matches(":popover-open")) el.hidePopover();
+      el.showPopover();
+    };
+    raise();
+    const dialogs = new MutationObserver((list) => {
+      if (list.some((m) => m.target instanceof HTMLDialogElement && m.target.open)) raise();
+    });
+    dialogs.observe(document.body, { attributes: true, attributeFilter: ["open"], subtree: true });
     window.addEventListener("pointermove", onMove, { passive: true });
     document.addEventListener("pointerleave", onLeave);
     window.addEventListener("pointerdown", onDown);
     window.addEventListener("pointerup", onUp);
     return () => {
       html.classList.remove("has-cursor");
+      dialogs.disconnect();
+      if (el.matches(":popover-open")) el.hidePopover();
       window.removeEventListener("pointermove", onMove);
       document.removeEventListener("pointerleave", onLeave);
       window.removeEventListener("pointerdown", onDown);
@@ -64,7 +77,7 @@ export function Cursor() {
   }, []);
 
   return (
-    <div ref={root} className="site-cursor" aria-hidden="true" data-mode="dot">
+    <div ref={root} className="site-cursor" aria-hidden="true" data-mode="dot" popover="manual">
       <span className="site-cursor-dot" />
       <span className="site-cursor-ring" />
       <svg className="site-cursor-claw" viewBox={`0 0 ${MARK_SIZE} ${MARK_SIZE}`} width="30" height="30">

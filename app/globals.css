@@ -344,6 +344,16 @@ html.has-cursor :is(input:not([type="range"]):not([type="checkbox"]):not([type="
   left: 0;
   top: 0;
   z-index: 300;
+  /* It is a popover (top layer, above modal dialogs): undo the UA popover box. */
+  right: auto;
+  bottom: auto;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  overflow: visible;
+  width: 0;
+  height: 0;
   pointer-events: none;
   opacity: 0;
   transition: opacity 160ms ease-out;
