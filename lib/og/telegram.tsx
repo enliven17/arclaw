@@ -9,7 +9,7 @@ import { CLAW, CREAM, LINE, MUTED, PANEL, PRIZE } from "./palette";
 
 export function TgWelcomeImage() {
   return (
-    <OgFrame eyebrow="Claw machines on Arc" footer="Every box returns at least half">
+    <OgFrame eyebrow="Claw machines on Arc" footer="At least half your stake, at table prices">
       <div style={{ display: "flex", width: "100%", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
           <div style={{ display: "flex", flexDirection: "column", fontSize: 76, fontWeight: 500, lineHeight: 1, letterSpacing: -2.7 }}>

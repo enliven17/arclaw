@@ -99,7 +99,7 @@ export function Odds({ machines }: { machines: Machine[] }) {
           {/* The guarantees. */}
           <dl className="grid grid-cols-2 gap-4">
             {[
-              { k: "Never less than", v: fmtPct(m.floor, 0), d: `Every box pays at least ${usdc(m.priceUsdc * m.floor)} USDC back in stocks.` },
+              { k: "Never less than", v: fmtPct(m.floor, 0), d: `Every box is worth at least ${usdc(m.priceUsdc * m.floor)} USDC in stocks at the prices its table was set with.` },
               { k: "Never more than", v: fmtMultiplier(m.cap), d: `The cap is set per machine and checked on every payout.` },
               { k: "Expected return", v: fmtPct(m.rtp), d: `Computed from this table. The contract keeps it between ${fmtPct(m.rtpMin, 0)} and ${fmtPct(m.rtpMax, 0)}.` },
               { k: "The draw", v: "VRF", d: "Every box comes from a verifiable random draw you can check on the explorer." },

@@ -42,7 +42,7 @@ const WELCOME = [
   "",
   MACHINES.map((m) => `${m.name}: ${usdc(m.priceUsdc)} USDC, ${fmtPct(m.rtp, 0)} expected return`).join("\n"),
   "",
-  "Every box returns at least half. Up to 10x on a jackpot.",
+  "Every box is set to be worth at least half its price at table prices. Up to 10x on a jackpot.",
 ].join("\n");
 
 const HELP = [
@@ -65,7 +65,7 @@ async function odds(chat: number) {
     media: MACHINES.map((m, i) => ({
       type: "photo",
       media: abs(`/api/og/tg?kind=odds-${m.slug}`),
-      ...(i === 0 ? { caption: "Odds are set on-chain. Every box is worth at least half its price and at most 10x." } : {}),
+      ...(i === 0 ? { caption: "Odds are set on-chain. Every box is set to be worth at least half its price at table prices, and at most 10x." } : {}),
     })),
   });
 }
