@@ -40,12 +40,14 @@ export function Line({ d, tone = "lo", className }: { d: string; tone?: LineTone
 
 const tenth = (v: number) => Math.round(v * 10) / 10;
 
+/** All dots of a group as one path of two-arc circles: a cabinet has over a thousand, and one node each made the
+ *  page slow to style and render (it stalled the page transitions). */
 export function Dots({ points, size = 0.5, tone = "mid" }: { points: Flat[]; size?: number; tone?: Tone }) {
+  if (!points.length) return null;
+  const d = points.map(([x, y]) => `M${tenth(x - size)} ${tenth(y)}a${size} ${size} 0 1 0 ${2 * size} 0a${size} ${size} 0 1 0 ${-2 * size} 0`).join("");
   return (
     <g className="iso-dots" data-tone={tone}>
-      {points.map(([x, y], i) => (
-        <circle key={i} cx={tenth(x)} cy={tenth(y)} r={size} />
-      ))}
+      <path d={d} />
     </g>
   );
 }
