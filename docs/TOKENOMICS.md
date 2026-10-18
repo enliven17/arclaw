@@ -66,7 +66,14 @@ Two separate things. Only the first is code.
 
 What it is worth at the top tier: about 0.16 percentage points of return (about 1.6 USDC per 1,000 USDC played; 0.16 cent per Single box, 0.8 cent per Stack box, 1.6 cent per Vault box). It is a small perk, by design: every table is checked on-chain at the maximum boost, so the house edge cannot be bent by it.
 
-**2. Buyback and distribution (off-chain, run by the team).** Not in any contract and no on-chain obligation. The team may use part of the house edge to buy ARCLAW on the market and distribute or burn it, by its own decision, in the amounts it chooses and announces. While margin is small the amounts are small; as profit grows the team intends to increase them. Nothing here is a promise of yield or a share of revenue. Because the contract does not know about it, it needs no audit and can change any time.
+**2. Buyback and holder distribution (off-chain, run by the team).** Not in any contract and not enforced on-chain. The team's policy, each month from the net profit of the month (after VRF fees, desk spread and the other costs above):
+
+| Share of monthly net profit | What happens |
+|---|---|
+| 25% | Buyback: the team buys ARCLAW on the market |
+| 10% | Distribution to ARCLAW holders (the team picks the snapshot and the method) |
+
+The two are separate, so 35% of the month's net profit goes to the token in total and 65% stays with the project. The percentages are the team's current policy, not a contract term: the team can raise them as profit grows (larger buybacks and distributions are the plan), and changing them needs no audit because the contracts know nothing about it. It is not a guaranteed yield; if there is no net profit in a month there is nothing to buy or distribute.
 
 Not decided yet and not written anywhere: ARCLAW total supply, allocation and launch plan (it is minted later on Arguspad; the owner sets its address in the vault).
 
