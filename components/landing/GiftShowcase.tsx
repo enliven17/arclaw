@@ -64,7 +64,7 @@ export function GiftShowcase() {
             .to({}, { duration: 0.4 });
 
           if (pinned) {
-            ScrollTrigger.create({ trigger: el, start: "top top", end: "+=1800", pin: true, pinType: pinType(), scrub: 0.8, animation: tl, anticipatePin: 1 });
+            ScrollTrigger.create({ trigger: el, start: "top top", end: "+=1800", refreshPriority: 1, pin: true, pinType: pinType(), scrub: 0.8, animation: tl, anticipatePin: 1 });
           } else {
             tl.timeScale(1.15);
             ScrollTrigger.create({ trigger: q("[data-gift-stage]")[0], start: "top 75%", once: true, onEnter: () => tl.play() });

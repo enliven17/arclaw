@@ -111,7 +111,7 @@ export function HowItWorks({ machines }: { machines: Machine[] }) {
           .to({}, { duration: 0.5 });
 
         if (pinned) {
-          ScrollTrigger.create({ trigger: el, start: "top top", end: "+=2600", pin: true, pinType: pinType(), scrub: 0.8, animation: tl, anticipatePin: 1 });
+          ScrollTrigger.create({ trigger: el, start: "top top", end: "+=2600", refreshPriority: 2, pin: true, pinType: pinType(), scrub: 0.8, animation: tl, anticipatePin: 1 });
         } else {
           tl.timeScale(1.2);
           ScrollTrigger.create({ trigger: q("[data-stage]")[0], start: "top 80%", once: true, onEnter: () => tl.play() });

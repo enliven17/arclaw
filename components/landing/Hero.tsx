@@ -41,7 +41,7 @@ export function Hero({ art, machines }: { art: Record<Variant, ClawArt>; machine
         if (pinned) {
           const proxy = { p: 0 };
           const tween = gsap.to(proxy, { p: 1, ease: "none", onUpdate: () => claw.current?.seekProgress(proxy.p) });
-          ScrollTrigger.create({ trigger: el, start: "top top", end: "+=1600", pin: true, pinType: pinType(), scrub: 0.6, animation: tween, anticipatePin: 1 });
+          ScrollTrigger.create({ trigger: el, start: "top top", end: "+=1600", refreshPriority: 3, pin: true, pinType: pinType(), scrub: 0.6, animation: tween, anticipatePin: 1 });
           return;
         }
         const st = ScrollTrigger.create({
