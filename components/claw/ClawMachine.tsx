@@ -21,7 +21,7 @@ import { translateAlong } from "@/components/iso/iso-kit";
 import type { ClawArt } from "./geometry";
 import { DURATION, REST_POSE, poseAt, type Phase, type Pose } from "./model";
 import { CHUTE_CLIP, PRONG_ANGLES, boxShift, bridgeShift, cablePath, clawShift, coinShift, hubTop, joystick, prongPath, px, trolleyShift } from "./frame";
-import { H, P, W } from "./view";
+import { H, P, W, variantOf } from "./view";
 import { play, type Sfx } from "@/lib/sfx";
 import "./claw.css";
 
@@ -318,7 +318,9 @@ export function ClawMachine({ art, ref, label = "A claw machine: a glass cabinet
             <path d={CHUTE_CLIP} />
           </clipPath>
         </defs>
-        {art.back}
+        {/* The static back of the cabinet (geometry.tsx cabinetBack), cached once per finish. */}
+        <use href={`/cabinet/${variantOf(machine)}.svg#back`} />
+
         <g ref={farTruck}>{art.farTruck}</g>
         <g ref={trolley}>{art.trolley}</g>
         <path ref={cable} className="claw-cable" strokeWidth={CABLE_W} d={cablePath(s)} />

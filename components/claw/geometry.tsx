@@ -411,22 +411,30 @@ function Coin() {
 }
 
 /** Everything the live component needs, keyed (react.md: lazy element props need stable keys). */
+/**
+ * Everything behind the gantry: cabinet body, deck, far frame, shelf light, chute and pile. It never moves and is
+ * about 70% of a cabinet's markup, so it ships as a static, cached SVG (public/cabinet/<variant>.svg, written by
+ * scripts/cabinet-svgs.tsx before every build) instead of inline in every page and its RSC payload.
+ */
+export function cabinetBack(variant: Variant = "single") {
+  return (
+    <g key="back">
+      <path className="iso-halo" d={haloOf(PLINTH, Z.foot, 6, P)} />
+      <Base variant={variant} />
+      <Body />
+      <BodyTrim variant={variant} />
+      <Deck />
+      <DeckTrim variant={variant} />
+      <FarField />
+      <ShelfLight variant={variant} />
+      <ChuteAndPile variant={variant} />
+      <Rail ry={RAIL_Y[0]} near={false} />
+    </g>
+  );
+}
+
 export function clawArt(variant: Variant = "single") {
   return {
-    back: (
-      <g key="back">
-        <path className="iso-halo" d={haloOf(PLINTH, Z.foot, 6, P)} />
-        <Base variant={variant} />
-        <Body />
-        <BodyTrim variant={variant} />
-        <Deck />
-        <DeckTrim variant={variant} />
-        <FarField />
-        <ShelfLight variant={variant} />
-        <ChuteAndPile variant={variant} />
-        <Rail ry={RAIL_Y[0]} near={false} />
-      </g>
-    ),
     farTruck: (
       <g key="far-truck">
         <Truck ry={RAIL_Y[0]} />
