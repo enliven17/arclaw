@@ -10,6 +10,9 @@ export default function LegalLayout({ children }: { children: ReactNode }) {
       <main id="main" className="wrap pb-24 pt-36">
         <article className="legal mx-auto max-w-[720px]">{children}</article>
         <nav className="mx-auto mt-16 flex max-w-[720px] gap-6 border-t border-cream/8 pt-6 text-[15px] text-muted">
+          <Link className="transition-colors hover:text-cream" href="/whitepaper">
+            Whitepaper
+          </Link>
           <Link className="transition-colors hover:text-cream" href="/disclaimer">
             Risk disclaimer
           </Link>

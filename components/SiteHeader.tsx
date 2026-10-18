@@ -24,6 +24,7 @@ const NAV = [
   { href: "/#gift", label: "Gift" },
   { href: "/#token", label: "Token" },
   { href: "/#odds", label: "Odds" },
+  { href: "/whitepaper", label: "Whitepaper" },
   { href: "/#faq", label: "FAQ" },
 ];
 
