@@ -9,6 +9,7 @@ import { Logo } from "@/components/Logo";
 import { SplitHeading } from "@/components/motion/SmoothScroll";
 import type { Machine } from "@/lib/machines";
 import { X_HANDLE, X_URL } from "@/lib/seo";
+import { ClawLink } from "@/components/motion/PageTransitions";
 
 const LINKS = [
   { href: "#machines", label: "Machines" },
@@ -29,10 +30,10 @@ export function Footer({ art, machines }: { art: Record<Variant, ClawArt>; machi
           <ul className="mt-10 grid max-w-[560px] gap-3 lg:grid-cols-3" data-reveal>
             {machines.map((m, i) => (
               <li key={m.id}>
-                <a href={`/app/play/${m.slug}`} className={`${i === 0 ? "btn" : "btn-ghost"} w-full !justify-between`}>
+                <ClawLink href={`/app/play/${m.slug}`} className={`${i === 0 ? "btn" : "btn-ghost"} w-full !justify-between`}>
                   <span>{m.name}</span>
                   <span className="money">{m.priceUsdc} USDC</span>
-                </a>
+                </ClawLink>
               </li>
             ))}
           </ul>

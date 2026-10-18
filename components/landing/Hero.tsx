@@ -7,7 +7,6 @@
  * screens play it once when the cabinet is in view. The landing is marketing only: the button opens the machine in
  * the app (/app/play/<machine>). Reduced motion: the machine stays at rest.
  */
-import Link from "next/link";
 import { useRef, useState } from "react";
 import { ClawMachine, type ClawHandle } from "@/components/claw/ClawMachine";
 import type { ClawArt } from "@/components/claw/geometry";
@@ -17,6 +16,7 @@ import { PINNED, REDUCED, ScrollTrigger, gsap, pinType, useGSAP } from "@/lib/mo
 import { whenSplashDone } from "@/lib/splash";
 import type { Machine } from "@/lib/machines";
 import { MachineSwitch } from "./MachineSwitch";
+import { ClawLink } from "@/components/motion/PageTransitions";
 
 export function Hero({ art, machines }: { art: Record<Variant, ClawArt>; machines: Machine[] }) {
   const root = useRef<HTMLElement>(null);
@@ -74,9 +74,9 @@ export function Hero({ art, machines }: { art: Record<Variant, ClawArt>; machine
             <MachineSwitch machines={machines} value={id} onChange={setId} label="Machine" />
           </div>
           <div className="mt-4 flex flex-wrap items-center gap-3" data-reveal>
-            <Link href={`/app/play/${machine.slug}`} className="btn-cream">
+            <ClawLink href={`/app/play/${machine.slug}`} className="btn-cream">
               Play {machine.name} for <span className="money">{machine.priceUsdc} USDC</span>
-            </Link>
+            </ClawLink>
             <a href="#odds" className="btn-ghost">
               See the odds
             </a>

@@ -7,6 +7,7 @@ import Link from "next/link";
 import { ClawMachine } from "@/components/claw/ClawMachine";
 import { clawArt } from "@/components/claw/geometry";
 import { variantOf } from "@/components/claw/view";
+import { CabinetMorph } from "@/components/motion/PageTransitions";
 import { fmtMultiplier, fmtPct } from "@/lib/machines";
 import { withResolved } from "@/lib/machines.server";
 import { usdc } from "@/lib/stocks";
@@ -30,7 +31,9 @@ export default function PlayPage() {
             <li key={m.id} className="flex flex-col overflow-hidden rounded-[18px] border border-line bg-panel">
               <Link href={`/app/play/${m.slug}`} className="group flex flex-1 flex-col" aria-label={`Enter ${m.name}, ${m.priceUsdc} USDC per play`}>
                 <div className="mx-auto w-full max-w-[320px] px-6 pt-6 transition-transform duration-500 ease-[var(--ease-out-quint)] group-hover:-translate-y-1">
-                  <ClawMachine art={ART[variantOf(m.slug)]} machine={m.slug} label={`The ${m.name} machine.`} />
+                  <CabinetMorph slug={m.slug}>
+                    <ClawMachine art={ART[variantOf(m.slug)]} machine={m.slug} label={`The ${m.name} machine.`} />
+                  </CabinetMorph>
                 </div>
                 <div className="flex flex-1 flex-col border-t border-line p-6">
                   <div className="flex items-baseline justify-between gap-4">

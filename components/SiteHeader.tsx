@@ -14,6 +14,7 @@ import { getLenis } from "@/lib/motion";
 import { cn } from "@/lib/cn";
 import { Logo } from "./Logo";
 import { SoundToggle } from "./SoundToggle";
+import { ClawLink } from "./motion/PageTransitions";
 import { play } from "@/lib/sfx";
 
 const NAV = [
@@ -89,9 +90,9 @@ export function SiteHeader() {
           </nav>
           <div className="flex items-center gap-2">
             <SoundToggle />
-            <Link href="/app" className="btn-ghost !min-h-[36px] !px-3.5 !py-2 text-[14px]">
+            <ClawLink href="/app/play" className="btn-ghost !min-h-[36px] !px-3.5 !py-2 text-[14px]">
               Open app
-            </Link>
+            </ClawLink>
             <button type="button" onClick={open} className="btn-ghost !min-h-[36px] !px-3 !py-2 text-[14px] md:hidden" aria-haspopup="dialog">
               Menu
             </button>
@@ -121,9 +122,9 @@ export function SiteHeader() {
               </li>
             ))}
           </ul>
-          <Link href="/app" onClick={close} className="btn mt-10 w-full">
+          <ClawLink href="/app/play" onClick={close} className="btn mt-10 w-full">
             Open app
-          </Link>
+          </ClawLink>
         </nav>
       </dialog>
     </>

@@ -14,6 +14,7 @@ import { WalletProvider } from "@/components/wallet/WalletProvider";
 import { ARC } from "@/lib/arc/config";
 import { X_URL } from "@/lib/seo";
 import { cn } from "@/lib/cn";
+import { ClawLink } from "@/components/motion/PageTransitions";
 
 const NAV = [
   { href: "/app/play", label: "Play" },
@@ -28,9 +29,9 @@ function Header() {
     <header className="fixed inset-x-0 top-0 z-[90] border-b border-line bg-ink/85 backdrop-blur-md">
       <div className="wrap flex h-14 items-center justify-between gap-4">
         <div className="flex items-center gap-6">
-          <Link href="/" aria-label="arclaw home" className="rounded-[4px]">
+          <ClawLink href="/" aria-label="arclaw home" className="rounded-[4px]">
             <Logo height={22} />
-          </Link>
+          </ClawLink>
           <nav aria-label="App" className="hidden md:block">
             <ul className="flex items-center gap-1">
               {NAV.map((n) => {

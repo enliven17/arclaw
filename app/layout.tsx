@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Providers } from "@/components/Providers";
+import { PageTransition, TransitionClaw } from "@/components/motion/PageTransitions";
 import { fontVariables } from "@/lib/fonts";
 import { SITE_DESCRIPTION, SITE_NAME, SITE_URL, TAGLINE, X_HANDLE } from "@/lib/seo";
 import "./globals.css";
@@ -33,7 +34,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         >
           Skip to content
         </a>
-        <Providers>{children}</Providers>
+        <Providers>
+          <PageTransition>{children}</PageTransition>
+          <TransitionClaw />
+        </Providers>
       </body>
     </html>
   );

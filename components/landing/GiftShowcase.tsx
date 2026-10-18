@@ -8,13 +8,13 @@
  * Wide screens with a fine pointer pin and scrub; everything else plays once in view. Without JS or with reduced
  * motion the wrapped gift shows as it ends.
  */
-import Link from "next/link";
 import { useRef } from "react";
 import { PINNED, REDUCED, ScrollTrigger, gsap, pinType, useGSAP } from "@/lib/motion";
 import { whenSplashDone } from "@/lib/splash";
 import { SplitHeading } from "@/components/motion/SmoothScroll";
 import { BoosterPack } from "@/components/pack/BoosterPack";
 import { Logo } from "@/components/Logo";
+import { ClawLink } from "@/components/motion/PageTransitions";
 
 const PACKS = ["Single", "Stack", "Vault"];
 
@@ -93,9 +93,9 @@ export function GiftShowcase() {
             the box for their own wallet, and nobody can take it on the way.
           </p>
           <div className="mt-8" data-reveal>
-            <Link href="/app/gifts" className="btn-cream">
+            <ClawLink href="/app/gifts" className="btn-cream">
               Send a gift
-            </Link>
+            </ClawLink>
           </div>
         </div>
 

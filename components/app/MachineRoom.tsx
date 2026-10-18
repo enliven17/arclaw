@@ -18,6 +18,7 @@ import { ClawMachine, type ClawHandle } from "@/components/claw/ClawMachine";
 import type { ClawArt } from "@/components/claw/geometry";
 import { useWallet } from "@/components/wallet/WalletProvider";
 import { RevealOverlay, type RevealWaiting } from "./RevealOverlay";
+import { CabinetMorph } from "@/components/motion/PageTransitions";
 import { arcClient } from "@/lib/arc/chain";
 import { explorerTx } from "@/lib/arc/config";
 import {
@@ -197,7 +198,9 @@ export function MachineRoom({ art, machine }: { art: ClawArt; machine: Machine }
   return (
     <div className="wrap grid gap-8 py-8 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)] lg:items-center lg:gap-12 lg:py-10">
       <div className="mx-auto w-full max-w-[560px]">
-        <ClawMachine ref={claw} art={art} machine={machine.slug} sound label={`The ${machine.name} machine.`} />
+        <CabinetMorph slug={machine.slug}>
+          <ClawMachine ref={claw} art={art} machine={machine.slug} sound label={`The ${machine.name} machine.`} />
+        </CabinetMorph>
       </div>
 
       <section aria-labelledby="panel-title" className="rounded-[18px] border border-line bg-panel p-6 md:p-8">

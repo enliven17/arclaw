@@ -8,6 +8,7 @@ import { variantOf, type Variant } from "@/components/claw/view";
 import { SplitHeading } from "@/components/motion/SmoothScroll";
 import { fmtMultiplier, fmtPct, type Machine } from "@/lib/machines";
 import { usdc } from "@/lib/stocks";
+import { ClawLink } from "@/components/motion/PageTransitions";
 
 export function Machines({ art, machines }: { art: Record<Variant, ClawArt>; machines: Machine[] }) {
   return (
@@ -52,9 +53,9 @@ export function Machines({ art, machines }: { art: Record<Variant, ClawArt>; mac
                     </div>
                   </dl>
                   <div className="mt-6 grid grid-cols-2 gap-2">
-                    <a href={`/app/play/${m.slug}`} className="btn-cream w-full">
+                    <ClawLink href={`/app/play/${m.slug}`} className="btn-cream w-full">
                       Play {m.name}
-                    </a>
+                    </ClawLink>
                     <a href="#odds" className="btn-ghost w-full">
                       Odds
                     </a>

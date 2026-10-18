@@ -491,3 +491,98 @@ html:not(.js) .how-step {
   opacity: 0.4;
   pointer-events: none;
 }
+
+/* ---------- Page transitions (components/motion/PageTransitions.tsx) ---------- */
+
+/* The claw that hauls the page between the landing and the app: parked above the screen, dropped by html[data-claw]. */
+.transition-claw {
+  position: fixed;
+  left: 50%;
+  top: 0;
+  z-index: 400;
+  pointer-events: none;
+  transform: translate(-50%, -130%);
+  view-transition-name: claw-rig;
+}
+.transition-claw-cable {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% - 3px);
+  width: 6px;
+  height: 100vh;
+  transform: translateX(-50%);
+  background: var(--color-cream);
+}
+.transition-claw svg {
+  display: block;
+}
+html[data-claw] .transition-claw {
+  transform: translate(-50%, -14px);
+  transition: transform 180ms cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+
+@keyframes vt-haul {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(-110vh);
+  }
+}
+@keyframes vt-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes vt-rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
+/* Claw: the old viewport (with the claw gripping it) is hauled up, over the new page, which waits still underneath. */
+html:active-view-transition-type(claw)::view-transition-old(root) {
+  z-index: 2;
+  animation: vt-haul 480ms cubic-bezier(0.55, 0, 0.75, 0.15) both;
+}
+html:active-view-transition-type(claw)::view-transition-new(root) {
+  z-index: 1;
+  animation: none;
+}
+::view-transition-group(claw-rig) {
+  z-index: 3;
+  animation: none;
+}
+::view-transition-old(claw-rig),
+::view-transition-new(claw-rig) {
+  animation: vt-haul 480ms cubic-bezier(0.55, 0, 0.75, 0.15) both;
+}
+
+/* Everything else: the old page leaves fast, the new one rises in a little after. */
+::view-transition-group(.page-swap) {
+  animation-duration: 0s;
+}
+::view-transition-old(.page-swap) {
+  animation: vt-fade-out 140ms ease-out both;
+}
+::view-transition-new(.page-swap) {
+  animation: vt-rise-in 280ms var(--ease-out-quint) 90ms both;
+}
+
+/* A cabinet moving from its marketplace card into its machine page. */
+::view-transition-group(.cabinet-morph) {
+  animation-duration: 460ms;
+  animation-timing-function: var(--ease-out-quint);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+  .transition-claw {
+    display: none;
+  }
+}
