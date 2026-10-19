@@ -21,7 +21,7 @@ only when someone can use what it pays for.
 It runs two ways, same code:
 
 - **Convex crons** (production): `convex/keeperRun.ts` (`"use node"` actions `reveal`, `tick`, `reprice`), scheduled
-  in `convex/crons.ts`; storage in `convex/keeperState.ts`; the public `keeper:wake` and `keeper:status` in
+  in `convex/crons.ts`; storage in `convex/keeperState.ts`; the public `keeper:wake` and the admin-only `keeper:status` in
   `convex/keeper.ts` (a `"use node"` file can only hold actions). The actions do nothing until `KEEPER_PRIVATE_KEY` is
   set in the Convex env. Manual reprice: `npx convex run keeperRun:reprice '{"force":true}'`.
 - **CLI** (operator laptop, a backup VM, tests): `pnpm keeper <command>`.
@@ -133,9 +133,9 @@ URL answering `{ "quotes": [ { "symbol", "mid", "halted", "generatedAt" } ] }`.
 
 A machine nobody used for a day sleeps with a stale table. When a visitor opens its page:
 
-1. The app reads `keeper:status` (public query). Each entry of `machines` has `fresh` (switched on, table younger than
-   `maxTableAge`, every card within `maxPriceMoveBps` at the last read), `openable` (fresh and not paused), `waking`
-   (not fresh and woken in the last hour), `staleAt`, `demand` and `readAt`.
+1. The app reads the machine's table straight from the chain (`lib/arclaw/status.ts`). `keeper:status` holds the
+   same per machine view (`fresh`, `openable`, `waking`, `staleAt`, `demand`, `readAt`) plus health and the event
+   log, and takes `ADMIN_QUERY_SECRET` (Convex and Vercel env): only `/api/admin` reads it.
 2. If it is not fresh, the app calls `keeper:wake({ machineId })` (public mutation; only ids from `lib/machines.json`;
    one per machine per 60 s, a repeat answers `{ accepted: false }`) and shows "getting the machine ready".
 3. The 10 s cron sees the new wake, reprices the machine if it is due (stale, aged or moved) and saves its new state;

@@ -1,10 +1,12 @@
 "use client";
 
 /**
- * App-wide client providers: smooth scroll, the cursor, the splash and sound. Wallets (ConnectKit) mount in the app
+ * App-wide client providers: smooth scroll, the cursor, the splash, sound and Vercel Analytics. Analytics gets the path
+ * only: a claim link carries its private key after the #, and a share link its signed fields after the ?. Wallets (ConnectKit) mount in the app
  * shell only (components/app/AppShell.tsx), so the marketing pages never load them.
  */
 import { useEffect, type ReactNode } from "react";
+import { Analytics } from "@vercel/analytics/next";
 import { armSound } from "@/lib/sfx";
 import { SmoothScroll } from "./motion/SmoothScroll";
 import { Cursor } from "./motion/Cursor";
@@ -18,6 +20,7 @@ export function Providers({ children }: { children: ReactNode }) {
       <Cursor />
       <Splash />
       {children}
+      <Analytics beforeSend={(e) => ({ ...e, url: e.url.split(/[?#]/)[0]! })} />
     </SmoothScroll>
   );
 }

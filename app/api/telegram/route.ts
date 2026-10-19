@@ -10,8 +10,9 @@ export const runtime = "nodejs";
 function authorised(req: Request): boolean {
   const want = process.env.TELEGRAM_WEBHOOK_SECRET;
   const got = req.headers.get("x-telegram-bot-api-secret-token");
-  if (!want || !got || want.length !== got.length) return false;
-  return timingSafeEqual(Buffer.from(want), Buffer.from(got));
+  if (!want || !got) return false;
+  const a = Buffer.from(want), b = Buffer.from(got);
+  return a.length === b.length && timingSafeEqual(a, b);
 }
 
 export async function POST(req: Request) {

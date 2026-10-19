@@ -1,13 +1,21 @@
 /**
  * Totals for the admin panel (app/app/admin), from the indexer's tables: players, plays, boxes, USDC in and out, per
- * machine and per tier, plus the latest plays and pulls. Public like the leaderboard: every number here is derived
- * from public contract events, so it guards nothing; the panel's sign-in (lib/admin.server.ts) is what is gated.
+ * machine and per tier, plus the latest plays and pulls. Only for the site's server: the caller must pass
+ * ADMIN_QUERY_SECRET (set in both the Convex and the Vercel env), which /api/admin does after the wallet sign-in.
  */
 import { queryGeneric } from "convex/server";
+import { v } from "convex/values";
+
+/** True when `secret` is this deployment's ADMIN_QUERY_SECRET; an unset secret lets nobody in. */
+export const adminSecretOk = (secret: string) => {
+  const want = process.env.ADMIN_QUERY_SECRET ?? "";
+  return want.length >= 32 && secret === want;
+};
 
 export const overview = queryGeneric({
-  args: {},
-  handler: async (ctx) => {
+  args: { secret: v.string() },
+  handler: async (ctx, { secret }) => {
+    if (!adminSecretOk(secret)) throw new Error("not found");
     // ponytail: full scans, fine to a few thousand rows; keep running totals in `ingest` when Convex's read limit nears
     const players = await ctx.db.query("players").collect();
     const plays = await ctx.db.query("plays").collect();

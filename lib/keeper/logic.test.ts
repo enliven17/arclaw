@@ -145,3 +145,11 @@ test("alerts: sent once, re-sent on escalation or after the repeat window, resol
   });
   assert.equal(st2.alerts.paused?.lastSentAt, 0);
 });
+
+test("errorLine: no RPC URL (and so no API key) ever leaves the keeper in an error", async () => {
+  const { errorLine } = await import("./alert");
+  const viemLike = Object.assign(new Error("HTTP request failed.\n\nURL: https://arc-mainnet.g.alchemy.com/v2/secret_key\nRequest body: {}"), { shortMessage: "HTTP request failed." });
+  assert.equal(errorLine(viemLike), "HTTP request failed.");
+  assert.equal(errorLine(new Error("Request exceeds defined limit. URL: https://rpc.example/v2/k3y")), "Request exceeds defined limit. URL: <url>");
+  assert.doesNotMatch(errorLine("fetch to wss://node.example/abc failed"), /abc/);
+});

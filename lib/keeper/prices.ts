@@ -5,6 +5,7 @@
  * Fail closed: unreachable, malformed, stale (generatedAt older than maxAgeSec by the wall clock), halted, a missing
  * symbol, or any token more than maxDiffBps away from the on-chain oracle means no reprice.
  */
+import { errorLine } from "./alert";
 import type { PriceCheck } from "./config";
 
 export type SecondSourceResult =
@@ -26,7 +27,7 @@ export async function checkSecondSource(pc: PriceCheck, oracle: ReadonlyMap<stri
     if (!Array.isArray(json.quotes)) return { ok: false, reason: "second source answered without quotes" };
     quotes = json.quotes as Quote[];
   } catch (e) {
-    return { ok: false, reason: `second source unreachable: ${(e as Error).message?.slice(0, 120) ?? e}` };
+    return { ok: false, reason: `second source unreachable: ${errorLine(e, 120)}` };
   }
   const bySymbol = new Map(quotes.filter((q) => typeof q.symbol === "string").map((q) => [String(q.symbol).toUpperCase(), q]));
   let worstBps = 0n;

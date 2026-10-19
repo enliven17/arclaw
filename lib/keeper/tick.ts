@@ -15,7 +15,7 @@
  */
 import type { Address, PublicClient } from "viem";
 import { recentVrfActivity } from "./arclaw";
-import { notifierOf, reconcileAlerts, type Notify } from "./alert";
+import { errorLine, notifierOf, reconcileAlerts, type Notify } from "./alert";
 import type { KeeperConfig } from "./config";
 import { assessHealth } from "./health";
 import { probeVrf, retryOrReturn, reveal } from "./ops";
@@ -134,7 +134,7 @@ export async function tick(ctx: KeeperContext, opts: TickOptions): Promise<TickR
     try {
       markets = await readMarkets(client, cfg, open.g);
     } catch (e) {
-      issues.push({ key: "read-markets", severity: "warn", message: `could not read tables or prices: ${(e as Error).message.slice(0, 200)}` });
+      issues.push({ key: "read-markets", severity: "warn", message: `could not read tables or prices: ${errorLine(e)}` });
     }
     let demand: Map<number, Demand> | null = null;
     if (markets) {
@@ -178,7 +178,7 @@ export async function tick(ctx: KeeperContext, opts: TickOptions): Promise<TickR
     state.lastTick = { at: open.g.now, ok: true, summary };
     return result;
   } catch (e) {
-    const msg = (e as Error).message?.split("\n")[0]?.slice(0, 300) ?? String(e);
+    const msg = errorLine(e, 300);
     state.failures++;
     addSpend(state, sender, wall());
     result.ok = false;

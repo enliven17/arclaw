@@ -15,6 +15,7 @@
  */
 import { decodeErrorResult, encodeFunctionData, parseAbi, type Address, type Hex, type PublicClient } from "viem";
 import { arclawAbi, astockPriceSourceAbi, d20CoordinatorAbi, mockPriceSourceAbi } from "../abi";
+import { errorLine } from "./alert";
 import type { Deployment } from "./config";
 import type { ChainOutcome, MachineRules, OutcomeInput } from "./table";
 
@@ -302,6 +303,5 @@ export function revertName(e: unknown): string {
       return `revert ${data.slice(0, 10)}`;
     }
   }
-  const m = e instanceof Error ? ((e as { shortMessage?: string }).shortMessage ?? e.message) : String(e);
-  return m.split("\n")[0]!.slice(0, 200);
+  return errorLine(e);
 }

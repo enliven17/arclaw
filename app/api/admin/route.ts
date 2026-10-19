@@ -17,8 +17,8 @@ import { isAdmin } from "@/lib/admin.server";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const overviewRef = makeFunctionReference<"query", Record<string, never>, unknown>("admin:overview");
-const statusRef = makeFunctionReference<"query", { events?: number }, unknown>("keeper:status");
+const overviewRef = makeFunctionReference<"query", { secret: string }, unknown>("admin:overview");
+const statusRef = makeFunctionReference<"query", { secret: string; events?: number }, unknown>("keeper:status");
 
 const settle = async <T,>(fn: () => Promise<T>) => {
   try {
@@ -57,14 +57,16 @@ export async function POST(request: NextRequest) {
   const body = (await request.json().catch(() => null)) as { message?: unknown; signature?: unknown } | null;
   if (!(await isAdmin(request.headers.get("host"), body?.message, body?.signature))) return NextResponse.json({ error: "not found" }, { status: 404 });
 
+  const secret = process.env.ADMIN_QUERY_SECRET ?? "";
   const convex = () => {
     const url = process.env.NEXT_PUBLIC_CONVEX_URL;
     if (!url) throw new Error("NEXT_PUBLIC_CONVEX_URL is not set");
+    if (!secret) throw new Error("ADMIN_QUERY_SECRET is not set");
     return new ConvexHttpClient(url);
   };
   const [stats, keeper, onchain] = await Promise.all([
-    settle(() => convex().query(overviewRef, {})),
-    settle(() => convex().query(statusRef, { events: 25 })),
+    settle(() => convex().query(overviewRef, { secret })),
+    settle(() => convex().query(statusRef, { secret, events: 25 })),
     settle(chain),
   ]);
   return NextResponse.json({ at: Date.now(), stats, keeper, chain: onchain }, { headers: { "cache-control": "no-store" } });

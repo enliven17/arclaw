@@ -14,6 +14,13 @@ const RANK: Record<Severity, number> = { info: 0, warn: 1, critical: 2 };
 export const REPEAT_S: Record<Severity, number> = { info: Infinity, warn: 6 * 3600, critical: 3600 };
 export const RESOLVE_QUIET_S = 15 * 60;
 
+/** An error as one short line that is safe to log, alert and show: viem's shortMessage (its full message carries the
+ *  request URL, and a private RPC's URL holds its API key), with any URL left in it masked. */
+export function errorLine(e: unknown, max = 200): string {
+  const m = e instanceof Error ? ((e as { shortMessage?: string }).shortMessage ?? e.message) : String(e);
+  return (m.split("\n")[0] ?? "").replace(/(?:https?|wss?):\/\/\S+/g, "<url>").slice(0, max);
+}
+
 export type Notify = (text: string) => Promise<void>;
 
 export function telegramNotify(chatId: string, token = process.env.TELEGRAM_BOT_TOKEN, api = process.env.KEEPER_TELEGRAM_API || "https://api.telegram.org"): Notify {
@@ -51,7 +58,7 @@ export async function reconcileAlerts(cfg: KeeperConfig, state: KeeperState, iss
       await notify(text);
       return true;
     } catch (e) {
-      events.push({ at: now, kind: "alert-failed", level: "warn", message: (e as Error).message });
+      events.push({ at: now, kind: "alert-failed", level: "warn", message: errorLine(e) });
       return false;
     }
   };

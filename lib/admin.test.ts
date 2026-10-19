@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { ADMIN_SESSION_MS, adminMessage } from "./admin";
-import { isAdmin } from "./admin.server";
+import { allowedHost, isAdmin } from "./admin.server";
 
 const admin = privateKeyToAccount(generatePrivateKey());
 const host = "www.arclaw.app";
@@ -27,4 +27,12 @@ test("expired, far-future, wrong host and wrong signer are refused", async () =>
   assert.equal(await isAdmin("evil.example", ok.message, ok.signature, now, admin.address), false);
   const other = await signIn(now + ADMIN_SESSION_MS, privateKeyToAccount(generatePrivateKey()));
   assert.equal(await isAdmin(host, other.message, other.signature, now, admin.address), false);
+});
+
+test("only the site's own hosts may be named in a sign-in", () => {
+  assert.equal(allowedHost("www.arclaw.app", "https://arclaw.app"), true);
+  assert.equal(allowedHost("arclaw.app", "https://www.arclaw.app"), true);
+  assert.equal(allowedHost("localhost:3000", "https://arclaw.app"), true);
+  assert.equal(allowedHost("evil.example", "https://arclaw.app"), false);
+  assert.equal(allowedHost("arclaw.app.evil.example", "https://arclaw.app"), false);
 });

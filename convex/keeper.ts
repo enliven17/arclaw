@@ -5,14 +5,16 @@
  *                        (one per machine per 60 s), machineId must be one of lib/machines.json, nothing else is taken.
  *                        The 10 s keeper loop picks it up, so the table is fresh about 10 to 20 s later. A wake also
  *                        counts as demand for 60 minutes (docs/OPERATIONS.md, reprice policy).
- *   status()             last tick, last reprice, health, alerts, recent events, and per machine whether its table is
- *                        fresh (what the UI polls while it shows "getting the machine ready").
+ *   status({ secret })   last tick, last reprice, health, alerts, recent events, and per machine whether its table is
+ *                        fresh. Admin only (ADMIN_QUERY_SECRET, convex/admin.ts): health and events describe the
+ *                        treasury and the keeper's errors. The app reads machine state from the chain instead.
  */
 import { mutationGeneric, queryGeneric } from "convex/server";
 import { v } from "convex/values";
 import machinesFile from "../lib/machines.json";
 import { machineFreshness } from "../lib/keeper/status";
 import type { MachineStatus } from "../lib/keeper/store";
+import { adminSecretOk } from "./admin";
 
 const MACHINE_IDS = new Set((machinesFile as { machines: { id: number }[] }).machines.map((m) => m.id));
 const WAKE_DEDUP_MS = 60_000;
@@ -40,8 +42,9 @@ type State = {
 };
 
 export const status = queryGeneric({
-  args: { events: v.optional(v.number()) },
-  handler: async (ctx, { events = 30 }) => {
+  args: { secret: v.string(), events: v.optional(v.number()) },
+  handler: async (ctx, { secret, events = 30 }) => {
+    if (!adminSecretOk(secret)) throw new Error("not found");
     const raw = (await ctx.db.query("keeperKv").withIndex("by_key", (q) => q.eq("key", "state")).unique())?.value;
     const s = raw ? (JSON.parse(raw) as State) : null;
     const recent = await ctx.db.query("keeperEvents").withIndex("by_at").order("desc").take(Math.min(Math.max(events, 1), 100));

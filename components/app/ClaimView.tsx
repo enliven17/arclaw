@@ -7,7 +7,7 @@
  * claimLink(linkId, yourAddress, signature): a copy of the link seen by anyone else can only ever deliver the boxes to
  * the address the key signed.
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Address, Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { useWallet } from "@/components/wallet/WalletProvider";
@@ -28,6 +28,7 @@ function parseHash(): Parsed {
 export function ClaimView({ machineSlug, boxes, note }: { machineSlug: string; boxes: number; note: string | null }) {
   const w = useWallet();
   const [link, setLink] = useState<Parsed | undefined>(undefined);
+  const parsed = useRef<Parsed | undefined>(undefined);
   const [state, setState] = useState<LinkState | null>(null);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
@@ -35,8 +36,11 @@ export function ClaimView({ machineSlug, boxes, note }: { machineSlug: string; b
   const [now, setNow] = useState(0);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- the key lives in the URL hash, browser only
-    setLink(parseHash());
+    // Kept in a ref: the effect can run twice (strict mode) and the hash is gone the second time.
+    parsed.current ??= parseHash();
+    setLink(parsed.current);
+    // Read once, then off the address bar, so it is not left in history, screenshots or anything that reads the URL.
+    if (window.location.hash) history.replaceState(history.state, "", window.location.pathname + window.location.search);
   }, []);
 
   const load = useCallback(async () => {

@@ -1,5 +1,4 @@
 import type { Metadata, Viewport } from "next";
-import { Analytics } from "@vercel/analytics/next";
 import { Providers } from "@/components/Providers";
 import { ClawCurtain } from "@/components/motion/ClawCurtain";
 import { PageTransition } from "@/components/motion/PageTransitions";
@@ -40,7 +39,6 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           <PageTransition>{children}</PageTransition>
           <ClawCurtain />
         </Providers>
-        <Analytics />
       </body>
     </html>
   );
