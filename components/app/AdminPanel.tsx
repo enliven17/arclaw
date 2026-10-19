@@ -2,13 +2,13 @@
 
 /**
  * The admin panel: treasury, usage, machines, inventory, players and the keeper's log, from POST /api/admin. The
- * admin wallet signs a 15-minute read-only sign-in (lib/admin.ts); it is kept for this tab only and the panel refreshes
+ * admin wallet signs a 10-minute read-only sign-in (lib/admin.ts); it is kept for this tab only and the panel refreshes
  * every 30 seconds until it lapses. Any other wallet sees nothing: the server answers it with a 404.
  */
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useSignMessage } from "wagmi";
 import { useWallet } from "@/components/wallet/WalletProvider";
-import { ADMIN, adminMessage } from "@/lib/admin";
+import { ADMIN, ADMIN_SESSION_MS, adminMessage } from "@/lib/admin";
 import { explorerAddress, explorerTx } from "@/lib/arc/config";
 import { machineById } from "@/lib/machines";
 import { usdc } from "@/lib/stocks";
@@ -93,7 +93,7 @@ export function AdminPanel() {
 
   const signIn = async () => {
     try {
-      const expires = Date.now() + 15 * 60_000;
+      const expires = Date.now() + ADMIN_SESSION_MS;
       const message = adminMessage(window.location.host, expires);
       const s = { message, signature: await signMessageAsync({ message }), expires };
       try {
@@ -112,7 +112,7 @@ export function AdminPanel() {
       <div className="wrap py-16">
         <h1 className="h-section !text-[clamp(40px,5vw,72px)]">Admin.</h1>
         <p className="mt-4 max-w-[52ch] text-[16px] text-muted">
-          {!w.address ? "Connect the admin wallet to continue." : !isAdmin ? "This wallet has no access." : "Sign a read-only message to open the panel for 15 minutes. It moves no funds."}
+          {!w.address ? "Connect the admin wallet to continue." : !isAdmin ? "This wallet has no access." : "Sign a read-only message to open the panel for 10 minutes. It moves no funds."}
         </p>
         {error ? <p className="mt-3 text-[15px] text-claw">{error}</p> : null}
         <div className="mt-6">

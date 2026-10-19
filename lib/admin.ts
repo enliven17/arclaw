@@ -2,6 +2,8 @@
 import { getAddress } from "viem";
 
 export const ADMIN = getAddress("0xcc78505FE8707a1D85229BA0E7177aE26cE0f17D");
+/** How far ahead the panel sets a sign-in's expiry. */
+export const ADMIN_SESSION_MS = 10 * 60_000;
 
 export const adminMessage = (domain: string, expires: number) =>
   ["arclaw admin sign-in", `domain: ${domain}`, `expires: ${new Date(expires).toISOString()}`, "Read only. This signature moves no funds."].join("\n");
