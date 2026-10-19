@@ -24,7 +24,7 @@ export type KeeperEvent = {
 };
 
 export type RetryRecord = { attempts: number; lastAt: number; lastRequestId: string | null; consecutiveExpired: number; gaveUp: string | null };
-export type AlertRecord = { severity: Severity; message: string; firstAt: number; lastSentAt: number };
+export type AlertRecord = { severity: Severity; message: string; firstAt: number; lastSentAt: number; lastSeenAt?: number };
 
 /** JSON-safe health snapshot (amounts as decimal USDC strings). */
 export type HealthReport = {

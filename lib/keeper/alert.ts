@@ -1,7 +1,9 @@
 /**
  * Alerts: the active issues of a tick, deduplicated against what was already sent, to Telegram (TELEGRAM_BOT_TOKEN to
  * ALERT_TELEGRAM_CHAT_ID) and to the event log. An issue is sent when it first appears, when its severity rises, and
- * again every REPEAT_S while it lasts; a "resolved" line goes out when it clears. Info issues are logged only.
+ * again every REPEAT_S while it lasts; a "resolved" line goes out once it has been gone for RESOLVE_QUIET_S, so an issue
+ * that flaps (an RPC that fails every few ticks) is one alert, not an alert and a resolve every few minutes. Info
+ * issues are logged only.
  * Plain text (no parse mode), so nothing in a message can inject markup. KEEPER_TELEGRAM_API overrides the Bot API
  * origin (tests point it at a local fake).
  */
@@ -10,6 +12,7 @@ import type { Issue, KeeperEvent, KeeperState, Severity } from "./store";
 
 const RANK: Record<Severity, number> = { info: 0, warn: 1, critical: 2 };
 export const REPEAT_S: Record<Severity, number> = { info: Infinity, warn: 6 * 3600, critical: 3600 };
+export const RESOLVE_QUIET_S = 15 * 60;
 
 export type Notify = (text: string) => Promise<void>;
 
@@ -57,15 +60,19 @@ export async function reconcileAlerts(cfg: KeeperConfig, state: KeeperState, iss
     if (issue.severity === "info") continue;
     const rec = state.alerts[issue.key];
     const due = !rec || RANK[issue.severity] > RANK[rec.severity] || now - rec.lastSentAt >= REPEAT_S[issue.severity];
-    if (!due) continue;
+    if (!due) {
+      state.alerts[issue.key] = { ...rec, lastSeenAt: now };
+      continue;
+    }
     const text = `${issue.severity === "critical" ? "CRITICAL" : "WARN"} ${label(cfg)}\n${issue.key}: ${issue.message}`;
     const sent = await send(text);
     events.push({ at: now, kind: "alert", level: issue.severity === "critical" ? "error" : "warn", message: `${issue.key}: ${issue.message}`, data: { sent, severity: issue.severity } });
-    state.alerts[issue.key] = { severity: issue.severity, message: issue.message, firstAt: rec?.firstAt ?? now, lastSentAt: sent ? now : (rec?.lastSentAt ?? 0) };
+    state.alerts[issue.key] = { severity: issue.severity, message: issue.message, firstAt: rec?.firstAt ?? now, lastSentAt: sent ? now : (rec?.lastSentAt ?? 0), lastSeenAt: now };
   }
   for (const [key, rec] of Object.entries(state.alerts)) {
     const now_ = active.get(key);
     if (now_ && now_.severity !== "info") continue;
+    if (now - (rec.lastSeenAt ?? rec.lastSentAt) < RESOLVE_QUIET_S) continue;
     const sent = await send(`RESOLVED ${label(cfg)}\n${key}: ${rec.message}`);
     events.push({ at: now, kind: "alert-resolved", level: "info", message: `${key} resolved`, data: { sent } });
     if (sent) delete state.alerts[key];

@@ -11,7 +11,7 @@ import { demandOf, emptyDemandLog } from "./demand";
 import { machineFreshness } from "./status";
 import type { OpenOpening } from "./state";
 import { checkSecondSource } from "./prices";
-import { reconcileAlerts } from "./alert";
+import { RESOLVE_QUIET_S, reconcileAlerts } from "./alert";
 import { emptyState } from "./store";
 import { loadConfig } from "./config";
 
@@ -126,9 +126,18 @@ test("alerts: sent once, re-sent on escalation or after the repeat window, resol
   await reconcileAlerts(cfg, st, [{ key: "gas", severity: "critical", message: "very low" }], t0 + 120 + 3600, notify);
   assert.equal(sent.length, 3);
   await reconcileAlerts(cfg, st, [{ key: "oracle", severity: "info", message: "closed" }], t0 + 4000, notify);
+  assert.equal(sent.length, 3, "not resolved until it has been quiet for RESOLVE_QUIET_S");
+  await reconcileAlerts(cfg, st, [], t0 + 120 + 3600 + RESOLVE_QUIET_S, notify);
   assert.equal(sent.length, 4);
   assert.match(sent[3]!, /RESOLVED/);
   assert.deepEqual(Object.keys(st.alerts), []);
+  // a flapping issue (there one tick, gone the next) is one alert, no resolves in between
+  const flap: string[] = [];
+  const st3 = emptyState();
+  for (let i = 0; i < 20; i++) {
+    await reconcileAlerts(cfg, st3, i % 2 ? [] : [{ key: "rpc", severity: "warn", message: "limit" }], t0 + i * 120, async (t) => void flap.push(t));
+  }
+  assert.equal(flap.length, 1);
   // a failing channel keeps the alert pending
   const st2 = emptyState();
   await reconcileAlerts(cfg, st2, [{ key: "paused", severity: "critical", message: "x" }], t0, async () => {
