@@ -8,6 +8,7 @@ Rebuild the images with `node brand/social/render.mjs`. They draw from `lib/bran
 | `profile-claw.png` | 1000 x 1000 | Alternate avatar for small sizes or launch periods |
 | `banner.png` | 1500 x 500 | X header, Farcaster, Discord banner. The avatar covers the bottom left corner on X, so nothing important lives there. |
 | `grab.png` | 1600 x 900 | X post: the Single machine as the site draws it, "Come grab a box." Rebuild with `node brand/social/grab.mjs` (captures the live machine). |
+| `stack.png` | 1600 x 900 | X post: built on Arc (@arc), Astock (@TryArcStocks) and D20DAO (@d20dao), and the three steps of a play. Marks come from `components/landing/BuiltOn.tsx`. Rebuild with `node brand/social/stack.mjs`. |
 
 ## Name and handle
 
