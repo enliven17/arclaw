@@ -312,7 +312,8 @@ abstract contract OddsWriter is ArcConfig {
 ///                  warning (move it to a Safe later via transferOwnership + acceptOwnership). STRICT_OWNER=1 makes
 ///                  an EOA owner or owner == deployer a hard error.
 ///   OPERATOR       treasury agent (reprices, restocks). Mainnet: required and must differ from the deployer.
-///   KEEPER         reveal / retry bot (default OPERATOR). GUARDIAN: pause-only key (required on mainnet; testnet
+///   KEEPER         reveal / retry bot (default OPERATOR; mainnet: nonzero and not the deployer). GUARDIAN: pause-only
+///                  key (required on mainnet; testnet
 ///                  default OWNER).
 ///   RESERVE_FLOOR  float in wei, untouchable by withdraw and spend (default 5 USDC). Size it about 10x the price of
 ///                  the biggest enabled machine (docs/TOKENOMICS.md) and raise it as machines are switched on; the
@@ -392,6 +393,9 @@ contract Deploy is OddsWriter {
         require(operator != msg.sender, "OPERATOR must not be the deployer");
         require(owner != address(0) && operator != address(0), "OWNER and OPERATOR required");
         require(guardian != address(0), "GUARDIAN required");
+        // _configure reads the same env: the reveal / retry bot must be its own hot key, never the deployer
+        address keeper = vm.envOr("KEEPER", operator);
+        require(keeper != address(0) && keeper != msg.sender, "KEEPER must be set and not the deployer");
         _checkOwner();
         // House VRF subsidy matched to the live fee: 2x today's quote (base-fee headroom), at least 0.04 USDC. At
         // 20 gwei the D20 mainnet fee is 3 x 20 gwei x (300k + 100k gas) = 0.024 USDC.

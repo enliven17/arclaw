@@ -37,9 +37,17 @@ crown jewels: two offline backups, deleted from the machine that made it.
 - VRF miss breaker: every opening whose request expired counts as one miss, on the day it is first retried or returned.
   `maxMisses` misses in a UTC day close `open` (error `VrfMisses`) until 00:00 UTC; plays, reveals, retries and returns go
   on. A trip runs the refund clock like a pause, so a VRF that keeps missing opens `refundSealed` three days after the
-  first trip. It reopens by itself: the keeper should alert on a trip and the guardian pause on repeated trips.
-- Price source swaps (`setPolicy` with a new source) only while paused, and they keep the refund clock running for four
-  days, so swapping in a reverting source cannot lock unopened boxes without the clock running.
+  first trip. A trip while the contract is already paused leaves the running pause clock alone (round 6), so returning
+  expired openings during a pause cannot push `refundSealed` back. The counter saturates at `maxMisses`. It reopens by
+  itself: the keeper should alert on a trip and the guardian pause on repeated trips.
+- Price source swaps (`setPolicy` with a new source) only while paused. A swap holds `resumedAt` four days past it, and
+  the pause clock counts until `resumedAt` plus one day of service, so the refund clock keeps running until five days
+  after the swap: swapping in a reverting source cannot lock unopened boxes without the clock running.
+- Settle pauses (round 6): a reveal, retry or return pauses play only when it creates a new IOU or leaves the unreserved
+  balance under `minBuffer`. An IOU the owner has funded does not re-pause the contract while its holder never claims.
+- Machines: switching a machine off starts its refund clock, kept across a switch back on for a day of service. A
+  machine that never sold a box drops its off clock when switched on (round 6): no box of it exists to protect, so a
+  machine left off at deploy does not open `refundSealed` on its first day of service.
 - The house VRF subsidy only comes from the unreserved balance; when that is empty the opener pays the full fee.
 - Payments: no return-data copy, a 100k gas cap on pushes with a credit fallback, reentrancy guards on every state change.
 - Randomness: D20DAO VRF (drand evmnet beacon, verifiable on chain, 60 second window, refund after). See the whitepaper for
@@ -47,7 +55,7 @@ crown jewels: two offline backups, deleted from the machine that made it.
 
 ## What was reviewed
 
-Seven rounds, each by two independent AI-assisted reviewers writing exploit tests (`contracts/test/audit1` to `audit7*`),
+Eight rounds, each by two independent AI-assisted reviewers writing exploit tests (`contracts/test/audit1` to `audit8*`),
 plus a red-team pass over the economics, the keys, the web app and the API (October 2026; findings are in the
 commit history). Every finding became a test. The suite also has invariant tests (liabilities always backed, reserves
 match). This is **not** a professional audit firm's work; one should be commissioned before large volumes.
@@ -67,8 +75,9 @@ match). This is **not** a professional audit firm's work; one should be commissi
 
 ## Known trust assumptions
 
-Accepted on purpose, not fixed in code (audit round 7). The Owner Safe is the mitigation for all three owner items; a
-Safe delay module (a timelock on owner transactions) is the planned next step.
+Accepted on purpose, not fixed in code (audit rounds 7 and 8). The Owner Safe is the mitigation for every owner item; a
+Safe delay module (a timelock on owner transactions) is the planned next step, and it must cover the owner calls of
+`AstockPriceSource` and `LuckVault` too, not only Arclaw's.
 
 | Assumption | Why it stays |
 |---|---|
@@ -77,6 +86,10 @@ Safe delay module (a timelock on owner transactions) is the planned next step.
 | Miss counter resets at 00:00 UTC: a burst straddling midnight can book up to 2 x maxMisses - 1 misses before the breaker closes `open` | Daily window by design; the keeper alerts on miss rate, the guardian pauses. |
 | Misses booked late: an opening that expired while its table aged out before the keeper could retry, and was never retried, books its miss on the day it is returned. A holder of many such openings (only possible during a real VRF outage) can close `open` until midnight on a day of their choice | The alternative (booking on the request day) would make a late return a free re-roll. It closes only `open`, only until midnight, never pauses. |
 | The deploy-time pause starts the refund clock: if the owner unpauses two or more days after deploying, `refundSealed` is open to everyone during the first day of service | Neutral (a refund at the price paid), and the launch is short. Unpause within a day of deploying, or expect early refunds. |
+| A retried opening that is later returned books one miss for two dropped words (8a/8b L-01), so the breaker bounds about 2 x (maxMisses - 1) re-rolls a day, not maxMisses (about 29 USDC a day on Vault at the default 10) | Booking the return as well brings back the round 4 double count, which let stored misses close `open` on demand. Each re-roll still needs an expired request, an aged-out table and a new open. Keeper alerts on the retry rate; the guardian pauses. |
+| A VRF that accepts requests but never answers, under maxMisses openings a day, gives no on-chain exit (8a L-02): the breaker never trips, `pauseIfVrfDown` reverts `VrfAlive` (the request goes through) and, while tables are repriced, `refundSealed` never opens | The guardian is load-bearing here: the keeper alerts (`vrf-retry-expired`, `vrf-retry-rate`) and the guardian pauses, which starts the refund clock. |
+| The owner can close `open` for the rest of a UTC day without any refund clock by lowering `maxMisses` under today's count (`setLimits`, 8a I-02) | Owner trust, one day at most per call; the Safe (and later its delay module) is the mitigation. |
+| `AstockPriceSource.setUnderlyings` remaps or unmaps a card token at once, unpaused and without the `setPolicy` hold (8b INFO-01), so the `setPolicy` pause rule is not a control against the owner key: opens can halt while the table still counts as fresh and no clock runs | Owner trust: the price source has the same owner. The Safe delay module must cover the price source's owner calls too. A stalled machine still reaches `refundSealed` once its table ages out. |
 
 ## Incidents
 

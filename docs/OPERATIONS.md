@@ -182,7 +182,8 @@ Stack and Vault are on. The risk is front-loaded, before the house has earned an
 (`receive()` accepts top-ups). Health warns (`float-jackpot`) while the unreserved balance cannot pay one top pack of
 a switched-on machine (9.9 USDC for Single, 99 for Vault).
 
-If the float runs dry a reveal records an IOU (`totalOwed`) and the contract pauses itself (see `owed`).
+If the float runs dry a reveal records an IOU (`totalOwed`) and the contract pauses itself (see `owed`). Only a new IOU
+pauses: once you have funded the outstanding IOUs and unpaused, an IOU its holder never claims does not pause again.
 
 ## Alerts
 
@@ -193,11 +194,11 @@ Info issues are only in the event log and the status page.
 | Key | Severity | Meaning | Do |
 |---|---|---|---|
 | `paused` | critical | Arclaw is paused (owner, guardian, the VRF miss breaker, `pauseIfVrfDown`, or an IOU or buffer breach). Message gives when sealed boxes become refundable | find out why (`vrf-misses`, `vrf-down`, `owed`, `buffer`); fix; owner `unpause()` |
-| `vrf-misses` | warn at half, critical at max | expired requests retried or returned today versus `limits().maxMisses` (default 10); at the max the contract pauses itself | dead-VRF runbook; the breaker resets at 00:00 UTC |
+| `vrf-misses` | warn at half, critical at max | expired requests retried or returned today versus `limits().maxMisses` (default 10); at the max `open` closes until 00:00 UTC (no pause) | dead-VRF runbook; the breaker resets at 00:00 UTC |
 | `vrf-retry-expired` | critical | an opening's one retry went unanswered too | dead-VRF runbook; the keeper probes `pauseIfVrfDown` |
 | `vrf-down` | critical | `pauseIfVrfDown` succeeded: D20 is down and the keeper paused the contract | dead-VRF runbook |
 | `vrf-unreadable` | critical | the coordinator's `getRequest` reverts | dead-VRF runbook |
-| `owed` | critical | reveals could not pay refunds in full: IOUs outstanding, play paused | send native USDC to the contract until `totalOwed` can be claimed, then unpause |
+| `owed` | critical | reveals could not pay refunds in full: IOUs outstanding (a new one pauses play) | send native USDC to the contract until `totalOwed` can be claimed, then unpause; an unclaimed, funded IOU does not re-pause |
 | `buffer` | critical | unreserved balance under `minBuffer`: the next reveal pauses play | top up the contract |
 | `float-low` | warn | unreserved balance under `reserveFloor`: the float is paying big wins | top up to at least `reserveFloor` |
 | `float-jackpot` | warn | unreserved balance cannot pay one top pack of a switched-on machine | top up |
@@ -231,8 +232,9 @@ Symptoms: `vrf-retry-expired`, `vrf-misses`, `vrf-down`, `vrf-unreadable`, openi
 How the contract and the keeper limit the damage on their own:
 
 - Each opening gets **one** retry (`openingRetries`, `RetryLimit` after). The keeper uses it as soon as the request
-  expires. Every expired request that is retried or returned is a VRF miss; `limits().maxMisses` (10) in a UTC day
-  pause the contract.
+  expires. Every expired opening that is retried or returned is one VRF miss; `limits().maxMisses` (10) in a UTC day
+  close `open` until 00:00 UTC and run the sealed-refund clock (a trip while already paused leaves the pause's clock
+  alone).
 - When opens keep failing (a used retry expired again, the coordinator cannot be read, or 2 or more misses today) the
   keeper calls `pauseIfVrfDown()`, at most every 10 minutes. The call is simulated first: on a working VRF it reverts
   `VrfAlive` and nothing is signed or spent; on a dead one it is sent and pauses the contract (`vrf-down`). It never
@@ -254,8 +256,8 @@ What you do:
 
 - `pause()`: owner or guardian. Stops `play` and `open`. Reveals, retries, returns, claims and `refundSealed` keep
   working, and the keeper keeps revealing. The keeper does not reprice while paused (nothing can open).
-- The contract pauses itself: on an IOU or the unreserved balance under `minBuffer` after a reveal, on `maxMisses` VRF
-  misses in a day, and through `pauseIfVrfDown`.
+- The contract pauses itself: on a new IOU or the unreserved balance under `minBuffer` after a reveal, retry or
+  return, and through `pauseIfVrfDown`. `maxMisses` VRF misses in a day close only `open`, until 00:00 UTC.
 - `unpause()`: owner only. It no longer clears `pausedSince`: use `paused()` for "is it paused" and
   `sealedRefundAt(id)` for when sealed boxes become refundable.
 - Per machine: `setMachineActive(id, false)` (same effect for one machine, its own clock). Switching a machine on

@@ -81,7 +81,8 @@ contract A7bFindingsTest is Base {
             vm.prank(alice);
             box.returnBoxes(ids[i]);
         }
-        assertEq(_misses(), n, "six withheld words, six misses");
+        // six misses booked; the counter saturates at maxMisses (round 6, 8a I-01)
+        assertEq(_misses(), 2, "six withheld words, the breaker tripped");
         assertEq(box.balanceOf(alice, M1), n);
 
         // and the re-roll is stopped for the day

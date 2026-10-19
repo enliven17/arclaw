@@ -62,7 +62,7 @@ contract A7aFindings is Base {
         for (uint256 i; i < 13; ++i) {
             box.retry(ids[i]);
         }
-        assertEq(_misses(), 13);
+        assertEq(_misses(), 10, "13 misses, the counter saturates at maxMisses (round 6, 8a I-01)");
         assertFalse(box.paused(), "the breaker never pauses");
         uint256 tid = box.currentTable(M1) - 1;
         vm.prank(alice);

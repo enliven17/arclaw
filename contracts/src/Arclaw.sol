@@ -47,11 +47,13 @@ import {ILuck} from "./LuckVault.sol";
 ///         breaker; it reopens by itself at 00:00 UTC, and a trip runs the refundSealed pause clock as a pause does).
 ///         Plays, reveals, retries and returns go on; each pending opening keeps at most its one retry.
 ///         returnBoxes + reopen is not a free loop: it needs an expired request (a miss), the pinned table aged out
-///         (up to maxTableAge, 1 day by default), and a new open, which the breaker stops. Residual: up to about
-///         maxMisses re-rolls a day, worth on average about 0.16 x price each (Vault single box, best-of-2 minus
-///         0.85), so with the default 10 about 16 USDC a day on Vault, plus whatever was opened before the misses
-///         were booked (they surface 60 s after the request). The breaker reopens daily on its own: monitor expiries
-///         and have the guardian pause on repeated trips.
+///         (up to maxTableAge, 1 day by default), and a new open, which the breaker stops. A retried opening that is
+///         later returned books its one miss at the retry and nothing at the return (audit 8a/8b L-01), so one miss
+///         can cover two dropped words. Residual: up to about 2 x (maxMisses - 1) re-rolls a day, NOT maxMisses,
+///         worth on average about 0.16 x price each (Vault single box, best-of-2 minus 0.85), so with the default
+///         10 about 29 USDC a day on Vault, plus whatever was opened before the misses were booked (they surface
+///         60 s after the request). The breaker reopens daily on its own: monitor expiries and have the guardian
+///         pause on repeated trips.
 contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomness {
     using SafeERC20 for IERC20;
 
@@ -199,7 +201,7 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
     /// Refunds a reveal could not cover from the unreserved balance: IOUs, claimable as the pool refills.
     mapping(address => uint256) public owed;
     uint256 public totalOwed;
-    /// After a reveal, any IOU or an unreserved balance under this pauses new plays and opens (0 = IOUs only).
+    /// After a settle, a new IOU or an unreserved balance under this pauses new plays and opens (0 = new IOUs only).
     uint256 public minBuffer;
     /// May reveal any opening right away (openers may always reveal their own).
     mapping(address => bool) public keepers;
@@ -229,8 +231,8 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
     /// openingId => re-requests made (<= MAX_RETRIES)
     mapping(uint256 => uint256) public openingRetries;
 
-    /// Daily limits, UTC day: JIT desk spend (jitCap, native wei) and VRF misses (expired requests retried or
-    /// returned) before the contract pauses itself (maxMisses).
+    /// Daily limits, UTC day: JIT desk spend (jitCap, native wei) and VRF misses (expired openings retried or
+    /// returned, saturating at maxMisses) before `open` closes until 00:00 UTC (maxMisses).
     struct Limits {
         uint32 day;
         uint16 misses;
@@ -764,7 +766,7 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
     /// @notice Stop or resume new plays and opens on a machine (reveals, returns and links continue).
     function setMachineActive(uint256 machineId, bool active) external onlyOwner {
         if (machines[machineId].price == 0) revert UnknownMachine();
-        ArclawRules.setActive(offSince, offClock, onSince, machineId, active);
+        ArclawRules.setActive(offSince, offClock, onSince, boxesSold, machineId, active);
     }
 
     /// @notice The ARCLAW staking vault (LuckVault). Zero turns boosts off for new opens.
@@ -794,7 +796,8 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
 
     /// @notice Price source and the operator's daily spend cap. Once a table exists, a new source only while paused
     ///         (audit 7a M-02, 7b L-01: a reverting source halts opens while the table still counts as fresh), and
-    ///         the swap keeps the pause clock counting SEALED_REFUND_AFTER + SERVICE_RESET past it: a daily
+    ///         the swap holds resumedAt SEALED_REFUND_AFTER + SERVICE_RESET past it, so the pause clock keeps counting
+    ///         until resumedAt + SERVICE_RESET, 5 days after the swap: a daily
     ///         pause + swap + reprice + swap back + unpause batch can neither stop nor restart refundSealed's clock.
     function setPolicy(IPriceSource source, uint256 cap) external onlyOwner {
         if (source != priceSource && _tables.length != 0) {
@@ -844,7 +847,8 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
         emit GuardianSet(g);
     }
 
-    /// @notice Daily JIT desk spend cap (native wei) and VRF misses per day before the automatic pause (>= 1).
+    /// @notice Daily JIT desk spend cap (native wei) and VRF misses per day before `open` closes until 00:00 UTC
+    ///         (>= 1). Lowering it under today's count closes `open` at once without a clock (owner trust, 8a I-02).
     function setLimits(uint96 jitDailyCap, uint16 maxMissesPerDay) external onlyOwner {
         if (maxMissesPerDay == 0) revert BadMachine();
         (limits.jitCap, limits.maxMisses) = (jitDailyCap, maxMissesPerDay);
@@ -978,10 +982,12 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
     /// An expired opening was retried or returned: one VRF miss, booked today. maxMisses in a day close `open` until
     /// 00:00 UTC (checked in open), not a pause: a stock of old misses cannot stop the whole contract or need an
     /// unpause. A trip runs the refundSealed pause clock like a pause ending at 00:00 UTC, so a VRF that keeps
-    /// missing day after day still opens refundSealed SEALED_REFUND_AFTER after the first trip.
+    /// missing day after day still opens refundSealed SEALED_REFUND_AFTER after the first trip. The counter
+    /// saturates at maxMisses (audit 8a I-01: no uint16 overflow can block retries and returns).
     function _miss() internal {
         Limits storage l = _today();
-        if (++l.misses >= l.maxMisses) {
+        if (l.misses < l.maxMisses) ++l.misses;
+        if (l.misses >= l.maxMisses) {
             _clock();
             _hold((block.timestamp / 1 days + 1) * 1 days);
         }
@@ -992,8 +998,11 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
         if (until > resumedAt) resumedAt = until;
     }
 
-    /// Starts the pause clock, unless one is still running (within SERVICE_RESET of the end of the last stop).
+    /// Starts the pause clock, unless one is still running (within SERVICE_RESET of the end of the last stop). A
+    /// no-op while paused (audit 8a M-01, 8b M-02): the running pause owns the clock, so a breaker trip during a
+    /// pause cannot restart it. _pause calls this before the pause flag is set.
     function _clock() internal {
+        if (paused()) return;
         if (pausedSince == 0 || block.timestamp >= resumedAt + SERVICE_RESET) pausedSince = block.timestamp;
     }
 
@@ -1014,10 +1023,12 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
     }
 
     /// Pays `amount` to `to` out of `cover` (reveal refunds: the unreserved balance); what it cannot cover becomes an
-    /// IOU (owed), so a big win never eats other players' reserves. Any IOU, or a buffer under minBuffer, pauses plays
-    /// and opens.
+    /// IOU (owed), so a big win never eats other players' reserves. A new IOU, or a buffer under minBuffer, pauses
+    /// plays and opens. An older IOU alone does not (audit 8b M-01): once the owner has funded it (it is out of
+    /// _unreserved) and unpaused, a holder who never claims cannot re-pause the contract on every later settle.
     function _settle(address to, uint256 amount, uint256 cover) internal {
-        if (amount > cover) {
+        bool fresh = amount > cover;
+        if (fresh) {
             uint256 iou = amount - cover;
             owed[to] += iou;
             totalOwed += iou;
@@ -1025,7 +1036,7 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
             amount = cover;
         }
         if (amount != 0) _sendNative(to, amount);
-        if (!paused() && (totalOwed != 0 || _unreserved() < minBuffer)) _pause();
+        if (!paused() && (fresh || _unreserved() < minBuffer)) _pause();
     }
 
     /// Every pause (owner, guardian, automatic) runs the sealed-refund clock. A pause within SERVICE_RESET of the
@@ -1204,17 +1215,21 @@ library ArclawRules {
     }
 
     /// Arclaw.setMachineActive: switching an off machine off again keeps its clock, and so does on+off before a day
-    /// of service (SERVICE_RESET): the owner cannot push refundSealed back.
+    /// of service (SERVICE_RESET): the owner cannot push refundSealed back. Switching on a machine that never sold a
+    /// box drops its off clock (audit 8b L-02): no box of it exists, so the clock protects nobody, and kept it would
+    /// open refundSealed on the first day of service of a machine switched off at deploy.
     function setActive(
         mapping(uint256 => uint256) storage offSince,
         mapping(uint256 => uint256) storage offClock,
         mapping(uint256 => uint256) storage onSince,
+        mapping(uint256 => uint256) storage sold,
         uint256 id,
         bool active
     ) external {
         if (active) {
             delete offSince[id];
             onSince[id] = block.timestamp;
+            if (sold[id] == 0) delete offClock[id];
         } else if (offSince[id] == 0) {
             offSince[id] = block.timestamp;
             if (offClock[id] == 0 || block.timestamp >= onSince[id] + 1 days) offClock[id] = block.timestamp;
