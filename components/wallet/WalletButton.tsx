@@ -12,7 +12,7 @@ export function WalletButton({ className }: { className?: string }) {
   const [menu, setMenu] = useState(false);
   if (!w.address) {
     return (
-      <button type="button" onClick={w.openConnect} disabled={w.connecting} className={cn("btn-cream !min-h-[36px] !px-3.5 !py-2 text-[14px]", className)}>
+      <button type="button" onClick={w.openConnect} className={cn("btn-cream !min-h-[36px] !px-3.5 !py-2 text-[14px]", className)}>
         Connect
       </button>
     );

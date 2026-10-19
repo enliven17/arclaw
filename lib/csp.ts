@@ -7,10 +7,34 @@
  *                                   nonce run, and the head script below by its hash. This is where wallets sign and
  *                                   gift keys live, so an injected script there has nothing to run with.
  *
- * Everything else is shared: nobody can frame the site, no plugins, no base-tag or form hijacking. Network and image
- * sources stay open to https because wallet SDKs (WalletConnect relays, Coinbase, MetaMask), RPCs, Convex and the
- * stock logos live on many hosts, and a missing one would silently break connecting a wallet.
+ * Everything else is shared: nobody can frame the site, no plugins, no base-tag or form hijacking. connect-src is an
+ * allowlist (an injected script could otherwise post keys anywhere): this site, the Arc RPCs, Convex, and the wallet
+ * SDKs' own services, measured by walking every page and wallet flow in a browser (2026-10-19). A wallet that adds a
+ * new host shows up as a "Refused to connect" in the console: add its vendor domain here. Images stay open to https
+ * (stock logos, wallet icons).
  */
+
+/** Wallet SDK services, by vendor (WalletConnect/Reown relays and APIs, Coinbase Wallet and walletlink, MetaMask SDK). */
+const WALLET_HOSTS = [
+  "https://*.walletconnect.com", "wss://*.walletconnect.com", "https://*.walletconnect.org", "wss://*.walletconnect.org",
+  "https://*.reown.com", "wss://*.reown.com",
+  "https://*.coinbase.com", "wss://*.coinbase.com", "https://www.walletlink.org", "wss://www.walletlink.org",
+  "https://*.metamask.io", "wss://*.metamask.io",
+];
+
+/** Origins (and their websocket twins) of any extra RPCs this build is configured with (NEXT_PUBLIC_ARC_RPC_URL). */
+function envOrigins(): string[] {
+  return (process.env.NEXT_PUBLIC_ARC_RPC_URL ?? "").split(",").flatMap((u) => {
+    try {
+      const { origin, host } = new URL(u.trim());
+      return [origin, `wss://${host}`];
+    } catch {
+      return [];
+    }
+  });
+}
+
+const CONNECT_SRC = [...new Set(["'self'", "https://*.arc.io", "wss://*.arc.io", "https://*.convex.cloud", "wss://*.convex.cloud", ...envOrigins(), ...WALLET_HOSTS])].join(" ");
 
 /** Before first paint: mark JS so reveal targets start hidden (no-JS keeps them visible), and decide the splash (first
  *  visit per tab session, never under reduced motion) so it never flashes for a returning visitor. */
@@ -26,7 +50,7 @@ export const policy = (scriptSrc: string) =>
     "img-src 'self' data: blob: https:",
     "font-src 'self' data:",
     "media-src 'self' blob:",
-    "connect-src 'self' https: wss:",
+    `connect-src ${CONNECT_SRC}`,
     "frame-src https://verify.walletconnect.com https://verify.walletconnect.org",
     "worker-src 'self' blob:",
     "manifest-src 'self'",

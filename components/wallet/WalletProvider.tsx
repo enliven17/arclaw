@@ -21,8 +21,6 @@ const WALLETCONNECT_PROJECT_ID = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_I
 
 type WalletState = {
   address: Address | null;
-  /** True while wagmi reconnects the last wallet, or a connection is in progress. */
-  connecting: boolean;
   disconnect(): void;
   send(calls: Call[]): Promise<Hex>;
   /** Opens ConnectKit's modal. */
@@ -39,7 +37,9 @@ export function useWallet(): WalletState {
 
 function Inner({ children }: { children: ReactNode }) {
   const config = useConfig();
-  const { address, status } = useAccount();
+  // Connect stays clickable whatever wagmi's status: a connection the user abandons (a closed QR) can sit in
+  // "connecting" for good, and a disabled button would leave no way to try again without a reload.
+  const { address } = useAccount();
   const { disconnect } = useDisconnect();
   const { open, setOpen } = useModal();
 
@@ -74,12 +74,11 @@ function Inner({ children }: { children: ReactNode }) {
   const value = useMemo<WalletState>(
     () => ({
       address: address ? getAddress(address) : null,
-      connecting: status === "connecting" || status === "reconnecting",
       disconnect: () => disconnect(),
       send,
       openConnect: () => setOpen(true),
     }),
-    [address, status, disconnect, send, setOpen],
+    [address, disconnect, send, setOpen],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
