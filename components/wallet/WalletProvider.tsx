@@ -123,7 +123,12 @@ function PrivyInner({ children }: { children: ReactNode }) {
       const client = createWalletClient({ account: getAddress(active.address), chain: ARC_CHAIN, transport: custom(provider) });
       let last: Hex = "0x";
       for (const call of calls) {
-        const hash = await client.sendTransaction({ to: call.to, data: call.data, value: call.value ?? 0n });
+        const tx = { to: call.to, data: call.data, value: call.value ?? 0n };
+        // Gas and fees come from our own RPCs: a wallet whose saved Arc RPC is rate-limited then only has to sign.
+        const pub = arcClient();
+        const account = getAddress(active.address);
+        const [gas, fees] = await Promise.all([pub.estimateGas({ account, ...tx }), pub.estimateFeesPerGas()]);
+        const hash = await client.sendTransaction({ ...tx, gas: (gas * 12n) / 10n, maxFeePerGas: fees.maxFeePerGas, maxPriorityFeePerGas: fees.maxPriorityFeePerGas });
         const receipt = await arcClient().waitForTransactionReceipt({ hash });
         if (receipt.status !== "success") throw new Error("The transaction reverted.");
         last = hash;
