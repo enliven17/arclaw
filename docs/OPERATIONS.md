@@ -92,7 +92,8 @@ day with nobody playing, so the keeper only pays for tables someone can use (`re
 `lib/keeper/reprice.ts`, demand in `lib/keeper/demand.ts`):
 
 1. **Switched on only.** A machine with `machineOff(id)` is never repriced (mainnet launches with Single only). Nothing
-   is repriced while the contract is paused.
+   is repriced while the contract is paused or while the VRF miss breaker has closed opens (`VrfMisses` until 00:00
+   UTC): no table is worth paying for when nobody can open.
 2. **Demand only.** A machine has demand when any of these holds:
    - sealed boxes of it are outstanding (`boxesSold` minus opened, plus returned, minus refunded, from the logs),
    - an opening of it is pending or fulfilled and not yet revealed,
@@ -141,8 +142,9 @@ A machine nobody used for a day sleeps with a stale table. When a visitor opens 
    `keeper:status` then reports it fresh, typically 10 to 20 seconds after the first visitor.
 4. The wake keeps counting as demand for 60 minutes, so the machine stays fresh while people are looking at it.
 
-A wake on a fresh machine costs nothing (no reprice is due). A wake on a switched-off machine, or while the contract is
-paused, does nothing. Convex caches queries, so `fresh` is as of the keeper's last state write (every 10 s or minute);
+A wake on a fresh machine costs nothing (no reprice is due). A wake on a switched-off machine, while the contract is
+paused, or while the miss breaker has closed opens, does nothing; `keeper:status` then reports `openable: false`
+and `opensClosedUntil` (the next 00:00 UTC). Convex caches queries, so `fresh` is as of the keeper's last state write (every 10 s or minute);
 `staleAt` lets the UI judge between writes.
 
 ## Weekends and market closed
@@ -183,7 +185,13 @@ Stack and Vault are on. The risk is front-loaded, before the house has earned an
 a switched-on machine (9.9 USDC for Single, 99 for Vault).
 
 If the float runs dry a reveal records an IOU (`totalOwed`) and the contract pauses itself (see `owed`). Only a new IOU
-pauses: once you have funded the outstanding IOUs and unpaused, an IOU its holder never claims does not pause again.
+pauses: once you have funded the outstanding IOUs and unpaused, an IOU its holder never claims does not pause again,
+so health warns (`owed`) while an IOU is unfunded. Deploys set `minBuffer` to 1 wei: a reveal that leaves nothing
+unreserved pauses play.
+
+The float also pays the house VRF subsidy: the subsidy (up to `maxVrfSubsidy`) is only paid while the unreserved
+balance covers it. Without a float players pay the whole VRF fee to open and the keeper pays it on retries
+(`vrf-subsidy` warns).
 
 ## Alerts
 
@@ -193,13 +201,14 @@ Info issues are only in the event log and the status page.
 
 | Key | Severity | Meaning | Do |
 |---|---|---|---|
-| `paused` | critical | Arclaw is paused (owner, guardian, the VRF miss breaker, `pauseIfVrfDown`, or an IOU or buffer breach). Message gives when sealed boxes become refundable | find out why (`vrf-misses`, `vrf-down`, `owed`, `buffer`); fix; owner `unpause()` |
-| `vrf-misses` | warn at half, critical at max | expired requests retried or returned today versus `limits().maxMisses` (default 10); at the max `open` closes until 00:00 UTC (no pause) | dead-VRF runbook; the breaker resets at 00:00 UTC |
+| `paused` | critical | Arclaw is paused (owner, guardian, `pauseIfVrfDown`, a new IOU, or a reveal leaving less than `minBuffer`). Message gives when sealed boxes become refundable | find out why (`vrf-down`, `owed`, `buffer`); fix; owner `unpause()` |
+| `vrf-misses` | warn at half, critical at max | VRF misses booked today versus `limits().maxMisses` (default 10). A retried opening books one, a return after a retry none. At the max `open()` reverts `VrfMisses` until 00:00 UTC: **opens are closed, the contract is not paused**; plays, reveals, retries and returns go on and the keeper stops repricing | one trip: nothing, opens reopen at 00:00 UTC. Repeated trips day after day or a dead VRF: the guardian pauses (or `pauseIfVrfDown`); dead-VRF runbook |
 | `vrf-retry-expired` | critical | an opening's one retry went unanswered too | dead-VRF runbook; the keeper probes `pauseIfVrfDown` |
 | `vrf-down` | critical | `pauseIfVrfDown` succeeded: D20 is down and the keeper paused the contract | dead-VRF runbook |
 | `vrf-unreadable` | critical | the coordinator's `getRequest` reverts | dead-VRF runbook |
-| `owed` | critical | reveals could not pay refunds in full: IOUs outstanding (a new one pauses play) | send native USDC to the contract until `totalOwed` can be claimed, then unpause; an unclaimed, funded IOU does not re-pause |
-| `buffer` | critical | unreserved balance under `minBuffer`: the next reveal pauses play | top up the contract |
+| `owed` | warn unfunded, info funded | IOUs outstanding (`totalOwed`). Unfunded: the balance is under every reserve plus the IOUs. A funded IOU no longer pauses anything, so this is the signal | send native USDC to the contract until it is funded; holders `claimOwed` |
+| `buffer` | critical with openings in flight, else warn | unreserved balance under `minBuffer` (1 wei on deploy): a reveal that leaves no more pauses play | send the float |
+| `vrf-subsidy` | warn | the unreserved balance cannot fund the VRF subsidy: players pay the whole fee to open, the keeper on retries | send the float |
 | `float-low` | warn | unreserved balance under `reserveFloor`: the float is paying big wins | top up to at least `reserveFloor` |
 | `float-jackpot` | warn | unreserved balance cannot pay one top pack of a switched-on machine | top up |
 | `jit-cap` | warn | just-in-time buys used 80% of today's cap; past it short cards are refunded | owner `setLimits` if the volume is real |
@@ -232,9 +241,10 @@ Symptoms: `vrf-retry-expired`, `vrf-misses`, `vrf-down`, `vrf-unreadable`, openi
 How the contract and the keeper limit the damage on their own:
 
 - Each opening gets **one** retry (`openingRetries`, `RetryLimit` after). The keeper uses it as soon as the request
-  expires. Every expired opening that is retried or returned is one VRF miss; `limits().maxMisses` (10) in a UTC day
-  close `open` until 00:00 UTC and run the sealed-refund clock (a trip while already paused leaves the pause's clock
-  alone).
+  expires. An expired opening books one VRF miss whether it is retried or returned (a return after a retry books
+  none); `limits().maxMisses` (10) in a UTC day close `open` (`VrfMisses`) until 00:00 UTC without pausing and run
+  the sealed-refund clock (a trip while already paused leaves the pause's clock alone). While opens are closed the
+  keeper does not reprice.
 - When opens keep failing (a used retry expired again, the coordinator cannot be read, or 2 or more misses today) the
   keeper calls `pauseIfVrfDown()`, at most every 10 minutes. The call is simulated first: on a working VRF it reverts
   `VrfAlive` and nothing is signed or spent; on a dead one it is sent and pauses the contract (`vrf-down`). It never
@@ -243,8 +253,8 @@ How the contract and the keeper limit the damage on their own:
 What you do:
 
 1. Check the D20 coordinator on the explorer and D20DAO's status. A paused or upgraded coordinator usually comes back.
-2. If the contract is not paused yet and openings keep expiring: the guardian calls `pause()` (or anyone calls
-   `pauseIfVrfDown()`).
+2. One breaker trip needs nothing: opens reopen at 00:00 UTC. If it trips again day after day, or D20 is dead: the
+   guardian calls `pause()` (or anyone calls `pauseIfVrfDown()`, which only pauses when D20 really fails).
 3. Openings whose retry is used wait for their opener: `returnBoxes` once the pinned table aged out (24 h after it was
    priced), or 7 days after the request if the coordinator's reads revert.
 4. When VRF is back (`pauseIfVrfDown` reverts `VrfAlive`, a test open is fulfilled): owner `unpause()`. The pause clock
@@ -282,7 +292,7 @@ What you do:
   for uncommitted ones). It deploys with `MOCK_PRICES=1 forge script Deploy.s.sol` in a temp copy (the repo's
   `lib/deployments` is never touched), then plays, opens, fulfils, reveals, lets requests expire (one retry, then
   stop), moves and breaks the mock oracle, checks demand (idle machines left alone, stale tables with nobody playing
-  cost nothing), the daily cap and spend metric, wake and status, a fake second source and a fake Telegram, holds the
+  cost nothing), the daily cap and spend metric, wake and status, the miss breaker (opens closed, not paused, no spend), a fake second source and a fake Telegram, holds the
   lock, jams a nonce, kills the RPC, and finally kills the coordinator so the keeper's `pauseIfVrfDown` pauses the
   contract, asserting each outcome on chain.
 - `pnpm keeper:simulate [--mix 100,0,0]`: bankroll risk.

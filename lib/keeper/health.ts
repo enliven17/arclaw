@@ -49,12 +49,18 @@ export function assessHealth(x: HealthInput): HealthReport {
   if (g.paused) add("paused", "critical", `Arclaw is paused (pause clock since ${ago(Math.max(0, g.now - g.pausedSince))})${refundAt !== null ? `; sealed boxes refundable ${refundAt <= g.now ? "now" : `in ${ago(refundAt - g.now)}`}` : ""}`);
   // the VRF miss breaker: maxMisses expired requests (retried or returned) in a UTC day pause the contract
   const { misses, maxMisses, jitCap, jitSpent } = g.limits;
-  if (maxMisses > 0 && misses >= maxMisses) add("vrf-misses", "critical", `${misses}/${maxMisses} VRF misses today: the breaker paused the contract`);
-  else if (maxMisses > 0 && misses * 2 >= maxMisses) add("vrf-misses", "warn", `${misses}/${maxMisses} VRF misses today: at ${maxMisses} the contract pauses itself`);
+  // round 5/6: the breaker closes open() (VrfMisses) until 00:00 UTC; it does not pause
+  if (g.missCapped) add("vrf-misses", "critical", `${misses}/${maxMisses} VRF misses today: opens closed (VrfMisses) until 00:00 UTC, in ${ago(Math.max(0, (g.opensClosedUntil ?? g.now) - g.now))}; plays, reveals, retries and returns go on. Repeated trips or a dead VRF: guardian pause or pauseIfVrfDown`);
+  else if (maxMisses > 0 && misses * 2 >= maxMisses) add("vrf-misses", "warn", `${misses}/${maxMisses} VRF misses today: at ${maxMisses} opens close until 00:00 UTC`);
   if (jitCap > 0n && jitSpent * 100n >= jitCap * 80n) add("jit-cap", "warn", `just-in-time buys spent ${usdc(jitSpent)} of the ${usdc(jitCap)} USDC daily cap: past it short cards are refunded, not bought`);
   if (g.guardian.toLowerCase() === x.me.toLowerCase()) add("guardian-is-keeper", "warn", "the pause-only guardian is the keeper hot key; give it to a separate key");
-  if (g.totalOwed > 0n) add("owed", "critical", `${usdc(g.totalOwed)} USDC of IOUs outstanding (totalOwed); plays stay paused until covered`);
-  if (g.unreserved < g.minBuffer) add("buffer", "critical", `unreserved ${usdc(g.unreserved)} USDC is under minBuffer ${usdc(g.minBuffer)}: the next reveal pauses play`);
+  // a funded IOU no longer pauses anything, so an unfunded one is only visible here
+  if (g.totalOwed > 0n && g.balance < g.liabilities) add("owed", "warn", `${usdc(g.totalOwed)} USDC of IOUs outstanding and unfunded: balance ${usdc(g.balance)} is under reserves plus IOUs ${usdc(g.liabilities)}; fund ${usdc(g.liabilities - g.balance)} USDC`);
+  else if (g.totalOwed > 0n) add("owed", "info", `${usdc(g.totalOwed)} USDC of IOUs outstanding, funded and claimable (claimOwed)`);
+  // a reveal that leaves less than minBuffer (1 wei on deploy) unreserved pauses play: urgent only with openings in flight
+  if (g.unreserved < g.minBuffer) add("buffer", open.openings.length ? "critical" : "warn", `unreserved ${usdc(g.unreserved)} USDC is under minBuffer (${g.minBuffer} wei): a reveal that does not leave more pauses play${open.openings.length ? `, ${open.openings.length} opening(s) in flight` : ""}; fund the float`);
+  // round 6: the VRF subsidy is paid from the unreserved balance only; without it players pay the whole fee to open
+  if (g.maxVrfSubsidy > 0n && g.unreserved < g.maxVrfSubsidy) add("vrf-subsidy", "warn", `unreserved ${usdc(g.unreserved)} USDC cannot fund the VRF subsidy (${usdc(g.maxVrfSubsidy)}): players and the keeper pay the whole VRF fee; fund the float`);
   if (g.unreserved < g.reserveFloor) add("float-low", "warn", `unreserved ${usdc(g.unreserved)} USDC is under reserveFloor ${usdc(g.reserveFloor)}: the float is being spent on big wins, top it up`);
   // only machines that are switched on can pay a pack (mainnet launches with Single only)
   const jackpot = biggestPackWei(markets ? markets.machines.filter((m) => !m.off).map((m) => m.id) : undefined);
@@ -116,6 +122,7 @@ export function assessHealth(x: HealthInput): HealthReport {
     vrfOpened: vrf?.opened ?? null,
     vrfRetried: vrf?.rerequested ?? null,
     vrfMissesToday: misses,
+    opensClosedUntil: g.opensClosedUntil,
     maxMisses,
     jitSpentTodayUsdc: usdc(jitSpent),
     jitCapUsdc: usdc(jitCap),

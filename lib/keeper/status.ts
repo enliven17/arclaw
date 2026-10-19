@@ -2,7 +2,7 @@
  * Per-machine freshness for a status page, from the keeper's saved state (no chain reads). Pure and runtime free, so
  * convex/keeper.ts (default runtime) and the CLI (`pnpm keeper status`) share it.
  *   fresh     switched on, has a table younger than maxTableAge, every card within maxPriceMoveBps at the last read
- *   openable  fresh and the contract is not paused
+ *   openable  fresh, the contract is not paused and the VRF miss breaker has not closed opens (pass both as `closed`)
  *   waking    not fresh and a wake request in the last 60 minutes (the keeper is on it)
  */
 import type { MachineStatus } from "./store";

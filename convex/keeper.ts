@@ -33,7 +33,7 @@ export const wake = mutationGeneric({
 type State = {
   lastTick?: unknown;
   lastReprice?: unknown;
-  lastHealth?: { metrics?: { paused?: boolean } } | null;
+  lastHealth?: { metrics?: { paused?: boolean; opensClosedUntil?: number | null } } | null;
   alerts?: unknown;
   failures?: number;
   machines?: Record<string, MachineStatus>;
@@ -47,8 +47,11 @@ export const status = queryGeneric({
     const recent = await ctx.db.query("keeperEvents").withIndex("by_at").order("desc").take(Math.min(Math.max(events, 1), 100));
     const wakes: Record<string, number> = Object.fromEntries((await ctx.db.query("keeperWakes").take(100)).map((w) => [String(w.machineId), w.at]));
     const paused = s?.lastHealth?.metrics?.paused === true;
+    // the miss breaker closes open() until 00:00 UTC without pausing
+    const closedUntil = s?.lastHealth?.metrics?.opensClosedUntil ?? null;
+    const opensClosed = closedUntil !== null && Date.now() / 1000 < closedUntil;
     // Date.now() is as of the last state write (Convex caches queries); staleAt lets the UI judge by itself
-    const machines = machineFreshness([...MACHINE_IDS], s?.machines, wakes, paused, Math.floor(Date.now() / 1000), Date.now());
+    const machines = machineFreshness([...MACHINE_IDS], s?.machines, wakes, paused || opensClosed, Math.floor(Date.now() / 1000), Date.now());
     return {
       lastTick: s?.lastTick ?? null,
       lastReprice: s?.lastReprice ?? {},
@@ -56,6 +59,7 @@ export const status = queryGeneric({
       alerts: s?.alerts ?? {},
       failures: s?.failures ?? 0,
       paused,
+      opensClosedUntil: opensClosed ? closedUntil : null,
       machines,
       events: recent.map(({ at, kind, level, message, tx }) => ({ at, kind, level, message, tx: tx ?? null })),
     };

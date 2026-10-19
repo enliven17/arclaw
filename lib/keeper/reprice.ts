@@ -5,7 +5,8 @@
  * that would not validate, the keeper not being the operator) skips the reprice and raises an issue.
  *
  * Spend policy (a reprice of all three machines costs about 0.2 USDC; the project must not drain itself idle):
- *   only machines that are switched on, of a contract that is not paused
+ *   only machines that are switched on, of a contract that is not paused and whose opens are not closed by the VRF
+ *   miss breaker (VrfMisses until 00:00 UTC)
  *   only machines with demand (demand.ts: sealed boxes, an opening in flight, a play in 24 h, a wake in 60 min)
  *   and then only when (repriceReason):
  *     no-table   it has no table
@@ -87,7 +88,8 @@ export async function reprice(args: {
   const results: RepriceOutcome[] = [];
   const issues: Issue[] = [];
   const events: KeeperEvent[] = [];
-  if (g.paused && !args.force) return { results, issues, events }; // nothing can open: no table is worth paying for
+  // nothing can open (paused, or the miss breaker closed opens until 00:00 UTC): no table is worth paying for
+  if ((g.paused || g.missCapped) && !args.force) return { results, issues, events };
   const cap = cfg.thresholds.maxRepricesPerDay;
   const due = view.machines
     .filter((m) => !args.only || args.only.includes(m.id))

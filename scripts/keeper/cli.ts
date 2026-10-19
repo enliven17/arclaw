@@ -84,7 +84,7 @@ async function main() {
   }
   if (cmd === "status") {
     const st = await ctx.store.load();
-    const machines = machineFreshness(MACHINES_FILE.machines.map((m) => m.id), st.machines, await ctx.store.wakes(), st.lastHealth?.metrics.paused === true, Number((await ctx.client.getBlock()).timestamp), Date.now());
+    const machines = machineFreshness(MACHINES_FILE.machines.map((m) => m.id), st.machines, await ctx.store.wakes(), st.lastHealth?.metrics.paused === true || Number(st.lastHealth?.metrics.opensClosedUntil ?? 0) > Number((await ctx.client.getBlock()).timestamp), Number((await ctx.client.getBlock()).timestamp), Date.now());
     if (flag("json")) return out(json({ lastTick: st.lastTick, spend: st.spend, repriceDay: st.repriceDay, machines }));
     for (const m of machines) out(`machine ${m.id} fresh ${m.fresh} openable ${m.openable} waking ${m.waking} demand ${m.demand} staleAt ${m.staleAt ? new Date(m.staleAt * 1000).toISOString() : "-"}`);
     return;

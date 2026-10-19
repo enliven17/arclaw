@@ -3,6 +3,9 @@
  * seed, pause-only guardian, daily JIT cap, top-up accounting, refundSealed clock), regenerate lib/abi and adjust this
  * file; the rest of lib/keeper only sees the plain types below.
  *
+ * Round 5/6 (7785c44): the miss breaker no longer pauses: with limits().day == today and misses >= maxMisses, open()
+ * reverts VrfMisses until 00:00 UTC (plays, reveals, retries, returns go on). A retried opening books one miss, a
+ * return after a retry none. A funded IOU no longer pauses; deploys set minBuffer to 1 wei.
  * Round 4 (7056ee8): one retry per opening (RetryLimit), every retried or returned expired request is a VRF miss and
  * limits().maxMisses in a UTC day pause the contract, a daily JIT spend cap, topUpReserve, a pause-only guardian,
  * pauseIfVrfDown() (reverts VrfAlive on a working VRF, so a simulation is a free probe), pausedSince is no longer
@@ -54,6 +57,11 @@ export type Globals = {
   guardian: Address;
   /** Daily limits (UTC day of the last write; misses and jitSpent read as 0 once a new day started). */
   limits: { day: number; misses: number; maxMisses: number; jitCap: bigint; jitSpent: bigint };
+  /** Miss breaker tripped today: open() reverts VrfMisses until opensClosedUntil (next 00:00 UTC). */
+  missCapped: boolean;
+  opensClosedUntil: number | null;
+  /** Every reserve plus IOUs: below this balance an IOU is not funded. */
+  liabilities: bigint;
   maxTableAge: number;
   maxPriceMoveBps: bigint;
   nextOpeningId: bigint;
@@ -122,6 +130,9 @@ export async function readGlobals(c: PublicClient, d: Deployment, me: Address): 
     resumedAt: Number(resumedAt),
     guardian,
     limits: { day: Number(lDay), misses: sameDay ? Number(lMisses) : 0, maxMisses: Number(lMax), jitCap: BigInt(lCap), jitSpent: sameDay ? BigInt(lSpent) : 0n },
+    missCapped: sameDay && Number(lMisses) >= Number(lMax),
+    opensClosedUntil: sameDay && Number(lMisses) >= Number(lMax) ? (today + 1) * 86_400 : null,
+    liabilities: res,
     maxTableAge: Number(maxTableAge),
     maxPriceMoveBps,
     nextOpeningId,
@@ -187,12 +198,22 @@ export async function readRequest(c: PublicClient, coordinator: Address, request
   }
 }
 
-/** msg.value a subsidised retry needs: the VRF fee above maxVrfSubsidy, quoted at 2x the base fee, plus 30%. */
-export async function retryTopUp(c: PublicClient, g: Globals): Promise<bigint> {
+/** The VRF fee of one request now, quoted at 2x the base fee. */
+export async function vrfFee(c: PublicClient, g: Globals): Promise<bigint> {
   const block = await c.getBlock();
   const base = block.baseFeePerGas ?? (await c.getGasPrice());
-  const fee = (await c.readContract({ address: g.vrfCoordinator, abi: d20CoordinatorAbi, functionName: "quoteFeeAt", args: [g.callbackGasLimit, base * 2n] })) as bigint;
-  const required = fee > g.maxVrfSubsidy ? fee - g.maxVrfSubsidy : 0n;
+  return (await c.readContract({ address: g.vrfCoordinator, abi: d20CoordinatorAbi, functionName: "quoteFeeAt", args: [g.callbackGasLimit, base * 2n] })) as bigint;
+}
+
+/**
+ * msg.value a keeper retry needs, plus 30% (the change comes back). Round 6: the house subsidy (up to maxVrfSubsidy)
+ * is only paid while the unreserved balance covers it; an unfunded contract makes the caller pay the whole fee.
+ */
+export async function retryTopUp(c: PublicClient, g: Globals): Promise<bigint> {
+  const fee = await vrfFee(c, g);
+  const sub = fee > g.maxVrfSubsidy ? g.maxVrfSubsidy : fee;
+  const funded = g.unreserved >= sub + fee; // the contract checks unreserved >= sub + msg.value
+  const required = funded ? fee - sub : fee;
   return required === 0n ? 0n : (required * 13n) / 10n;
 }
 

@@ -163,7 +163,7 @@ type CliOut = {
     health: { ok: boolean; issues: { key: string; severity: string; message: string }[]; metrics: Record<string, string | number | boolean | null> } | null;
     error: string | null;
     accepted?: boolean;
-    machines?: { id: number; fresh: boolean; waking: boolean }[];
+    machines?: { id: number; fresh: boolean; openable: boolean; waking: boolean }[];
   };
 };
 
@@ -279,6 +279,11 @@ async function main() {
     let o = await cli(["health"]);
     show(o);
     ok(o.json.health && o.json.health.issues.every((i) => i.severity !== "critical"), "fresh deploy: no critical issue (keeper role, operator role, tables fresh)");
+
+    // the owner sends the float, as the deploy runbook says: it funds the VRF subsidy and big packs
+    await wallet(0).sendTransaction({ to: dep.arclaw, value: 50n * 10n ** 18n }).then((h) => pub.waitForTransactionReceipt({ hash: h }));
+    o = await cli(["health"]);
+    ok(!issueKeys(o).includes("vrf-subsidy") && !issueKeys(o).includes("buffer"), "float of 50 USDC sent: VRF subsidy funded, buffer fine");
 
     log("\n[3] play, open, VRF fulfils, the keeper reveals");
     const a = await playAndOpen(1, 3);
@@ -455,6 +460,36 @@ async function main() {
     ok(back && (await status(d.openingId)) === 4, `opener took boxes of opening #${d.openingId} back (returnBoxes)`);
     o = await cli(["tick"]);
     ok(telegram.some((t) => t.startsWith("RESOLVED") && t.includes("vrf-retry-expired")), "opening closed: vrf-retry-expired resolved on Telegram");
+
+    log("\n[15b] VRF miss breaker: maxMisses reached closes opens until 00:00 UTC (no pause); the keeper spends nothing");
+    await send(0, dep.arclaw, arclawAbi, "setLimits", [2000n * 10n ** 18n, 1]); // one miss a day trips it
+    const mm = await playAndOpen(3, 1);
+    await warp(61);
+    o = await cli(["tick"]);
+    show(o);
+    ok(kinds(o).includes("retried") && !(await read<boolean>("paused")), "the retry booked the day's only allowed miss; Arclaw is not paused");
+    await send(2, dep.arclaw, arclawAbi, "play", [3n, 1n], 10n * 10n ** 18n); // plays still work
+    let closed = "";
+    try {
+      await pub.simulateContract({ account: player!, address: dep.arclaw, abi: arclawAbi, functionName: "open", args: [3n, 1n, await tableId(3)] });
+    } catch (e) {
+      closed = String((e as Error).message);
+    }
+    o = await cli(["health"]);
+    const vm = o.json.health?.issues.find((i) => i.key === "vrf-misses");
+    ok(/VrfMisses/.test(closed) && vm?.severity === "critical" && /opens closed/.test(vm.message) && severityOf(o, "paused") === null, "open reverts VrfMisses; health: vrf-misses critical (opens closed until 00:00 UTC), not paused");
+    const capBefore = await tableId(3);
+    await setPrice("NVDA", (prices[0]! * 103n) / 100n);
+    o = await cli(["tick"]);
+    show(o);
+    ok(!doneIds(o).length && (await tableId(3)) === capBefore, "machine 3 has demand and moved 3%, but opens are closed: no reprice");
+    st = await cli(["status"]);
+    ok(st.json.machines?.find((m) => m.id === 3)?.openable === false, "status: machine 3 not openable while opens are closed");
+    await send(0, dep.arclaw, arclawAbi, "setLimits", [2000n * 10n ** 18n, 10]);
+    await fulfill(await requestOf(mm.openingId));
+    o = await cli(["tick"]);
+    show(o);
+    ok((await status(mm.openingId)) === 3 && doneIds(o).includes(3), "owner lifts the cap: the retried opening is revealed and machine 3 repriced (moved)");
 
     log("\n[16] a stuck keeper transaction blocks sends until it clears");
     const e = await playAndOpen(3, 1);
