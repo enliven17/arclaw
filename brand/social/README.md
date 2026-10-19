@@ -7,6 +7,7 @@ Rebuild the images with `node brand/social/render.mjs`. They draw from `lib/bran
 | `profile.png` | 1000 x 1000 | Default avatar: X, Farcaster, Telegram, Discord |
 | `profile-claw.png` | 1000 x 1000 | Alternate avatar for small sizes or launch periods |
 | `banner.png` | 1500 x 500 | X header, Farcaster, Discord banner. The avatar covers the bottom left corner on X, so nothing important lives there. |
+| `grab.png` | 1600 x 900 | X post: the Single machine as the site draws it, "Come grab a box." Rebuild with `node brand/social/grab.mjs` (captures the live machine). |
 
 ## Name and handle
 
