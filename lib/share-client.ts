@@ -5,3 +5,16 @@ export async function requestShareLink(txHash: string, boxIndex: number): Promis
   if (!res.ok || !body.path) throw new Error(body.error ?? "Sharing is not available right now.");
   return body.path;
 }
+
+/** Opens an X post with the box's /pull link. The tab opens first, inside the click, so the popup blocker lets it through. */
+export function shareOnX(txHash: string, boxIndex: number, text: string) {
+  const tab = window.open("", "_blank");
+  void requestShareLink(txHash, boxIndex).then(
+    (path) => {
+      const url = `https://x.com/intent/post?${new URLSearchParams({ text, url: `${window.location.origin}${path}` })}`;
+      if (tab) tab.location.href = url;
+      else window.open(url, "_blank");
+    },
+    () => tab?.close(),
+  );
+}

@@ -20,7 +20,7 @@ import { SealedBox } from "@/components/pack/SealedBox";
 import { StockCard } from "@/components/landing/StockCard";
 import { variantOf } from "@/components/claw/view";
 import { toUsdc, type DrawnBox } from "@/lib/arclaw/contract";
-import { requestShareLink } from "@/lib/share-client";
+import { shareOnX } from "@/lib/share-client";
 import { usdc } from "@/lib/stocks";
 import { cn } from "@/lib/cn";
 
@@ -131,7 +131,7 @@ export function RevealOverlay({
     tl.fromTo(card, { opacity: 1, yPercent: -10, xPercent: 0, scale: 0.85 }, { yPercent: -70, duration: 0.25 * d, ease: "power2.out" })
       .set(card, { zIndex: 30 })
       .to(card, {
-      xPercent: (i - 1) * 108,
+      xPercent: (i - 1) * 120,
       yPercent: 0,
       scale: 1,
       rotate: (i - 1) * 3,
@@ -266,7 +266,7 @@ export function RevealOverlay({
                       key={`${index}-${i}`}
                       type="button"
                       data-rv-card=""
-                      className="relative z-10 col-start-1 row-start-1 w-[30%]"
+                      className="relative z-10 col-start-1 row-start-1 w-[27%]"
                       tabIndex={step === "flip" && !flipped[i] ? 0 : -1}
                       aria-label={flipped[i] ? `${c.ticker}, ${usdc(toUsdc(c.valueWei))} USDC` : `Turn card ${i + 1}`}
                       onClick={() => step === "flip" && flip(i)}
@@ -322,28 +322,10 @@ export function RevealOverlay({
 }
 
 function ShareButton({ box }: { box: DrawnBox }) {
-  const [state, setState] = useState<"idle" | "busy" | "copied" | "failed">("idle");
-  const share = async () => {
-    if (!box.txHash) return setState("failed");
-    setState("busy");
-    try {
-      const full = `${window.location.origin}${await requestShareLink(box.txHash, box.boxIndex)}`;
-      if (navigator.share) {
-        setState("idle");
-        await navigator.share({ url: full, title: "My arclaw pull" });
-      } else {
-        await navigator.clipboard.writeText(full);
-        setState("copied");
-        setTimeout(() => setState("idle"), 1600);
-      }
-    } catch (e) {
-      // A dismissed share sheet is not a failure; anything else is.
-      setState(e instanceof DOMException && e.name === "AbortError" ? "idle" : "failed");
-    }
-  };
+  const sum = usdc(box.cards.reduce((t, c) => t + toUsdc(c.valueWei), 0));
   return (
-    <button type="button" className="btn-ghost" disabled={state === "busy"} onClick={() => void share()}>
-      {state === "copied" ? "Link copied" : state === "failed" ? "Could not share" : "Share"}
+    <button type="button" className="btn-ghost" disabled={!box.txHash} onClick={() => shareOnX(box.txHash!, box.boxIndex, `Pulled a ${box.tierName} pack on @arclawapp: ${sum} USDC in real stocks.`)}>
+      Share on X
     </button>
   );
 }

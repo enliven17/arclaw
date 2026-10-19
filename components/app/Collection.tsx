@@ -16,7 +16,7 @@ import { ARC } from "@/lib/arc/config";
 import { allowance, approveCall, pullsOf, quoteSell, readHoldings, sellCall, toUsdc, type Pull } from "@/lib/arclaw/contract";
 import { getLenis } from "@/lib/motion";
 import { logoOf, usdc } from "@/lib/stocks";
-import { requestShareLink } from "@/lib/share-client";
+import { shareOnX } from "@/lib/share-client";
 import { cn } from "@/lib/cn";
 
 type Holding = Awaited<ReturnType<typeof readHoldings>>[number];
@@ -125,13 +125,9 @@ export function Collection() {
                       type="button"
                       className="btn-ghost !min-h-[36px] !px-3 !py-2 text-[13px]"
                       disabled={!p.txHash}
-                      onClick={() => {
-                        // Opened first, so the popup blocker sees a click; pointed at the signed link once the server has it.
-                        const tab = window.open("", "_blank");
-                        void requestShareLink(p.txHash!, p.boxIndex).then((path) => (tab ? (tab.location.href = path) : window.open(path, "_blank")), () => tab?.close());
-                      }}
+                      onClick={() => shareOnX(p.txHash!, p.boxIndex, `Pulled a ${p.tierName} pack on @arclawapp: ${usdc(sum)} USDC in real stocks.`)}
                     >
-                      Share
+                      Share on X
                     </button>
                   </span>
                 </li>
