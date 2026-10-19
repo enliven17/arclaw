@@ -116,3 +116,12 @@ Two independent contract reviews (10a, 10b, tests in `contracts/test/audit10a`, 
 - **10a L-02, a stolen operator key can stall opens without a refund clock.** Repricing ahead of every open makes it
   revert `TableChanged`, and each reprice keeps the table fresh, so neither the stale-table nor the pause clock runs.
   No funds move. Runbook: the guardian pauses first (the pause clock starts), then the owner Safe calls `setOperator`.
+
+10b found nothing above Info, with a launch-like invariant suite (no inventory, a float under the reserve floor,
+moving prices, failed callbacks, retries, IOUs, owner actions; six balance rules held over 36,000 calls) and a mainnet
+fork against the real deploy script, VRF, desk and oracle.
+
+- **10b INFO-01, a boost can be sold with its account.** A stake's 24-hour age belongs to the staking address, so an
+  aged position held by a transferable account (a Safe, a token-bound account) can be bought and used at once. The
+  house loses nothing (every return band is checked at the maximum boost, like the renting already accepted), but
+  "freshly bought tokens do not count" means freshly bought tokens, not bought positions.
