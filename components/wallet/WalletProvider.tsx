@@ -104,9 +104,11 @@ function PrivyInner({ children }: { children: ReactNode }) {
   const openConnect = useCallback(() => {
     if (!authenticated) return login();
     // Logged in with a stale wallet choice: fall back to the login wallet, or offer the wallet list.
-    if (embedded) return choose("embedded");
+    // The saved choice was an external wallet that did not reconnect after the reload: ask for that wallet again,
+    // never swap silently to the Privy one (a different address).
+    if (embedded && choice !== "external") return choose("embedded");
     connectWallet({ walletChainType: "ethereum-only", description: "" });
-  }, [authenticated, choose, connectWallet, embedded, login]);
+  }, [authenticated, choice, choose, connectWallet, embedded, login]);
 
   const disconnect = useCallback(() => {
     choose("off");
