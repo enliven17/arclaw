@@ -104,21 +104,20 @@ export async function readBoxes(client: PublicClient, owner: Address, ids = MACH
 }
 
 /**
- * The msg.value an open needs: the VRF fee above the house subsidy, quoted at the latest base fee with headroom
- * (the contract returns any change). Zero when the subsidy covers it.
+ * The msg.value an open needs: the whole VRF fee, quoted at the latest base fee with headroom. The house subsidy only
+ * applies while the contract has unreserved funds, so the app cannot know it in advance; whatever is not needed comes
+ * straight back to the player as change (and an opener's own top-up is paid back if the request expires).
  */
 export async function vrfTopUp(client: PublicClient): Promise<bigint> {
   const arclaw = need(ARCLAW, "arclaw");
-  const [coordinator, gas, subsidy, block] = await Promise.all([
+  const [coordinator, gas, block] = await Promise.all([
     client.readContract({ address: arclaw, abi: arclawAbi, functionName: "vrfCoordinator" }),
     client.readContract({ address: arclaw, abi: arclawAbi, functionName: "callbackGasLimit" }),
-    client.readContract({ address: arclaw, abi: arclawAbi, functionName: "maxVrfSubsidy" }),
     client.getBlock(),
   ]);
   const base = block.baseFeePerGas ?? (await client.getGasPrice());
   const fee = await client.readContract({ address: coordinator as Address, abi: d20CoordinatorAbi, functionName: "quoteFeeAt", args: [gas as number, base * 2n] });
-  const required = (fee as bigint) > (subsidy as bigint) ? (fee as bigint) - (subsidy as bigint) : 0n;
-  return required === 0n ? 0n : (required * 13n) / 10n;
+  return ((fee as bigint) * 13n) / 10n;
 }
 
 export type OpeningState = { status: number; requestedAt: number; machineId: number; boxes: number; opener: Address };
