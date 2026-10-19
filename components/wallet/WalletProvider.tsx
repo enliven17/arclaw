@@ -104,7 +104,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         appName: "arclaw",
         appDescription: "Pay USDC on Arc, play a claw machine, win real stocks.",
         appIcon: "/brand/lockup.svg",
-        walletConnectProjectId: WALLETCONNECT_PROJECT_ID,
+        // WalletConnect needs indexedDB, so it only starts in the browser, never during prerender.
+        walletConnectProjectId: typeof window === "undefined" ? "" : WALLETCONNECT_PROJECT_ID,
         enableAaveAccount: false,
         chains: [ARC_CHAIN],
         transports: { [ARC_CHAIN.id]: arcTransport() },
