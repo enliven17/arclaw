@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { connection } from "next/server";
 import { AppShell } from "@/components/app/AppShell";
 
 export const metadata: Metadata = {
@@ -7,6 +8,8 @@ export const metadata: Metadata = {
   robots: { index: true, follow: true },
 };
 
-export default function AppLayout({ children }: LayoutProps<"/app">) {
+export default async function AppLayout({ children }: LayoutProps<"/app">) {
+  // Per request, so Next can put proxy.ts's CSP nonce on its scripts (a prerendered page has no nonce to carry).
+  await connection();
   return <AppShell>{children}</AppShell>;
 }

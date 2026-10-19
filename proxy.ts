@@ -9,6 +9,7 @@
  * responsible for their own jurisdiction.
  */
 import { NextResponse, type NextRequest } from "next/server";
+import { STATIC_SCRIPT_SRC, policy, strictPolicy } from "@/lib/csp";
 
 const DEFAULT_BLOCKED = [
   // Sanctioned or embargoed.
@@ -21,15 +22,26 @@ const blocked = new Set(
   (process.env.BLOCKED_COUNTRIES?.trim() ? process.env.BLOCKED_COUNTRIES.split(",") : DEFAULT_BLOCKED).map((c) => c.trim().toUpperCase()).filter(Boolean),
 );
 
-export function proxy(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const country = request.headers.get("x-vercel-ip-country")?.toUpperCase();
   if (country && blocked.has(country)) {
     const url = request.nextUrl.clone();
     url.pathname = "/restricted";
     url.search = "";
-    return NextResponse.rewrite(url, { status: 451 });
+    const res = NextResponse.rewrite(url, { status: 451 });
+    res.headers.set("Content-Security-Policy", policy(STATIC_SCRIPT_SRC));
+    return res;
   }
-  return NextResponse.next();
+  // Strict CSP for the pages where wallets sign (lib/csp.ts). Next reads the nonce from the request's policy and puts
+  // it on its own scripts, which makes these pages render per request.
+  const nonce = btoa(crypto.randomUUID());
+  const csp = await strictPolicy(nonce);
+  const headers = new Headers(request.headers);
+  headers.set("x-nonce", nonce);
+  headers.set("Content-Security-Policy", csp);
+  const res = NextResponse.next({ request: { headers } });
+  res.headers.set("Content-Security-Policy", csp);
+  return res;
 }
 
 export const config = {

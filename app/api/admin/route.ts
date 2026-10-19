@@ -13,6 +13,7 @@ import { arcClient } from "@/lib/arc/chain";
 import { ARC, ARC_USDC } from "@/lib/arc/config";
 import { arclawAbi } from "@/lib/abi/arclaw";
 import { isAdmin } from "@/lib/admin.server";
+import { allow, clientIp } from "@/lib/rate-limit.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -54,6 +55,8 @@ async function chain() {
 }
 
 export async function POST(request: NextRequest) {
+  // The panel refreshes every 30 s; 20 a minute is plenty for it and caps what a stranger can make this route read.
+  if (!allow(`admin:${clientIp(request)}`, 20)) return NextResponse.json({ error: "not found" }, { status: 404 });
   const body = (await request.json().catch(() => null)) as { message?: unknown; signature?: unknown } | null;
   if (!(await isAdmin(request.headers.get("host"), body?.message, body?.signature))) return NextResponse.json({ error: "not found" }, { status: 404 });
 

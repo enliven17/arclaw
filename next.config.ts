@@ -1,34 +1,13 @@
 import type { NextConfig } from "next";
+import { STATIC_SCRIPT_SRC, policy } from "./lib/csp";
 
-/**
- * Content Security Policy. Scripts are limited to our own bundle plus the few third parties the app loads (Vercel
- * analytics); inline scripts stay allowed because Next's own bootstrap and the
- * splash decider in the head are inline and the pages are static (no per-request nonce). That still stops a script from
- * another origin, and the rest is locked down: nobody can frame the site (clickjacking), no plugins, no base-tag or
- * form hijacking. Network and image sources stay open to https because wallets, RPCs, Convex and the stock logos live
- * on many hosts.
- */
-const csp = [
-  "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' https://va.vercel-scripts.com",
-  "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob: https:",
-  "font-src 'self' data:",
-  "media-src 'self' blob:",
-  "connect-src 'self' https: wss:",
-  "frame-src https://verify.walletconnect.com https://verify.walletconnect.org",
-  "worker-src 'self' blob:",
-  "manifest-src 'self'",
-  "object-src 'none'",
-  "base-uri 'self'",
-  "form-action 'self'",
-  "frame-ancestors 'none'",
-  "upgrade-insecure-requests",
-].join("; ");
+// Static pages get the inline-friendly policy; /app and /claim get a strict per-request one from proxy.ts (lib/csp.ts).
+const csp = policy(STATIC_SCRIPT_SRC);
 
 const securityHeaders = [
   { key: "Content-Security-Policy", value: csp },
   { key: "X-Frame-Options", value: "DENY" },
+  { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains" },
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), payment=(), usb=(), serial=(), bluetooth=()" },
@@ -42,7 +21,12 @@ const nextConfig: NextConfig = {
   turbopack: { root: process.cwd() },
   async headers() {
     return [
-      { source: "/:path*", headers: securityHeaders },
+      // /app and /claim get their (strict) policy from proxy.ts; everything else gets the static one here
+      { source: "/:path((?!app(?:/|$)|claim(?:/|$)).*)", headers: securityHeaders },
+      { source: "/app/:path*", headers: securityHeaders.filter((h) => h.key !== "Content-Security-Policy") },
+      { source: "/app", headers: securityHeaders.filter((h) => h.key !== "Content-Security-Policy") },
+      { source: "/claim/:path*", headers: securityHeaders.filter((h) => h.key !== "Content-Security-Policy") },
+      { source: "/claim", headers: securityHeaders.filter((h) => h.key !== "Content-Security-Policy") },
       // Cabinet backs (scripts/cabinet-bake.tsx) are on every page with a machine: cache them for a day, revalidate in
       // the background for a week. Not immutable: the file names carry no hash.
       { source: "/cabinet/:file", headers: [{ key: "Cache-Control", value: "public, max-age=86400, stale-while-revalidate=604800" }] },

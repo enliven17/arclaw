@@ -3,6 +3,7 @@ import { Providers } from "@/components/Providers";
 import { ClawCurtain } from "@/components/motion/ClawCurtain";
 import { PageTransition } from "@/components/motion/PageTransitions";
 import { fontVariables } from "@/lib/fonts";
+import { HEAD_SCRIPT } from "@/lib/csp";
 import { SITE_DESCRIPTION, SITE_NAME, SITE_URL, TAGLINE, X_HANDLE } from "@/lib/seo";
 import "./globals.css";
 
@@ -18,15 +19,13 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = { themeColor: "#0c0c0e", colorScheme: "dark", viewportFit: "cover" };
 
-// Before first paint: mark JS so reveal targets start hidden (no-JS keeps them visible), and decide the splash
-// (first visit per tab session, never under reduced motion) so it never flashes for a returning visitor.
-const HEAD = `(function(){var d=document.documentElement;d.classList.add('js');try{if(!sessionStorage.getItem('arclaw:splash')&&!matchMedia('(prefers-reduced-motion: reduce)').matches)d.classList.add('splashing')}catch(e){}})()`;
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en" className={fontVariables} suppressHydrationWarning>
       <head>
-        <script dangerouslySetInnerHTML={{ __html: HEAD }} />
+        {/* lib/csp.ts: allowed by its hash on the strict pages */}
+        <script dangerouslySetInnerHTML={{ __html: HEAD_SCRIPT }} />
       </head>
       <body className="min-h-dvh bg-ink text-cream">
         <a

@@ -1,12 +1,12 @@
 /**
  * Who may read the admin panel, and how they prove it. Stateless: the admin wallet signs a short message naming this
  * site and an expiry about 10 minutes ahead; every panel request carries that message and signature, and the server
- * checks the domain, the expiry and the signer (verifyMessage also accepts smart wallets). Read only, so a replay inside
+ * checks the domain, the expiry and the signer, recovered locally (no RPC call, so junk signatures cost nothing; the
+ * admin is an EOA, verified on chain in round 10). Read only, so a replay inside
  * the window gains nothing a fresh sign-in would not. Anyone else gets a plain 404.
  */
 import "server-only";
-import { isHex } from "viem";
-import { arcClient } from "./arc/chain";
+import { isAddressEqual, isHex, recoverMessageAddress } from "viem";
 import { ADMIN, ADMIN_SESSION_MS, adminMessage } from "./admin";
 
 // The panel signs 10 minutes ahead (lib/admin.ts); the slack covers a browser clock that runs ahead of the server's.
@@ -32,7 +32,8 @@ export async function isAdmin(host: string | null, message: unknown, signature: 
   const expires = Date.parse(/^expires: (.+)$/m.exec(message)?.[1] ?? "");
   if (!Number.isFinite(expires) || expires <= now || expires > now + MAX_WINDOW_MS) return false;
   if (message !== adminMessage(host, expires)) return false;
-  return arcClient()
-    .verifyMessage({ address: admin, message, signature })
+  // ponytail: EOA only; if the admin ever moves to a smart wallet, verify through the chain (ERC-1271) here
+  return recoverMessageAddress({ message, signature })
+    .then((a) => isAddressEqual(a, admin))
     .catch(() => false);
 }

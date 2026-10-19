@@ -36,3 +36,12 @@ test("only the site's own hosts may be named in a sign-in", () => {
   assert.equal(allowedHost("evil.example", "https://arclaw.app"), false);
   assert.equal(allowedHost("arclaw.app.evil.example", "https://arclaw.app"), false);
 });
+
+test("the per-IP limit lets a minute's budget through, then refuses until the next minute", async () => {
+  const { allow } = await import("./rate-limit.server");
+  const t = 1_900_000_000_000;
+  for (let i = 0; i < 20; i++) assert.equal(allow("t:1.2.3.4", 20, t + i), true);
+  assert.equal(allow("t:1.2.3.4", 20, t + 30), false);
+  assert.equal(allow("t:5.6.7.8", 20, t + 30), true, "another IP has its own budget");
+  assert.equal(allow("t:1.2.3.4", 20, t + 60_000), true, "a new minute");
+});
