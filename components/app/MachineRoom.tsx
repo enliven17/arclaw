@@ -47,6 +47,7 @@ import { cn } from "@/lib/cn";
 const ACK_KEY = "arclaw:ack-18";
 const MAX_OPEN = 20;
 const GRIP_AT = 3.4;
+const KEEPER_GRACE_MS = 12_000;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -115,6 +116,7 @@ export function MachineRoom({ art, machine }: { art: ClawArt; machine: Machine }
   const settle = useCallback(
     async (openingId: bigint, fromBlock: bigint) => {
       const client = arcClient();
+      let fulfilledAt = 0;
       for (;;) {
         const s = await readOpening(client, openingId);
         if (s.status === STATUS.Revealed) {
@@ -125,7 +127,12 @@ export function MachineRoom({ art, machine }: { art: ClawArt; machine: Machine }
           setWaiting({ label: "The boxes went back to your wallet." });
           return;
         }
-        if (s.status === STATUS.Fulfilled) break;
+        // The keeper reveals a fulfilled opening at once; asking the opener too races it and their tx reverts
+        // (NotPending). Give the keeper a few seconds, and only ask for a signature if it has not come through.
+        if (s.status === STATUS.Fulfilled) {
+          fulfilledAt ||= Date.now();
+          if (Date.now() - fulfilledAt > KEEPER_GRACE_MS) break;
+        }
         if (Date.now() / 1000 > s.requestedAt + VRF_EXPIRY_S + 5) {
           setWaiting({
             label: "The draw took too long. Ask again, or take your boxes back.",
@@ -155,10 +162,11 @@ export function MachineRoom({ art, machine }: { art: ClawArt; machine: Machine }
         await sleep(1500);
       }
       const unseal = async () => {
-        setWaiting({ label: w.kind === "embedded" ? "Unsealing your cards" : "Confirm once more in your wallet to unseal your cards" });
+        setWaiting({ label: "Confirm once more in your wallet to unseal your cards" });
         try {
           const hash = await w.send([revealCall(openingId)]);
           const receipt = await client.getTransactionReceipt({ hash });
+          if (receipt.status !== "success") throw new Error("reveal reverted");
           setTxUrl(explorerTx(hash));
           setBoxes(await boxesFromLogs(client, receipt.logs));
         } catch {
