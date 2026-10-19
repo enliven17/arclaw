@@ -16,7 +16,6 @@
  */
 import { decodeEventLog, encodeAbiParameters, encodeFunctionData, getAddress, parseAbi, type Address, type Hex, type Log, type PublicClient } from "viem";
 import { arclawAbi, arclawLinksAbi, d20CoordinatorAbi } from "@/lib/abi";
-import testnet from "@/lib/deployments/arc-testnet.json";
 import { ARC } from "@/lib/arc/config";
 import type { Call } from "@/lib/arc/chain";
 import { MACHINES } from "@/lib/machines";
@@ -25,7 +24,7 @@ import { stockOf } from "@/lib/stocks";
 export const CONTRACTS = ARC.contracts;
 export const ARCLAW = CONTRACTS?.arclaw ?? null;
 /** ArclawLinks, once deployed (lib/deployments/*.json "links"). */
-export const LINKS = ((testnet as { links?: string }).links ?? null) as Address | null;
+export const LINKS = CONTRACTS?.links ?? null;
 
 /** Opening status enum in the contract. */
 export const STATUS = { None: 0, Pending: 1, Fulfilled: 2, Revealed: 3, Returned: 4 } as const;

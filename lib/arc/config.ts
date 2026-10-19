@@ -19,6 +19,8 @@ export type Contracts = {
   sellDesk: `0x${string}`;
   priceSource: `0x${string}`;
   vrfCoordinator: `0x${string}`;
+  /** The claim-link escrow (ArclawLinks), when this network has one. */
+  links: `0x${string}` | null;
   /** First block worth reading logs from. */
   deployBlock: bigint;
   /** ".arc" token address by ticker (without the .arc suffix). */
@@ -52,6 +54,7 @@ function contractsOf(d: typeof testnet): Contracts {
     sellDesk: (sell ?? d.desk) as `0x${string}`,
     priceSource: d.priceSource as `0x${string}`,
     vrfCoordinator: d.vrfCoordinator as `0x${string}`,
+    links: ((d as { links?: string }).links as `0x${string}` | undefined) ?? null,
     deployBlock: BigInt(d.deployBlock),
     stocks,
   };
