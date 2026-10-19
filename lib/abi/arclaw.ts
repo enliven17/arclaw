@@ -3410,17 +3410,6 @@ export const arclawAbi = [
   },
   {
     "type": "error",
-    "name": "SafeERC20FailedOperation",
-    "inputs": [
-      {
-        "name": "token",
-        "type": "address",
-        "internalType": "address"
-      }
-    ]
-  },
-  {
-    "type": "error",
     "name": "Slippage",
     "inputs": [
       {
@@ -3495,6 +3484,11 @@ export const arclawAbi = [
         "internalType": "uint256"
       }
     ]
+  },
+  {
+    "type": "error",
+    "name": "VrfMisses",
+    "inputs": []
   },
   {
     "type": "error",

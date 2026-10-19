@@ -141,6 +141,8 @@ export function revertText(e: unknown): string {
   const m = e instanceof Error ? ((e as { shortMessage?: string }).shortMessage ?? e.message) : String(e);
   if (/TableChanged/.test(m)) return "The prizes for this machine were just updated. Open again to play the new table.";
   if (/TableStale|BelowFloor/.test(m)) return "Prices moved since this machine's prizes were set. Opening is paused until they are updated.";
+  if (/VrfMisses/.test(m)) return "Opening is closed for a few hours while the randomness service catches up. Your boxes are safe and open again after 00:00 UTC.";
+  if (/VrfFeeTopUp/.test(m)) return "The randomness fee could not be covered right now. Try again in a moment.";
   if (/EnforcedPause/.test(m)) return "The machines are paused for a moment. Your boxes are safe; try again shortly.";
   if (/NotExpired/.test(m)) return "Your boxes can come back once this machine's prize table expires. A new draw is usually faster.";
   if (/reject|denied|cancel/i.test(m)) return "You cancelled it in your wallet.";
