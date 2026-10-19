@@ -32,6 +32,7 @@ abstract contract Base is Test {
     uint256 constant P1 = 1 ether;
     uint256 constant P2 = 5 ether;
     uint256 constant SUBSIDY = 0.1 ether;
+    uint256 constant FLOAT = 1 ether;
 
     function setUp() public virtual {
         vm.warp(1_800_000_000);
@@ -59,6 +60,10 @@ abstract contract Base is Test {
 
         nvda.mint(address(box), 100 ether);
         tsla.mint(address(box), 100 ether);
+        // House float: the VRF subsidy only comes from the unreserved balance (round 5, audit 7a L-01)
+        // and it is the reserve floor (as Deploy sets it), so freeBalance and withdraw/sweep limits read as before.
+        vm.deal(address(box), FLOAT);
+        box.setJit(address(0), 0, 0, 0, FLOAT);
         vm.deal(alice, 1000 ether);
         vm.deal(bob, 1000 ether);
     }

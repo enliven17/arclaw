@@ -312,12 +312,15 @@ abstract contract OddsWriter is ArcConfig {
 ///                  warning (move it to a Safe later via transferOwnership + acceptOwnership). STRICT_OWNER=1 makes
 ///                  an EOA owner or owner == deployer a hard error.
 ///   OPERATOR       treasury agent (reprices, restocks). Mainnet: required and must differ from the deployer.
-///   KEEPER         reveal / retry bot (default OPERATOR). GUARDIAN: pause-only key (default OWNER).
+///   KEEPER         reveal / retry bot (default OPERATOR). GUARDIAN: pause-only key (required on mainnet; testnet
+///                  default OWNER).
 ///   RESERVE_FLOOR  float in wei, untouchable by withdraw and spend (default 5 USDC). Size it about 10x the price of
-///                  the biggest enabled machine (docs/TOKENOMICS.md) and raise it as machines are switched on.
-///   LAUNCH_MACHINES machine ids left on at deploy, comma separated (mainnet default 1; testnet default all).
+///                  the biggest enabled machine (docs/TOKENOMICS.md) and raise it as machines are switched on; the
+///                  script prints a loud warning when it is under that.
+///   LAUNCH_MACHINES machine ids left on at deploy, comma separated (mainnet default 1, set-but-empty reverts;
+///                  testnet default all).
 ///   DAILY_CAP      operator spend cap per UTC day (default 500 USDC). JIT_DAILY_CAP (default 2000 USDC),
-///   MAX_MISSES     VRF misses per day before the automatic pause (default 10). MAX_VRF_SUBSIDY (mainnet default
+///   MAX_MISSES     VRF misses per day before opens close until 00:00 UTC (default 10). MAX_VRF_SUBSIDY (mainnet default
 ///                  2x the live D20 quote at the current base fee, at least 0.04 USDC).
 ///   BOX_URI, MAX_TABLE_AGE (seconds; default 1 day on both chains, the Arclaw maximum),
 ///   POOL_USD (testnet seed per stock, USD 6 dp, default $2000), MOCK_PRICES=1 (testnet: fixed prices, no fork).
@@ -331,6 +334,7 @@ contract Deploy is OddsWriter {
     address public desk;
     address public operator;
     address public owner;
+    address public guardian;
     address[8] public tokens;
     uint256[8] public prices;
 
@@ -351,6 +355,7 @@ contract Deploy is OddsWriter {
         vm.startBroadcast();
         operator = vm.envOr("OPERATOR", msg.sender);
         owner = vm.envOr("OWNER", msg.sender);
+        guardian = vm.envOr("GUARDIAN", owner);
         MockPriceSource src = new MockPriceSource();
         priceSource = address(src);
         desk = address(new MockAstockDesk(IPriceSource(priceSource)));
@@ -381,10 +386,12 @@ contract Deploy is OddsWriter {
 
     function _mainnet() internal {
         operator = vm.envAddress("OPERATOR");
+        guardian = vm.envAddress("GUARDIAN"); // explicit on mainnet: never defaults to OWNER
         vm.startBroadcast();
         owner = vm.envOr("OWNER", msg.sender);
         require(operator != msg.sender, "OPERATOR must not be the deployer");
         require(owner != address(0) && operator != address(0), "OWNER and OPERATOR required");
+        require(guardian != address(0), "GUARDIAN required");
         _checkOwner();
         // House VRF subsidy matched to the live fee: 2x today's quote (base-fee headroom), at least 0.04 USDC. At
         // 20 gwei the D20 mainnet fee is 3 x 20 gwei x (300k + 100k gas) = 0.024 USDC.
@@ -413,7 +420,10 @@ contract Deploy is OddsWriter {
         if (age != 0) box.setMaxTableAge(age);
         uint256[] memory single = new uint256[](1);
         single[0] = 1;
-        _configure(vm.envOr("LAUNCH_MACHINES", ",", single));
+        uint256[] memory launch = vm.envOr("LAUNCH_MACHINES", ",", single);
+        // audit 7a L-03: a set-but-empty LAUNCH_MACHINES parses to [] which _launched reads as "every machine on"
+        require(launch.length != 0, "LAUNCH_MACHINES is set but empty: unset it (default 1) or list the ids");
+        _configure(launch);
         if (owner != msg.sender) {
             box.transferOwnership(owner);
             src.transferOwnership(owner);
@@ -451,7 +461,7 @@ contract Deploy is OddsWriter {
         // The reveal bot: may reveal any opening at once (openers always can; anyone after an hour).
         box.setKeeper(vm.envOr("KEEPER", operator), true);
         // Pause-only hot key (the keeper host can trip it on alerts); it can never unpause.
-        box.setGuardian(vm.envOr("GUARDIAN", owner));
+        box.setGuardian(guardian);
         // ARCLAW luck: the vault ships with no token and no tiers (boosts off) until ARCLAW exists on Arguspad.
         luck = new LuckVault();
         box.setLuck(luck);
@@ -459,14 +469,17 @@ contract Deploy is OddsWriter {
         // Short cards are bought on the desk at reveal from box revenue: 1% slippage, up to 60 buys per reveal (a
         // 20-box reveal has 60 cards), 60 USDC per card (a Vault jackpot card is about 49.5). RESERVE_FLOOR is the
         // small float (no up-front bankroll: payouts come from what players paid, the float grows with sales).
-        box.setJit(desk, 100, 60, 60 ether, vm.envOr("RESERVE_FLOOR", uint256(5 ether)));
+        uint256 floor_ = vm.envOr("RESERVE_FLOOR", uint256(5 ether));
+        box.setJit(desk, 100, 60, 60 ether, floor_);
         // JIT spend per UTC day: 2000 USDC covers a 20-box Vault reveal of all jackpots (20 x 99), so a broken or
-        // hostile desk costs at most that a day. MAX_MISSES expired VRF requests a day pause the contract.
+        // hostile desk costs at most that a day. MAX_MISSES expired VRF openings a day close opens until 00:00 UTC.
         box.setLimits(
             uint96(vm.envOr("JIT_DAILY_CAP", uint256(2000 ether))), uint16(vm.envOr("MAX_MISSES", uint256(10)))
         );
+        uint256 biggest; // price of the biggest machine left on, native wei
         for (uint256 i; i < ms.length; ++i) {
             checkRules(ms[i], p.floorBps);
+            if (_launched(launch, ms[i].id) && ms[i].priceUsdc * 1e18 > biggest) biggest = ms[i].priceUsdc * 1e18;
             box.setMachine(
                 ms[i].id,
                 uint128(ms[i].priceUsdc * 1e18),
@@ -481,6 +494,18 @@ contract Deploy is OddsWriter {
                 console.log("machine switched off at launch:", ms[i].id);
             }
         }
+        _warnFloor(floor_, biggest);
+    }
+
+    /// audit 7a L-02: the float should cover a jackpot of the biggest enabled machine (about 10x its price, see
+    /// docs/TOKENOMICS.md); under that the first big win before revenue builds up becomes an IOU and pauses play.
+    function _warnFloor(uint256 floor_, uint256 biggest) internal pure {
+        if (floor_ >= biggest * 10) return;
+        console.log("################################################################################");
+        console.log("WARNING: RESERVE_FLOOR (wei) is under 10x the biggest enabled machine price:", floor_);
+        console.log("  10x biggest price (wei):", biggest * 10);
+        console.log("  An early jackpot can become an IOU and auto-pause. Fund the float before unpausing.");
+        console.log("################################################################################");
     }
 
     /// Empty `launch` = every machine on.

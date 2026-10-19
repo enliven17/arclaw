@@ -149,8 +149,9 @@ contract Round4Test is Base {
 
     // ------------------------------------------------------------------ retry limit and miss breaker
 
-    /// One re-request per opening, every expired request retried or returned is a miss, maxMisses a day pause.
-    function test_breaker_missesPauseTheContract() public {
+    /// One re-request per opening, every expired opening retried or returned is a miss, maxMisses a day close opens
+    /// until 00:00 UTC (round 5: not a pause; the trip runs the refund clock like one).
+    function test_breaker_missesCloseOpensForTheDay() public {
         box.setLimits(2000 ether, 2);
         _play(alice, M1, 3);
         (uint256 a,) = _open(alice, M1, 1);
@@ -158,19 +159,24 @@ contract Round4Test is Base {
         vm.warp(T0 + 61);
         box.retry(a); // keeper
         assertEq(_misses(), 1);
-        assertFalse(box.paused());
         box.retry(b);
         assertEq(_misses(), 2);
-        assertTrue(box.paused(), "second miss of the day pauses");
-        assertEq(box.pausedSince(), T0 + 61);
+        assertFalse(box.paused(), "no pause");
+        assertEq(box.pausedSince(), T0 + 61, "the trip starts the refund clock");
+        uint256 midnight = (T0 / 1 days + 1) * 1 days;
+        assertEq(box.resumedAt(), midnight, "held until 00:00 UTC");
         uint256 tid = box.currentTable(M1) - 1;
         vm.prank(alice);
-        vm.expectRevert(Pausable.EnforcedPause.selector);
+        vm.expectRevert(Arclaw.VrfMisses.selector);
         box.open(M1, 1, tid);
+        _play(alice, M1, 1); // plays go on
         // each pending opening keeps at most its one retry
         vm.warp(T0 + 122);
         vm.expectRevert(Arclaw.RetryLimit.selector);
         box.retry(a);
+        // 00:00 UTC: open again by itself (the table, priced at T0, is still fresh)
+        vm.warp(midnight);
+        _open(alice, M1, 1);
     }
 
     function test_breaker_returnBoxesCountsAndDayRolls() public {
@@ -192,15 +198,16 @@ contract Round4Test is Base {
         assertEq(_misses(), 1, "counter rolled over");
     }
 
-    /// The dead-coordinator path (7 days, getRequest reverting) is not a withholding: no miss.
-    function test_breaker_lostPathIsNotAMiss() public {
+    /// The dead-coordinator path (7 days, getRequest reverting) counts a miss too (round 5, audit 7b H-01): a dead VRF
+    /// closing opens is intended.
+    function test_breaker_lostPathIsAMiss() public {
         _play(alice, M1, 1);
         (uint256 id,) = _open(alice, M1, 1);
         vm.warp(T0 + 8 days);
         vm.mockCallRevert(address(vrf), abi.encodeWithSelector(ID20Coordinator.getRequest.selector), "dead");
         vm.prank(alice);
         box.returnBoxes(id);
-        assertEq(_misses(), 0);
+        assertEq(_misses(), 1);
     }
 
     /// Every request of an opening carries the same client seed; D20 still gives a new word per requestId.
@@ -219,7 +226,7 @@ contract Round4Test is Base {
     // ------------------------------------------------------------------ top-up reserve
 
     function test_topUp_reservedUntilRevealThenReleased() public {
-        vm.deal(address(box), 1 ether);
+        vm.deal(address(box), 1 ether + FLOAT); // float above the reserve floor
         vrf.setFee(0.15 ether); // subsidy 0.1, top-up 0.05
         _play(alice, M1, 1);
         uint256 tid = box.currentTable(M1) - 1;

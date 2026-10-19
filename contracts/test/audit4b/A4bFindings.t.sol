@@ -221,7 +221,7 @@ contract A4bFindingsTest is Base {
     /// L-03 fixed: the opener's VRF top-up is stored per opening and paid back when the request expires: on
     /// returnBoxes, and on retry (old top-up back, new one paid). The house keeps only its own subsidy back.
     function test_fixed_l03_expiredTopUpGoesBackToTheOpener() public {
-        vm.deal(address(box), 1 ether); // a house float, so the subsidy is not drawn from reserves
+        vm.deal(address(box), 1 ether + FLOAT); // a house float above the reserve floor
         vrf.setFee(0.3 ether); // subsidy 0.1: alice pays 0.2
         _play(alice, M1, 1);
         uint256 tableId = box.currentTable(M1) - 1;

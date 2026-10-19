@@ -121,11 +121,18 @@ contract A3aJitTest is Base {
 
     /// INFO: the VRF subsidy is paid from the contract balance without a free-balance check, so with no float
     /// every open leaves the reserved liabilities short by the subsidy.
-    function test_info_vrfSubsidyComesOutOfReservedFunds() public {
+    /// Fixed in round 5 (audit 7a L-01): with no unreserved balance the opener pays the whole fee, the house subsidy
+    /// never comes out of the box revenue.
+    function test_fixed_vrfSubsidyNeverComesOutOfReservedFunds() public {
         _play(alice, M1, 1);
         vm.deal(address(box), 1 ether); // exactly the box revenue, no float
-        _open(alice, M1, 1);
+        uint256 tid = box.currentTable(M1) - 1;
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(Arclaw.VrfFeeTopUp.selector, 0.02 ether, 0));
+        box.open(M1, 1, tid);
+        vm.prank(alice);
+        box.open{value: 0.02 ether}(M1, 1, tid);
         assertEq(box.pendingReserve(), 1 ether);
-        assertEq(address(box).balance, 1 ether - 0.02 ether);
+        assertEq(address(box).balance, 1 ether, "still fully backed");
     }
 }

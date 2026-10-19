@@ -37,6 +37,7 @@ contract A2GasTest is Test {
         box.setPolicy(IPriceSource(address(ps)), 0);
         box.setMachine(M, uint128(PRICE), 5000, 100_000, 6000, 8500);
         box.setKeeper(address(this), true); // reveals like the house bot
+        vm.deal(address(box), 1 ether); // house float: the VRF subsidy only comes from unreserved funds (round 5)
     }
 
     /// n outcomes, all worth 0.75x, cards on 3 distinct stocks rotating over 8. Last outcome weight `lastW`.

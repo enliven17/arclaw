@@ -104,7 +104,8 @@ contract A3bFindingsTest is Base {
     /// not take more than the free balance. The USDC view is also refused as a card.
     function test_fixed_m01_sweepCannotMoveReservedNative() public {
         vm.etch(USDC_ERC20, address(new ArcUsdcAlias()).code);
-        vm.deal(address(box), 0);
+        box.setJit(address(0), 0, 0, 0, 0); // no reserve floor: free balance is everything above the reserves
+        vm.deal(address(box), 1 ether); // house float for the VRF subsidy
         _play(alice, M1, 4);
         _open(alice, M1, 4);
         vm.deal(address(box), 4 ether); // exactly backed, no float

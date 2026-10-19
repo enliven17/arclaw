@@ -12,7 +12,7 @@ contract PlayTest is Base {
         _play(alice, M2, 2);
         assertEq(box.balanceOf(alice, M1), 3);
         assertEq(box.balanceOf(alice, M2), 2);
-        assertEq(address(box).balance, 3 * P1 + 2 * P2);
+        assertEq(address(box).balance, FLOAT + 3 * P1 + 2 * P2);
         assertEq(box.boxesSold(M1), 3);
         assertEq(box.boxesSold(M2), 2);
     }
@@ -462,7 +462,7 @@ contract RulesTest is Base {
         assertEq(box.pendingReserve(), 0);
         assertEq(box.owed(alice), 0.5 ether);
         assertEq(box.totalOwed(), 0.5 ether);
-        vm.deal(address(box), 4 ether); // treasury top-up
+        vm.deal(address(box), 4 ether + FLOAT); // treasury top-up (the float stays the reserve floor)
         assertEq(box.freeBalance(), 3.5 ether, "IOUs are reserved too");
         vm.expectRevert(abi.encodeWithSelector(Arclaw.Reserved.selector, 3.5 ether));
         box.withdraw(address(this), 3.5 ether + 1);
@@ -582,7 +582,7 @@ contract RulesTest is Base {
     }
 
     function test_spend_allowlistCapSlippage() public {
-        vm.deal(address(box), 100 ether);
+        vm.deal(address(box), 100 ether + FLOAT);
         vm.startPrank(op);
         vm.expectRevert(Arclaw.NotSink.selector);
         box.spend(alice, address(nvda), 1 ether, 1);

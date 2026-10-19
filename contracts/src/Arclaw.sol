@@ -41,13 +41,17 @@ import {ILuck} from "./LuckVault.sol";
 ///         landing in time (the D20 key holder, or an Arc validator censoring the fulfil transaction, which shows the
 ///         word about a block early) and also holds the opening can drop bad words and take best-of-N: per box
 ///         Single 91.1 / 103.4%, Stack 96.6 / 108.2%, Vault 101.0 / 111.4% at N = 2 / 3. The player alone cannot.
-///         Bounds here: an opening gets at most MAX_RETRIES re-requests (best-of-2); every expired request that is
-///         retried or returned counts as a miss, and limits.maxMisses misses in a UTC day pause the contract (no new
-///         opens; each pending opening keeps at most its one retry). returnBoxes + reopen is not a free loop: it
-///         needs an expired request (a miss), the pinned table aged out (up to maxTableAge, 1 day by default), and a
-///         new open, which the breaker stops. Residual: up to about maxMisses re-rolls a day, worth on average about
-///         0.16 x price each (Vault single box, best-of-2 minus 0.85), so with the default 10 about 16 USDC a day on
-///         Vault before the breaker pauses, plus one retry per opening still pending then. Monitor expiries.
+///         Bounds here: an opening gets at most MAX_RETRIES re-requests (best-of-2); an opening whose request expired
+///         counts as one miss, booked on the UTC day it is first retried or returned (every return path, the 7-day
+///         one included), and limits.maxMisses misses in a UTC day close `open` for the rest of that day (the
+///         breaker; it reopens by itself at 00:00 UTC, and a trip runs the refundSealed pause clock as a pause does).
+///         Plays, reveals, retries and returns go on; each pending opening keeps at most its one retry.
+///         returnBoxes + reopen is not a free loop: it needs an expired request (a miss), the pinned table aged out
+///         (up to maxTableAge, 1 day by default), and a new open, which the breaker stops. Residual: up to about
+///         maxMisses re-rolls a day, worth on average about 0.16 x price each (Vault single box, best-of-2 minus
+///         0.85), so with the default 10 about 16 USDC a day on Vault, plus whatever was opened before the misses
+///         were booked (they surface 60 s after the request). The breaker reopens daily on its own: monitor expiries
+///         and have the guardian pause on repeated trips.
 contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomness {
     using SafeERC20 for IERC20;
 
@@ -175,7 +179,8 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
     /// refundSealed clock of the paused state: set by a pause (owner, guardian, the automatic ones), kept after
     /// unpause until the contract has run SERVICE_RESET without a pause. 0 = never paused.
     uint256 public pausedSince;
-    /// Last unpause.
+    /// End of the last stop: the latest of the last unpause, the end of a breaker day (00:00 UTC after the trip) and
+    /// a price-source swap's hold. The pause clock keeps counting until SERVICE_RESET after it.
     uint256 public resumedAt;
     /// May pause (never unpause); a hot keeper-style key is fine.
     address public guardian;
@@ -364,6 +369,7 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
     error RetryLimit();
     error NotGuardian();
     error VrfAlive();
+    error VrfMisses();
 
     // ------------------------------------------------------------------ constructor
 
@@ -417,6 +423,9 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
         if (t == 0) revert NoPrizes();
         if (t - 1 != tableId) revert TableChanged();
         if (offSince[machineId] != 0) revert MachineOff();
+        // the VRF miss breaker: maxMisses misses today close opens until 00:00 UTC
+        Limits memory l = limits;
+        if (l.day == block.timestamp / 1 days && l.misses >= l.maxMisses) revert VrfMisses();
         // tablePrice == machine price: the price is immutable per machine and every table is set at it
         _checkTable(tableId);
 
@@ -525,8 +534,8 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
     ///         anyone else pays the full fee (and loses it if that request expires too).
     ///         Keeper-first: the house bot retries every expired opening at once, so the opener never gets to wait
     ///         and pick between retry and returnBoxes depending on where prices went.
-    ///         At most MAX_RETRIES per opening, and each counts as a VRF miss (the daily breaker, see the contract
-    ///         note): a withheld word can buy at most one fresh draw per opening. Past that, returnBoxes.
+    ///         At most MAX_RETRIES per opening, and the opening's miss is booked here (the daily breaker, see the
+    ///         contract note): a withheld word can buy at most one fresh draw per opening. Past that, returnBoxes.
     function retry(uint256 openingId) external payable nonReentrant returns (uint256 requestId) {
         Opening storage o = openings[openingId];
         if (o.status != OpeningStatus.Pending) revert NotPending();
@@ -538,11 +547,12 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
         delete openingOfRequest[old];
         _refundRandomness(old);
         uint256 back = openingTopUp[openingId];
-        topUpReserve -= back;
 
         uint256 fee;
         address opener = o.opener;
+        // the old top-up stays in topUpReserve until the new request is paid: the subsidy check never counts it
         (requestId, fee) = _request(openingId, msg.sender == opener || keepers[msg.sender] || msg.sender == operator);
+        topUpReserve -= back;
         o.requestId = requestId;
         o.requestedAt = uint64(block.timestamp);
         openingOfRequest[requestId] = openingId + 1;
@@ -555,8 +565,10 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
     ///         the boxes back never depends on a price move the opener has watched. RESCUE_AFTER the request, a
     ///         coordinator whose status read reverts or reports no deadline counts as expired, so a dead VRF never
     ///         strands the boxes (the pinned table aged out long before: maxTableAge <= 1 day).
-    ///         An expired request returned here counts as a VRF miss, like a retry: return + reopen is a re-roll, so
-    ///         it is gated by the table age and the daily breaker, not free.
+    ///         A returned opening counts as a VRF miss on every path (the 7-day one too: a dead VRF closing opens is
+    ///         intended), unless a retry already booked its miss: return + reopen is a re-roll, so it is gated by the
+    ///         table age and the daily breaker, not free. The miss lands on the day of the return, so returns kept
+    ///         back for later still count against the reopen.
     ///         The top-up comes back from topUpReserve; if D20 refunded less (refundBps >= 50%) and the unreserved
     ///         balance cannot make up the rest, the rest is an IOU (owed), never unbacked credit.
     function returnBoxes(uint256 openingId) external nonReentrant {
@@ -567,8 +579,8 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
         if (block.timestamp <= o.requestedAt + RESCUE_AFTER || !_randomnessLost(req)) {
             _requireExpired(req);
             if (block.timestamp <= tablePricedAt[o.tableId] + maxTableAge) revert NotExpired();
-            _miss();
         }
+        if (openingRetries[openingId] == 0) _miss(); // one miss per opening
         o.status = OpeningStatus.Returned;
         delete openingOfRequest[req];
         _refundRandomness(req);
@@ -718,12 +730,7 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
         if (day != spentDay) (spentDay, spentToday) = (day, 0);
         if (spentToday + amount > dailyCap) revert OverDailyCap();
         spentToday += amount;
-
-        uint256 before = IERC20(stock).balanceOf(address(this));
-        IAstockDesk(sink).buy{value: amount}(stock, minSharesOut, address(this));
-        got = IERC20(stock).balanceOf(address(this)) - before;
-        if (got < minSharesOut) revert Slippage(got, minSharesOut);
-        emit Spent(sink, stock, amount, got);
+        got = ArclawPayout.buy(sink, stock, amount, minSharesOut); // code size: the desk call runs in the library
     }
 
     // ================================================================== owner
@@ -785,7 +792,15 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
         emit OperatorSet(op);
     }
 
+    /// @notice Price source and the operator's daily spend cap. Once a table exists, a new source only while paused
+    ///         (audit 7a M-02, 7b L-01: a reverting source halts opens while the table still counts as fresh), and
+    ///         the swap keeps the pause clock counting SEALED_REFUND_AFTER + SERVICE_RESET past it: a daily
+    ///         pause + swap + reprice + swap back + unpause batch can neither stop nor restart refundSealed's clock.
     function setPolicy(IPriceSource source, uint256 cap) external onlyOwner {
+        if (source != priceSource && _tables.length != 0) {
+            _requirePaused();
+            _hold(block.timestamp + SEALED_REFUND_AFTER + SERVICE_RESET);
+        }
         (priceSource, dailyCap) = (source, cap);
         emit PolicySet(address(source), cap);
     }
@@ -844,7 +859,7 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
 
     /// @notice Owner only. Does not clear pausedSince: that clock restarts only on a pause after a day of service.
     function unpause() external onlyOwner {
-        resumedAt = block.timestamp;
+        _hold(block.timestamp);
         _unpause();
     }
 
@@ -857,10 +872,7 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
     /// @notice Move an ERC-20 out (inventory included). Never Arc's USDC view: on Arc it IS the native balance, which
     ///         only withdraw moves. Any other token that drains native still may not take more than the free balance.
     function sweep(address token, address to, uint256 amount) external onlyOwner nonReentrant {
-        if (token == USDC) revert UsdcAlias();
-        (uint256 bal, uint256 free) = (address(this).balance, freeBalance());
-        IERC20(token).safeTransfer(to, amount);
-        if (bal > address(this).balance + free) revert Reserved(free);
+        ArclawPayout.sweep(token, to, amount, freeBalance()); // code size: runs in the library
     }
 
     function renounceOwnership() public pure override {
@@ -883,11 +895,15 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
         emit Fulfilled(idPlusOne - 1, requestId, word);
     }
 
-    /// Pays the fee; with `subsidised` the house covers up to maxVrfSubsidy, otherwise the caller pays it all.
+    /// Pays the fee; with `subsidised` the house covers up to maxVrfSubsidy, otherwise the caller pays it all. The
+    /// subsidy only ever comes from the unreserved balance (audit 7a L-01): when that (without this call's msg.value)
+    /// cannot cover it, the caller pays the full fee, never other players' reserves.
     function _request(uint256 openingId, bool subsidised) internal returns (uint256 requestId, uint256 fee) {
         uint32 gasLimit = callbackGasLimit;
         fee = _quoteRandomness(gasLimit);
-        uint256 required = !subsidised ? fee : fee > maxVrfSubsidy ? fee - maxVrfSubsidy : 0;
+        uint256 sub = !subsidised ? 0 : fee > maxVrfSubsidy ? maxVrfSubsidy : fee;
+        if (_unreserved() < sub + msg.value) sub = 0;
+        uint256 required = fee - sub;
         if (msg.value < required) revert VrfFeeTopUp(required, msg.value);
         // only the opener's own top-up is paid back on expiry (reserved until then); anyone else's retry fee is
         // theirs to lose
@@ -959,10 +975,26 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
         if (l.day != d) (l.day, l.misses, l.jitSpent) = (d, 0, 0);
     }
 
-    /// An expired request was retried or returned: one VRF miss. maxMisses in a day pause the contract.
+    /// An expired opening was retried or returned: one VRF miss, booked today. maxMisses in a day close `open` until
+    /// 00:00 UTC (checked in open), not a pause: a stock of old misses cannot stop the whole contract or need an
+    /// unpause. A trip runs the refundSealed pause clock like a pause ending at 00:00 UTC, so a VRF that keeps
+    /// missing day after day still opens refundSealed SEALED_REFUND_AFTER after the first trip.
     function _miss() internal {
         Limits storage l = _today();
-        if (++l.misses >= l.maxMisses && !paused()) _pause();
+        if (++l.misses >= l.maxMisses) {
+            _clock();
+            _hold((block.timestamp / 1 days + 1) * 1 days);
+        }
+    }
+
+    /// Moves resumedAt (the end of the last stop) forward only.
+    function _hold(uint256 until) internal {
+        if (until > resumedAt) resumedAt = until;
+    }
+
+    /// Starts the pause clock, unless one is still running (within SERVICE_RESET of the end of the last stop).
+    function _clock() internal {
+        if (pausedSince == 0 || block.timestamp >= resumedAt + SERVICE_RESET) pausedSince = block.timestamp;
     }
 
     /// Pays an expired request's top-up (already taken out of topUpReserve) from the balance above the other reserves:
@@ -999,21 +1031,27 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
     /// Every pause (owner, guardian, automatic) runs the sealed-refund clock. A pause within SERVICE_RESET of the
     /// last unpause keeps the running clock: unpause + pause in one batch cannot restart it.
     function _pause() internal override {
-        if (pausedSince == 0 || block.timestamp >= resumedAt + SERVICE_RESET) pausedSince = block.timestamp;
+        _clock();
         super._pause();
     }
 
-    /// Validation and the outcome writes live in ArclawRules (code size); the per-table arrays stay here.
+    /// Validation, the outcome writes and the per-table arrays live in ArclawRules (code size).
     function _setPrizes(uint256 machineId, OutcomeInput[] calldata input) internal {
-        Machine memory mc = machines[machineId];
-        if (mc.price == 0) revert UnknownMachine();
-        if (address(priceSource) == address(0)) revert NoPriceSource();
-        uint256 tableId = _tables.length;
-        (uint256 rtpBps, uint256 w) =
-            ArclawRules.store(_tables, tableRefPrice, _tableTokens, lastPrice, mc, priceSource, input);
-        ArclawRules.record(tableWeight, tableMachine, tablePrice, tablePricedAt, w, machineId, mc.price);
-        currentTable[machineId] = tableId + 1;
-        emit PrizesSet(machineId, tableId, input.length, rtpBps, msg.sender);
+        ArclawRules.store(
+            _tables,
+            tableRefPrice,
+            _tableTokens,
+            lastPrice,
+            machines,
+            currentTable,
+            tableWeight,
+            tableMachine,
+            tablePrice,
+            tablePricedAt,
+            priceSource,
+            machineId,
+            input
+        );
     }
 
     /// Push native USDC with PUSH_GAS; if the receiver rejects it, needs more gas or the pool is short, keep it as
@@ -1051,7 +1089,37 @@ contract Arclaw is ERC1155, Ownable2Step, Pausable, ReentrancyGuard, D20Randomne
 ///         SEALED_REFUND_AFTER 3 days). Also holds setMachine's validation, the open-time live check of a table and
 ///         the machine on/off clocks behind refundSealed.
 library ArclawRules {
+    /// Arclaw._setPrizes: validates and appends a table of `machineId`, records its per-table arrays (total weight,
+    /// machine, price, priced at) and makes it the machine's current table.
     function store(
+        Arclaw.Outcome[][] storage tables,
+        mapping(uint256 => mapping(address => uint256)) storage refPrice,
+        mapping(uint256 => address[]) storage tokens,
+        mapping(address => uint256) storage last,
+        mapping(uint256 => Arclaw.Machine) storage machines,
+        mapping(uint256 => uint256) storage current,
+        uint256[] storage weights,
+        uint256[] storage machineOf,
+        uint256[] storage priceOf,
+        uint256[] storage pricedAt,
+        IPriceSource ps,
+        uint256 machineId,
+        Arclaw.OutcomeInput[] calldata input
+    ) external {
+        Arclaw.Machine memory mc = machines[machineId];
+        if (mc.price == 0) revert Arclaw.UnknownMachine();
+        if (address(ps) == address(0)) revert Arclaw.NoPriceSource();
+        uint256 tableId = tables.length;
+        (uint256 rtpBps, uint256 w) = _store(tables, refPrice, tokens, last, mc, ps, input);
+        weights.push(w);
+        machineOf.push(machineId);
+        priceOf.push(mc.price);
+        pricedAt.push(block.timestamp);
+        current[machineId] = tableId + 1;
+        emit Arclaw.PrizesSet(machineId, tableId, input.length, rtpBps, msg.sender);
+    }
+
+    function _store(
         Arclaw.Outcome[][] storage tables,
         mapping(uint256 => mapping(address => uint256)) storage refPrice,
         mapping(uint256 => address[]) storage tokens,
@@ -1059,7 +1127,7 @@ library ArclawRules {
         Arclaw.Machine memory mc,
         IPriceSource ps,
         Arclaw.OutcomeInput[] calldata input
-    ) external returns (uint256 rtpBps, uint256 w) {
+    ) private returns (uint256 rtpBps, uint256 w) {
         if (input.length == 0) revert Arclaw.NoPrizes();
         if (input.length > 64) revert Arclaw.TooManyOutcomes();
         uint256 tableId = tables.length;
@@ -1110,22 +1178,6 @@ library ArclawRules {
         }
         uint256 lucky = (10_000 - 100) * ev * w + 100 * pairs;
         if (lucky > uint256(mc.rtpMaxBps) * mc.price * w * w) revert Arclaw.RtpOutOfBand(lucky / w / w / mc.price);
-    }
-
-    /// Arclaw._setPrizes: the per-table arrays of a new table.
-    function record(
-        uint256[] storage weights,
-        uint256[] storage machineOf,
-        uint256[] storage priceOf,
-        uint256[] storage pricedAt,
-        uint256 w,
-        uint256 machineId,
-        uint256 price
-    ) external {
-        weights.push(w);
-        machineOf.push(machineId);
-        priceOf.push(price);
-        pricedAt.push(block.timestamp);
     }
 
     /// Arclaw.setMachine: bounds and the only-up rules (see its NatSpec).
@@ -1248,6 +1300,25 @@ library ArclawPayout {
         uint256 reserved;
         IPriceSource ps;
         bool cash; // rescue: every card at its refund value, no token touched
+    }
+
+    /// Arclaw.spend after its sink, free-balance and daily-cap checks: buys `stock` on `sink` with `amount` native,
+    /// delivered to Arclaw, and reverts unless at least `minSharesOut` arrived.
+    function buy(address sink, address stock, uint256 amount, uint256 minSharesOut) external returns (uint256 got) {
+        uint256 before = IERC20(stock).balanceOf(address(this));
+        IAstockDesk(sink).buy{value: amount}(stock, minSharesOut, address(this));
+        got = IERC20(stock).balanceOf(address(this)) - before;
+        if (got < minSharesOut) revert Arclaw.Slippage(got, minSharesOut);
+        emit Arclaw.Spent(sink, stock, amount, got);
+    }
+
+    /// Arclaw.sweep: any ERC-20 but Arc's USDC view (it IS the native balance), and never more native out than `free`
+    /// (a token whose transfer drains native).
+    function sweep(address token, address to, uint256 amount, uint256 free) external {
+        if (token == 0x3600000000000000000000000000000000000000) revert Arclaw.UsdcAlias();
+        uint256 bal = address(this).balance;
+        IERC20(token).safeTransfer(to, amount);
+        if (bal > address(this).balance + free) revert Arclaw.Reserved(free);
     }
 
     /// Returns the cards paid in stock and the USDC refund owed for the others.

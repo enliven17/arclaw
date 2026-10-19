@@ -104,6 +104,8 @@ contract A6aFindings is Base {
         uint256 tableId = box.currentTable(M1) - 1;
         vm.prank(alice);
         (uint256 id,) = box.open{value: 0.05 ether}(M1, 1, tableId);
+        // the house float is gone meanwhile (spent elsewhere): only the box price is left, the top-up is unbacked
+        vm.deal(address(box), 1 ether);
         vm.warp(T0 + 8 days);
         vm.mockCallRevert(address(vrf), abi.encodeWithSelector(MockVRFCoordinator.getRequest.selector), "dead");
         vm.mockCallRevert(address(vrf), abi.encodeWithSelector(MockVRFCoordinator.refundRequest.selector), "dead");

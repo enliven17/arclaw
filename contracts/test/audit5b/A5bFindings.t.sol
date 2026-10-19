@@ -178,6 +178,7 @@ contract A5bFindingsTest is Base {
         _play(alice, M1, 1);
         vm.prank(alice);
         (uint256 aliceId, uint256 aliceReq) = box.open{value: 0.2 ether}(M1, 1, t);
+        vm.deal(address(box), box.pendingReserve() + box.topUpReserve()); // no float left: a refund becomes an IOU
         vrf.fulfill(aliceReq, _wordFor(1)); // the 1.5x pack, all short
         box.reveal(aliceId);
         assertGt(box.totalOwed(), 0, "alice holds an IOU");

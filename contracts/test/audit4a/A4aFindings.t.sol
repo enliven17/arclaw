@@ -207,6 +207,7 @@ contract A4aFindings is Base {
         vrf.fulfill(req, word); // the word, hence the 9x pack, is now public
 
         box.sweep(address(nvda), address(this), nvda.balanceOf(address(box)));
+        box.setJit(address(0), 0, 0, 0, 0); // the owner drops the reserve floor too
         box.withdraw(address(this), box.freeBalance());
         box.reveal(id);
         assertApproxEqAbs(box.owed(alice), 8 ether, 10, "9x win: 1x paid from its own price, 8x an IOU");
