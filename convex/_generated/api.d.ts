@@ -10,6 +10,9 @@
 
 import type * as crons from "../crons.js";
 import type * as indexer from "../indexer.js";
+import type * as keeper from "../keeper.js";
+import type * as keeperRun from "../keeperRun.js";
+import type * as keeperState from "../keeperState.js";
 
 import type {
   ApiFromModules,
@@ -20,6 +23,9 @@ import type {
 declare const fullApi: ApiFromModules<{
   crons: typeof crons;
   indexer: typeof indexer;
+  keeper: typeof keeper;
+  keeperRun: typeof keeperRun;
+  keeperState: typeof keeperState;
 }>;
 
 /**
