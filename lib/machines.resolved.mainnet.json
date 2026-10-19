@@ -1,0 +1,300 @@
+{
+  "chainId": 5042,
+  "arclaw": "0x8e5Ca17b04E41c245e3F3200B28efAF6bE8EcA75",
+  "machines": [
+    {
+      "id": 1,
+      "priceUsdc": "1.00",
+      "priceWei": "1000000000000000000",
+      "tableId": 0,
+      "rtpBps": 7500,
+      "luckyRtpBps": 7516,
+      "minPackBps": 5265,
+      "maxPackBps": 98999,
+      "rules": { "floorBps": 5000, "capBps": 100000, "rtpMinBps": 7400, "rtpMaxBps": 7600 },
+      "totalWeight": 10000,
+      "tiers": [
+        {
+          "name": "Common",
+          "tier": 0,
+          "weight": 5606,
+          "probabilityPct": "56.0600",
+          "valueUsdc": "0.526500",
+          "valueWei": "526500000000000915",
+          "multiplier": "0.5265",
+          "cards": [
+            { "ticker": "SPY.arc", "token": "0x8645EB2EF4D5A7c46212EB7688547442126c7b48", "amount": "273800927289376", "valueUsdc": "0.210600" },
+            { "ticker": "QQQ.arc", "token": "0xC2017F980b6b3f1D149541cF692c1971e53383D4", "amount": "219151059880708", "valueUsdc": "0.157950" },
+            { "ticker": "AAPL.arc", "token": "0xdC79A6e977Eb1668B6BFF7aC788053305ffF13C9", "amount": "461525153538710", "valueUsdc": "0.157950" }
+          ]
+        },
+        {
+          "name": "Uncommon",
+          "tier": 1,
+          "weight": 2345,
+          "probabilityPct": "23.4500",
+          "valueUsdc": "0.800000",
+          "valueWei": "800000000000000856",
+          "multiplier": "0.8000",
+          "cards": [
+            { "ticker": "AMZN.arc", "token": "0x468B1D1f51c8EC186172C2386a0BED6Bcf99aDD8", "amount": "1216072831574742", "valueUsdc": "0.320000" },
+            { "ticker": "GOOGL.arc", "token": "0x5606e025C05Dd41EA485b19490632E09F3ec03B8", "amount": "696542638059468", "valueUsdc": "0.240000" },
+            { "ticker": "SPY.arc", "token": "0x8645EB2EF4D5A7c46212EB7688547442126c7b48", "amount": "312023848762821", "valueUsdc": "0.240000" }
+          ]
+        },
+        {
+          "name": "Rare",
+          "tier": 2,
+          "weight": 1704,
+          "probabilityPct": "17.0400",
+          "valueUsdc": "1.000000",
+          "valueWei": "1000000000000001174",
+          "multiplier": "1.0000",
+          "cards": [
+            { "ticker": "AAPL.arc", "token": "0xdC79A6e977Eb1668B6BFF7aC788053305ffF13C9", "amount": "1168787979838455", "valueUsdc": "0.400000" },
+            { "ticker": "META.arc", "token": "0xEb88c032788bc9aDc4671C10C19b95F9B93A2E37", "amount": "425499998772433", "valueUsdc": "0.300000" },
+            { "ticker": "QQQ.arc", "token": "0xC2017F980b6b3f1D149541cF692c1971e53383D4", "amount": "416241329308088", "valueUsdc": "0.300000" }
+          ]
+        },
+        {
+          "name": "Epic",
+          "tier": 3,
+          "weight": 250,
+          "probabilityPct": "2.5000",
+          "valueUsdc": "2.000000",
+          "valueWei": "2000000000000000225",
+          "multiplier": "2.0000",
+          "cards": [
+            { "ticker": "TSLA.arc", "token": "0x349dcB3a576813FFbAB4B88547A0D694eb20EB18", "amount": "2707151782274221", "valueUsdc": "1.000000" },
+            { "ticker": "AMZN.arc", "token": "0x468B1D1f51c8EC186172C2386a0BED6Bcf99aDD8", "amount": "1900113799335534", "valueUsdc": "0.500000" },
+            { "ticker": "GOOGL.arc", "token": "0x5606e025C05Dd41EA485b19490632E09F3ec03B8", "amount": "1451130495957223", "valueUsdc": "0.500000" }
+          ]
+        },
+        {
+          "name": "Legendary",
+          "tier": 4,
+          "weight": 80,
+          "probabilityPct": "0.8000",
+          "valueUsdc": "4.000000",
+          "valueWei": "4000000000000000879",
+          "multiplier": "4.0000",
+          "cards": [
+            { "ticker": "META.arc", "token": "0xEb88c032788bc9aDc4671C10C19b95F9B93A2E37", "amount": "2836666658482884", "valueUsdc": "2.000000" },
+            { "ticker": "NVDA.arc", "token": "0x0A2dd7160De0c452ED4642d498162550Fe2165f2", "amount": "5499782162794836", "valueUsdc": "1.200000" },
+            { "ticker": "AAPL.arc", "token": "0xdC79A6e977Eb1668B6BFF7aC788053305ffF13C9", "amount": "2337575959676909", "valueUsdc": "0.800000" }
+          ]
+        },
+        {
+          "name": "Jackpot",
+          "tier": 5,
+          "weight": 15,
+          "probabilityPct": "0.1500",
+          "valueUsdc": "9.899999",
+          "valueWei": "9899999999999999436",
+          "multiplier": "9.8999",
+          "cards": [
+            { "ticker": "NVDA.arc", "token": "0x0A2dd7160De0c452ED4642d498162550Fe2165f2", "amount": "22686601421528695", "valueUsdc": "4.949999" },
+            { "ticker": "TSLA.arc", "token": "0x349dcB3a576813FFbAB4B88547A0D694eb20EB18", "amount": "8040240793354436", "valueUsdc": "2.969999" },
+            { "ticker": "META.arc", "token": "0xEb88c032788bc9aDc4671C10C19b95F9B93A2E37", "amount": "2808299991898054", "valueUsdc": "1.979999" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "priceUsdc": "5.00",
+      "priceWei": "5000000000000000000",
+      "tableId": 1,
+      "rtpBps": 8000,
+      "luckyRtpBps": 8016,
+      "minPackBps": 5265,
+      "maxPackBps": 98999,
+      "rules": { "floorBps": 5000, "capBps": 100000, "rtpMinBps": 7900, "rtpMaxBps": 8100 },
+      "totalWeight": 10000,
+      "tiers": [
+        {
+          "name": "Common",
+          "tier": 0,
+          "weight": 4199,
+          "probabilityPct": "41.9900",
+          "valueUsdc": "2.632500",
+          "valueWei": "2632500000000000823",
+          "multiplier": "0.5265",
+          "cards": [
+            { "ticker": "SPY.arc", "token": "0x8645EB2EF4D5A7c46212EB7688547442126c7b48", "amount": "1369004636446876", "valueUsdc": "1.053000" },
+            { "ticker": "QQQ.arc", "token": "0xC2017F980b6b3f1D149541cF692c1971e53383D4", "amount": "1095755299403540", "valueUsdc": "0.789750" },
+            { "ticker": "AAPL.arc", "token": "0xdC79A6e977Eb1668B6BFF7aC788053305ffF13C9", "amount": "2307625767693548", "valueUsdc": "0.789750" }
+          ]
+        },
+        {
+          "name": "Uncommon",
+          "tier": 1,
+          "weight": 3175,
+          "probabilityPct": "31.7500",
+          "valueUsdc": "4.000000",
+          "valueWei": "4000000000000000578",
+          "multiplier": "0.8000",
+          "cards": [
+            { "ticker": "AMZN.arc", "token": "0x468B1D1f51c8EC186172C2386a0BED6Bcf99aDD8", "amount": "6080364157873707", "valueUsdc": "1.600000" },
+            { "ticker": "GOOGL.arc", "token": "0x5606e025C05Dd41EA485b19490632E09F3ec03B8", "amount": "3482713190297336", "valueUsdc": "1.200000" },
+            { "ticker": "SPY.arc", "token": "0x8645EB2EF4D5A7c46212EB7688547442126c7b48", "amount": "1560119243814103", "valueUsdc": "1.200000" }
+          ]
+        },
+        {
+          "name": "Rare",
+          "tier": 2,
+          "weight": 2281,
+          "probabilityPct": "22.8100",
+          "valueUsdc": "5.000000",
+          "valueWei": "5000000000000000933",
+          "multiplier": "1.0000",
+          "cards": [
+            { "ticker": "AAPL.arc", "token": "0xdC79A6e977Eb1668B6BFF7aC788053305ffF13C9", "amount": "5843939899192271", "valueUsdc": "2.000000" },
+            { "ticker": "META.arc", "token": "0xEb88c032788bc9aDc4671C10C19b95F9B93A2E37", "amount": "2127499993862163", "valueUsdc": "1.500000" },
+            { "ticker": "QQQ.arc", "token": "0xC2017F980b6b3f1D149541cF692c1971e53383D4", "amount": "2081206646540437", "valueUsdc": "1.500000" }
+          ]
+        },
+        {
+          "name": "Epic",
+          "tier": 3,
+          "weight": 250,
+          "probabilityPct": "2.5000",
+          "valueUsdc": "10.000000",
+          "valueWei": "10000000000000000343",
+          "multiplier": "2.0000",
+          "cards": [
+            { "ticker": "TSLA.arc", "token": "0x349dcB3a576813FFbAB4B88547A0D694eb20EB18", "amount": "13535758911371105", "valueUsdc": "5.000000" },
+            { "ticker": "AMZN.arc", "token": "0x468B1D1f51c8EC186172C2386a0BED6Bcf99aDD8", "amount": "9500568996677667", "valueUsdc": "2.500000" },
+            { "ticker": "GOOGL.arc", "token": "0x5606e025C05Dd41EA485b19490632E09F3ec03B8", "amount": "7255652479786115", "valueUsdc": "2.500000" }
+          ]
+        },
+        {
+          "name": "Legendary",
+          "tier": 4,
+          "weight": 80,
+          "probabilityPct": "0.8000",
+          "valueUsdc": "20.000000",
+          "valueWei": "20000000000000000260",
+          "multiplier": "4.0000",
+          "cards": [
+            { "ticker": "META.arc", "token": "0xEb88c032788bc9aDc4671C10C19b95F9B93A2E37", "amount": "14183333292414417", "valueUsdc": "10.000000" },
+            { "ticker": "NVDA.arc", "token": "0x0A2dd7160De0c452ED4642d498162550Fe2165f2", "amount": "27498910813974177", "valueUsdc": "6.000000" },
+            { "ticker": "AAPL.arc", "token": "0xdC79A6e977Eb1668B6BFF7aC788053305ffF13C9", "amount": "11687879798384541", "valueUsdc": "4.000000" }
+          ]
+        },
+        {
+          "name": "Jackpot",
+          "tier": 5,
+          "weight": 15,
+          "probabilityPct": "0.1500",
+          "valueUsdc": "49.499999",
+          "valueWei": "49499999999999999251",
+          "multiplier": "9.8999",
+          "cards": [
+            { "ticker": "NVDA.arc", "token": "0x0A2dd7160De0c452ED4642d498162550Fe2165f2", "amount": "113433007107643478", "valueUsdc": "24.749999" },
+            { "ticker": "TSLA.arc", "token": "0x349dcB3a576813FFbAB4B88547A0D694eb20EB18", "amount": "40201203966772180", "valueUsdc": "14.849999" },
+            { "ticker": "META.arc", "token": "0xEb88c032788bc9aDc4671C10C19b95F9B93A2E37", "amount": "14041499959490272", "valueUsdc": "9.899999" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "priceUsdc": "10.00",
+      "priceWei": "10000000000000000000",
+      "tableId": 2,
+      "rtpBps": 8500,
+      "luckyRtpBps": 8516,
+      "minPackBps": 5265,
+      "maxPackBps": 98999,
+      "rules": { "floorBps": 5000, "capBps": 100000, "rtpMinBps": 8400, "rtpMaxBps": 8600 },
+      "totalWeight": 10000,
+      "tiers": [
+        {
+          "name": "Common",
+          "tier": 0,
+          "weight": 2791,
+          "probabilityPct": "27.9100",
+          "valueUsdc": "5.265000",
+          "valueWei": "5265000000000000877",
+          "multiplier": "0.5265",
+          "cards": [
+            { "ticker": "SPY.arc", "token": "0x8645EB2EF4D5A7c46212EB7688547442126c7b48", "amount": "2738009272893751", "valueUsdc": "2.106000" },
+            { "ticker": "QQQ.arc", "token": "0xC2017F980b6b3f1D149541cF692c1971e53383D4", "amount": "2191510598807080", "valueUsdc": "1.579500" },
+            { "ticker": "AAPL.arc", "token": "0xdC79A6e977Eb1668B6BFF7aC788053305ffF13C9", "amount": "4615251535387096", "valueUsdc": "1.579500" }
+          ]
+        },
+        {
+          "name": "Uncommon",
+          "tier": 1,
+          "weight": 4008,
+          "probabilityPct": "40.0800",
+          "valueUsdc": "8.000000",
+          "valueWei": "8000000000000000550",
+          "multiplier": "0.8000",
+          "cards": [
+            { "ticker": "AMZN.arc", "token": "0x468B1D1f51c8EC186172C2386a0BED6Bcf99aDD8", "amount": "12160728315747413", "valueUsdc": "3.200000" },
+            { "ticker": "GOOGL.arc", "token": "0x5606e025C05Dd41EA485b19490632E09F3ec03B8", "amount": "6965426380594671", "valueUsdc": "2.400000" },
+            { "ticker": "SPY.arc", "token": "0x8645EB2EF4D5A7c46212EB7688547442126c7b48", "amount": "3120238487628206", "valueUsdc": "2.400000" }
+          ]
+        },
+        {
+          "name": "Rare",
+          "tier": 2,
+          "weight": 2856,
+          "probabilityPct": "28.5600",
+          "valueUsdc": "10.000000",
+          "valueWei": "10000000000000000805",
+          "multiplier": "1.0000",
+          "cards": [
+            { "ticker": "AAPL.arc", "token": "0xdC79A6e977Eb1668B6BFF7aC788053305ffF13C9", "amount": "11687879798384541", "valueUsdc": "4.000000" },
+            { "ticker": "META.arc", "token": "0xEb88c032788bc9aDc4671C10C19b95F9B93A2E37", "amount": "4254999987724326", "valueUsdc": "3.000000" },
+            { "ticker": "QQQ.arc", "token": "0xC2017F980b6b3f1D149541cF692c1971e53383D4", "amount": "4162413293080873", "valueUsdc": "3.000000" }
+          ]
+        },
+        {
+          "name": "Epic",
+          "tier": 3,
+          "weight": 250,
+          "probabilityPct": "2.5000",
+          "valueUsdc": "20.000000",
+          "valueWei": "20000000000000000424",
+          "multiplier": "2.0000",
+          "cards": [
+            { "ticker": "TSLA.arc", "token": "0x349dcB3a576813FFbAB4B88547A0D694eb20EB18", "amount": "27071517822742210", "valueUsdc": "10.000000" },
+            { "ticker": "AMZN.arc", "token": "0x468B1D1f51c8EC186172C2386a0BED6Bcf99aDD8", "amount": "19001137993355333", "valueUsdc": "5.000000" },
+            { "ticker": "GOOGL.arc", "token": "0x5606e025C05Dd41EA485b19490632E09F3ec03B8", "amount": "14511304959572230", "valueUsdc": "5.000000" }
+          ]
+        },
+        {
+          "name": "Legendary",
+          "tier": 4,
+          "weight": 80,
+          "probabilityPct": "0.8000",
+          "valueUsdc": "40.000000",
+          "valueWei": "40000000000000000522",
+          "multiplier": "4.0000",
+          "cards": [
+            { "ticker": "META.arc", "token": "0xEb88c032788bc9aDc4671C10C19b95F9B93A2E37", "amount": "28366666584828834", "valueUsdc": "20.000000" },
+            { "ticker": "NVDA.arc", "token": "0x0A2dd7160De0c452ED4642d498162550Fe2165f2", "amount": "54997821627948354", "valueUsdc": "12.000000" },
+            { "ticker": "AAPL.arc", "token": "0xdC79A6e977Eb1668B6BFF7aC788053305ffF13C9", "amount": "23375759596769082", "valueUsdc": "8.000000" }
+          ]
+        },
+        {
+          "name": "Jackpot",
+          "tier": 5,
+          "weight": 15,
+          "probabilityPct": "0.1500",
+          "valueUsdc": "98.999999",
+          "valueWei": "98999999999999999578",
+          "multiplier": "9.8999",
+          "cards": [
+            { "ticker": "NVDA.arc", "token": "0x0A2dd7160De0c452ED4642d498162550Fe2165f2", "amount": "226866014215286956", "valueUsdc": "49.499999" },
+            { "ticker": "TSLA.arc", "token": "0x349dcB3a576813FFbAB4B88547A0D694eb20EB18", "amount": "80402407933544361", "valueUsdc": "29.699999" },
+            { "ticker": "META.arc", "token": "0xEb88c032788bc9aDc4671C10C19b95F9B93A2E37", "amount": "28082999918980545", "valueUsdc": "19.799999" }
+          ]
+        }
+      ]
+    }
+  ]
+}
