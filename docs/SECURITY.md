@@ -101,3 +101,18 @@ Safe delay module (a timelock on owner transactions) is the planned next step, a
 ## Audit 9 note
 
 Round 6 was audited twice more with no Medium or higher findings. An IOU that loses its backing again (a VRF top-up payback) can leave a funded IOU short by up to one VRF fee. The deploy script now sets `minBuffer` to 1 wei, so the contract pauses whenever nothing is left unreserved, and the guardian may no longer be the deployer. Fund `totalOwed` plus a little before every unpause.
+
+## Audit 10 (pre-mainnet)
+
+Two independent contract reviews (10a, 10b, tests in `contracts/test/audit10a`, `audit10b`) and a web pentest
+(`docs/PENTEST.md`). 10a found nothing above Low; its two Lows are trust items outside our code paths:
+
+- **10a L-01, the VRF can be upgraded to pick words.** The D20 coordinator on mainnet (`0xd20da057...0571`) is a UUPS
+  proxy owned by a 2-of-2 Safe. Its owner can swap in logic that delivers chosen words, and Arclaw accepts any word
+  from the coordinator: a colluding player would pull a jackpot every time. Withholding was already accepted; choosing
+  was not. Mitigation: the keeper reads the proxy's implementation slot every tick and raises `vrf-upgraded`
+  (critical) the moment it changes (`KEEPER_VRF_IMPLEMENTATION`, default the implementation audited here); the
+  guardian pauses, which stops new opens and starts the refund clock. Ask D20DAO for an upgrade timelock.
+- **10a L-02, a stolen operator key can stall opens without a refund clock.** Repricing ahead of every open makes it
+  revert `TableChanged`, and each reprice keeps the table fresh, so neither the stale-table nor the pause clock runs.
+  No funds move. Runbook: the guardian pauses first (the pause clock starts), then the owner Safe calls `setOperator`.

@@ -18,7 +18,13 @@ node scripts/mainnet/deploy.mjs deploy --yes     # Safes, contracts (paused, Sin
 node scripts/mainnet/deploy.mjs status           # paused, balance, machines
 ```
 
-`deploy` writes `lib/deployments/arc-mainnet.json` and `lib/machines.resolved.mainnet.json`. Commit both, then:
+`deploy` writes `lib/deployments/arc-mainnet.json` and `lib/machines.resolved.mainnet.json`. Commit both. Publish the sources on the explorer so anyone can match the bytecode to this repo (a separate step, so an explorer outage cannot stop a deploy half way; safe to repeat):
+
+```bash
+cd contracts && forge script script/Deploy.s.sol --tc Deploy --rpc-url https://rpc.mainnet.arc.io --resume --verify --verifier blockscout --verifier-url https://explorer.arc.io/api/
+```
+
+Then:
 
 1. Convex (prod): `npx convex deploy`, then `npx convex env set` for `KEEPER_PRIVATE_KEY` (the keeper wallet from the bundle), `KEEPER_NETWORK=mainnet`, `KEEPER_DEPLOYMENT_JSON` only if the JSON is not yet in the build, `ALERT_TELEGRAM_CHAT_ID` and `TELEGRAM_BOT_TOKEN` when you have them.
 2. Vercel (prod): `NEXT_PUBLIC_ARC_NETWORK=mainnet`, `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID`, `SHARE_SECRET`, `APP_ORIGIN`; then `vercel deploy --prod` from main. Check the WalletConnect allowed domains include the production domain.

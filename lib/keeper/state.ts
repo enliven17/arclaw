@@ -7,7 +7,7 @@
  * Openings are found with a cursor kept in KeeperState.scan (new ids since the last tick, plus the ones still open),
  * so a tick never rereads the whole history.
  */
-import type { Address, PublicClient } from "viem";
+import { getAddress, type Address, type PublicClient } from "viem";
 import { STATUS, decimalsOf, priceOf, readGlobals, readMachine, readOpening, readRequest, type Globals, type MachineState, type Opening, type PriceRead, type RequestState } from "./arclaw";
 import { tokensOf, type KeeperConfig } from "./config";
 import { usMarket, type MarketClock } from "./market";
@@ -31,11 +31,19 @@ export async function mapLimit<T, R>(items: readonly T[], limit: number, fn: (x:
 }
 
 export type OpenOpening = Opening & { req: RequestState };
-export type OpeningsView = { g: Globals; market: MarketClock; keeperBalance: bigint; openings: OpenOpening[] };
+export type OpeningsView = { g: Globals; market: MarketClock; keeperBalance: bigint; openings: OpenOpening[]; vrfImpl: Address | null };
+
+/** The EIP-1967 implementation slot of a proxy, or null when it cannot be read. */
+const IMPL_SLOT = "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc";
+async function implementationOf(c: PublicClient, proxy: Address): Promise<Address | null> {
+  const raw = await c.getStorageAt({ address: proxy, slot: IMPL_SLOT }).catch(() => undefined);
+  return raw && raw.length === 66 ? getAddress(`0x${raw.slice(26)}`) : null;
+}
 
 export async function readOpenings(c: PublicClient, cfg: KeeperConfig, me: Address, st: KeeperState): Promise<OpeningsView> {
   const d = cfg.deployment;
   const [g, keeperBalance] = await Promise.all([readGlobals(c, d, me), c.getBalance({ address: me })]);
+  const vrfImpl = cfg.vrfImplementation ? await implementationOf(c, g.vrfCoordinator) : null;
   const next = BigInt(st.scan.next);
   const end = g.nextOpeningId < next + SCAN_PER_TICK ? g.nextOpeningId : next + SCAN_PER_TICK;
   const ids = [...new Set([...st.scan.open.map(BigInt), ...Array.from({ length: Number(end > next ? end - next : 0n) }, (_, k) => next + BigInt(k))].map(String))].map(BigInt);
@@ -46,7 +54,7 @@ export async function readOpenings(c: PublicClient, cfg: KeeperConfig, me: Addre
     req: o.status === STATUS.Pending ? await readRequest(c, g.vrfCoordinator, o.requestId, g.now) : { fulfilled: true, refunded: false, deadline: 0, expired: false, readable: true },
   }));
   st.scan = { next: String(end > next ? end : next), open: open.map((o) => String(o.id)) };
-  return { g, market: usMarket(g.now, cfg.market), keeperBalance, openings: withReq.sort((a, b) => (a.id < b.id ? -1 : 1)) };
+  return { g, market: usMarket(g.now, cfg.market), keeperBalance, openings: withReq.sort((a, b) => (a.id < b.id ? -1 : 1)), vrfImpl };
 }
 
 export type MachineView = MachineState & {

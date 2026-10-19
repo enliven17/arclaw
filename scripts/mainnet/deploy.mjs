@@ -2,7 +2,7 @@
  * The mainnet deployment, step by step, driven by the key bundle from keys.mjs.
  *
  *   node scripts/mainnet/deploy.mjs check   [--keys <file>] [--rpc <url>]
- *   node scripts/mainnet/deploy.mjs deploy  --yes [--keys <file>] [--rpc <url>] [--float <usdc>]
+ *   node scripts/mainnet/deploy.mjs deploy  --yes [--keys <file>] [--rpc <url>] [--reserve-floor <usdc>]
  *   node scripts/mainnet/deploy.mjs status  [--keys <file>] [--rpc <url>]
  *   node scripts/mainnet/deploy.mjs unpause --yes
  *   node scripts/mainnet/deploy.mjs enable  --machine 2 --yes      (after the keeper has repriced it)
@@ -98,7 +98,11 @@ async function deploy() {
 
   console.log("2/6 Contracts (forge script, paused, Single only)");
   const url = rpc ?? "https://rpc.mainnet.arc.io";
-  const floor = parseEther(String(get("--float-floor") ?? 5));
+  // reserveFloor never above the float this deploy will actually send (audit 10a I-01): 5 USDC, or less on a tight budget
+  const planned = fundPlan(bal > parseEther("1.2") ? bal - parseEther("1.2") : 0n).float;
+  const asked = get("--reserve-floor");
+  const floor = asked !== undefined ? parseEther(String(asked)) : planned < parseEther("5") ? planned : parseEther("5");
+  if (floor > planned) console.log(`   warning: reserve floor ${usdc(floor)} is above the planned float ${usdc(planned)}; the keeper will report float-low until it is topped up`);
   const run = spawnSync(
     "forge",
     ["script", "script/Deploy.s.sol", "--tc", "Deploy", "--rpc-url", url, "--broadcast", "--with-gas-price", "30gwei", "--priority-gas-price", "1gwei", "--private-key", keys.deployer.key],

@@ -53,6 +53,9 @@ export function assessHealth(x: HealthInput): HealthReport {
   if (g.missCapped) add("vrf-misses", "critical", `${misses}/${maxMisses} VRF misses today: opens closed (VrfMisses) until 00:00 UTC, in ${ago(Math.max(0, (g.opensClosedUntil ?? g.now) - g.now))}; plays, reveals, retries and returns go on. Repeated trips or a dead VRF: guardian pause or pauseIfVrfDown`);
   else if (maxMisses > 0 && misses * 2 >= maxMisses) add("vrf-misses", "warn", `${misses}/${maxMisses} VRF misses today: at ${maxMisses} opens close until 00:00 UTC`);
   if (jitCap > 0n && jitSpent * 100n >= jitCap * 80n) add("jit-cap", "warn", `just-in-time buys spent ${usdc(jitSpent)} of the ${usdc(jitCap)} USDC daily cap: past it short cards are refunded, not bought`);
+  if (cfg.vrfImplementation && open.vrfImpl && open.vrfImpl !== cfg.vrfImplementation) {
+    add("vrf-upgraded", "critical", `the VRF coordinator's implementation changed to ${open.vrfImpl} (expected ${cfg.vrfImplementation}): new logic could pick the random words. Guardian: pause now, then review the new implementation before unpausing`);
+  }
   if (g.guardian.toLowerCase() === x.me.toLowerCase()) add("guardian-is-keeper", "warn", "the pause-only guardian is the keeper hot key; give it to a separate key");
   // a funded IOU no longer pauses anything, so an unfunded one is only visible here
   if (g.totalOwed > 0n && g.balance < g.liabilities) add("owed", "warn", `${usdc(g.totalOwed)} USDC of IOUs outstanding and unfunded: balance ${usdc(g.balance)} is under reserves plus IOUs ${usdc(g.liabilities)}; fund ${usdc(g.liabilities - g.balance)} USDC`);

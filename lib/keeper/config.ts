@@ -6,6 +6,8 @@
  *   KEEPER_RPC_URL            comma list of RPCs (default: the network's public RPC; use a private one in production)
  *   KEEPER_DEPLOYMENT_JSON    inline deployment JSON (lib/deployments shape); needed on mainnet until
  *                             lib/arc/config.ts knows the mainnet addresses
+ *   KEEPER_VRF_IMPLEMENTATION the D20 coordinator's expected implementation (EIP-1967 slot); a change is a critical
+ *                             alert (default on mainnet: the one audited in round 10; "off" to skip)
  *   KEEPER_PRICE_CHECK        astock (default on mainnet) | off (default on testnet) | https://... (same JSON shape)
  *   KEEPER_DRY_RUN            1: simulate everything, sign nothing
  *   KEEPER_MIN_GAS_USDC       keeper gas balance under which health warns (default 1); critical under a fifth of it
@@ -67,6 +69,8 @@ export type KeeperConfig = {
   market: "auto" | "open" | "closed";
   thresholds: Thresholds;
   telegram: { chatId: string } | null;
+  /** The VRF coordinator is an upgradeable proxy whose owner could swap in logic that picks words (audit 10a L-01). */
+  vrfImplementation: Address | null;
 };
 
 type DeploymentFile = {
@@ -161,7 +165,17 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
       maxRetriesPerTick: 10,
     },
     telegram: env.ALERT_TELEGRAM_CHAT_ID && env.TELEGRAM_BOT_TOKEN ? { chatId: env.ALERT_TELEGRAM_CHAT_ID } : null,
+    vrfImplementation: vrfImplOf(env.KEEPER_VRF_IMPLEMENTATION, network),
   };
+}
+
+/** D20 mainnet coordinator 0xd20da057...0571: implementation as of audit round 10 (2026-10-19). */
+const D20_MAINNET_IMPL = "0xd20da000125643b4db5a6a36a3b853c17745df44";
+function vrfImplOf(raw: string | undefined, network: string): Address | null {
+  const v = raw?.trim();
+  if (v === "off") return null;
+  if (v) return getAddress(v);
+  return network === "mainnet" ? getAddress(D20_MAINNET_IMPL) : null;
 }
 
 /** Token addresses in SYMBOLS order (Deploy.s.sol's tokens array). */
