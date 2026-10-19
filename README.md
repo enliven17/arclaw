@@ -11,7 +11,7 @@ Live: https://arclaw.app (testnet until the mainnet launch). X: https://x.com/ar
 | | |
 |---|---|
 | Web | Next 16 (App Router), React 19, Tailwind v4, GSAP and Lenis, Vercel (with Web Analytics) |
-| Wallets | Privy (email, Google, X, external wallets) on top of viem |
+| Wallets | ConnectKit on wagmi (MetaMask, Coinbase, WalletConnect) |
 | Backend | Convex (leaderboard indexer, keeper cron), Telegram bot (`app/api/telegram`) |
 | Contracts | Solidity 0.8.28, Foundry, in `contracts/` |
 | Randomness | D20DAO VRF on Arc (`contracts/src/vrf`) |
@@ -60,7 +60,7 @@ See [`.env.example`](.env.example). The ones that matter:
 | Variable | Where | What |
 |---|---|---|
 | `NEXT_PUBLIC_ARC_NETWORK` | Vercel | `testnet` (default) or `mainnet` |
-| `NEXT_PUBLIC_PRIVY_APP_ID` | Vercel | Privy app; without it Connect says wallets are off |
+| `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` | Vercel | WalletConnect project; without it only browser wallets show |
 | `NEXT_PUBLIC_CONVEX_URL` | Vercel | the Convex deployment for the leaderboard |
 | `APP_ORIGIN` | Vercel | public origin for metadata and share cards |
 | `SHARE_SECRET` | Vercel | signs shared-pull links (`openssl rand -hex 32`), server only |

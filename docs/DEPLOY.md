@@ -21,7 +21,7 @@ node scripts/mainnet/deploy.mjs status           # paused, balance, machines
 `deploy` writes `lib/deployments/arc-mainnet.json` and `lib/machines.resolved.mainnet.json`. Commit both, then:
 
 1. Convex (prod): `npx convex deploy`, then `npx convex env set` for `KEEPER_PRIVATE_KEY` (the keeper wallet from the bundle), `KEEPER_NETWORK=mainnet`, `KEEPER_DEPLOYMENT_JSON` only if the JSON is not yet in the build, `ALERT_TELEGRAM_CHAT_ID` and `TELEGRAM_BOT_TOKEN` when you have them.
-2. Vercel (prod): `NEXT_PUBLIC_ARC_NETWORK=mainnet`, `NEXT_PUBLIC_PRIVY_APP_ID`, `SHARE_SECRET`, `APP_ORIGIN`; then `vercel deploy --prod` from main. Check the Privy allowed origins include the production domain.
+2. Vercel (prod): `NEXT_PUBLIC_ARC_NETWORK=mainnet`, `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID`, `SHARE_SECRET`, `APP_ORIGIN`; then `vercel deploy --prod` from main. Check the WalletConnect allowed domains include the production domain.
 3. Check `pnpm keeper status` (or the Convex `keeper:status` query) shows the Single table priced and healthy.
 4. Play once from your own wallet while the contract is still paused to confirm the UI shows "Paused for a moment", then:
 

@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * App-wide client providers: smooth scroll, the cursor, the splash and sound. Wallets (Privy) mount in the app
+ * App-wide client providers: smooth scroll, the cursor, the splash and sound. Wallets (ConnectKit) mount in the app
  * shell only (components/app/AppShell.tsx), so the marketing pages never load them.
  */
 import { useEffect, type ReactNode } from "react";

@@ -2,21 +2,21 @@ import type { NextConfig } from "next";
 
 /**
  * Content Security Policy. Scripts are limited to our own bundle plus the few third parties the app loads (Vercel
- * analytics, Cloudflare Turnstile for Privy's bot check); inline scripts stay allowed because Next's own bootstrap and the
+ * analytics); inline scripts stay allowed because Next's own bootstrap and the
  * splash decider in the head are inline and the pages are static (no per-request nonce). That still stops a script from
  * another origin, and the rest is locked down: nobody can frame the site (clickjacking), no plugins, no base-tag or
  * form hijacking. Network and image sources stay open to https because wallets, RPCs, Convex and the stock logos live
- * on many hosts. Privy's login runs in an iframe on auth.privy.io.
+ * on many hosts.
  */
 const csp = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' https://va.vercel-scripts.com https://challenges.cloudflare.com",
+  "script-src 'self' 'unsafe-inline' https://va.vercel-scripts.com",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https:",
   "font-src 'self' data:",
   "media-src 'self' blob:",
   "connect-src 'self' https: wss:",
-  "frame-src https://auth.privy.io https://*.privy.io https://verify.walletconnect.com https://verify.walletconnect.org https://challenges.cloudflare.com",
+  "frame-src https://verify.walletconnect.com https://verify.walletconnect.org",
   "worker-src 'self' blob:",
   "manifest-src 'self'",
   "object-src 'none'",

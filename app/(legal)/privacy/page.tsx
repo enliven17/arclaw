@@ -24,10 +24,6 @@ export default function Privacy() {
           show your collection and the leaderboard.
         </li>
         <li>
-          <strong>Login details.</strong> If you log in with email, Google or X, our wallet provider Privy receives that
-          email address or account so it can send you a code and keep your wallet tied to you.
-        </li>
-        <li>
           <strong>Gift details.</strong> If you send a gift, the note you write and the machine and number of boxes are
           used to draw the gift card and its link preview. A claim link carries its secret after the # in the address,
           which browsers never send to our servers.
@@ -48,8 +44,8 @@ export default function Privacy() {
 
       <h2>What we do not collect</h2>
       <p>
-        We never ask for or see your private keys or seed phrase. Wallets made at login are created and secured by
-        Privy, and we only learn the public address. We do not use advertising trackers and we do not sell or rent
+        We never ask for or see your private keys or seed phrase. Your wallet stays yours; we only learn its public
+        address. We do not use advertising trackers and we do not sell or rent
         personal data.
       </p>
 
@@ -62,7 +58,7 @@ export default function Privacy() {
       <h2>Who else processes it</h2>
       <ul>
         <li>Vercel (hosting) and Convex (database) store and serve the app.</li>
-        <li>Privy provides login and wallets. Circle provides the Arc network.</li>
+        <li>WalletConnect relays the connection if you link a mobile wallet. Circle provides the Arc network.</li>
         <li>Astock provides the tokenized stocks and prices; D20 provides randomness.</li>
         <li>Telegram, if you use the bot.</li>
       </ul>

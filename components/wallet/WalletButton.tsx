@@ -1,6 +1,6 @@
 "use client";
 
-/** The header's wallet button: Connect (opens Privy's modal), or the address with a small menu. */
+/** The header's wallet button: Connect (opens ConnectKit's modal), or the address with a small menu. */
 import { useState } from "react";
 import { cn } from "@/lib/cn";
 import { useWallet } from "./WalletProvider";
@@ -24,7 +24,6 @@ export function WalletButton({ className }: { className?: string }) {
       </button>
       {menu ? (
         <div className="absolute right-0 top-full z-10 mt-2 w-[220px] rounded-[14px] border border-line bg-panel p-2">
-          <p className="px-3 py-2 text-[13px] text-muted">{w.kind === "embedded" ? "Login wallet" : "Your own wallet"}</p>
           <button
             type="button"
             onClick={() => void navigator.clipboard?.writeText(w.address ?? "").then(() => setMenu(false))}

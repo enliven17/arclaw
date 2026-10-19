@@ -70,7 +70,7 @@ match). This is **not** a professional audit firm's work; one should be commissi
 | Owner = hot signers until replaced by hardware wallets | Replace before volume. |
 | Legal (gambling, securities, sanctions) | Region gate and age confirmation exist; counsel must set the real list (`BLOCKED_COUNTRIES`). Holder distribution wording reviewed in the disclaimer. |
 | Web: XSS, clickjacking, fake share cards | CSP and framing denied, signed share links, no user HTML. Embedded wallets sign without a prompt by design (the play button is the confirmation). |
-| Supply chain (Privy, wagmi, WalletConnect tree) | Lockfile installs, review upgrades, `pnpm audit` on release. |
+| Supply chain (ConnectKit, wagmi, WalletConnect tree) | Lockfile installs, review upgrades, `pnpm audit` on release. |
 | Telegram bot token | It was shared in a chat once, so rotate it when convenient; the webhook has a secret header. |
 
 ## Known trust assumptions

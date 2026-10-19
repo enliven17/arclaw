@@ -1,48 +1,31 @@
 "use client";
 
 /**
- * One wallet for the app, through Privy and Privy's own login modal (email code, Google, X, or an external wallet):
- *   embedded  a Privy wallet (an EOA) made for the user on email or Google/X login
- *   external  a browser or mobile wallet (MetaMask, Rabby, Coinbase, WalletConnect) connected through Privy
+ * One wallet for the app: the user's own (MetaMask, Rabby, Coinbase, WalletConnect), connected through Family's
+ * ConnectKit on wagmi. wagmi reconnects the last wallet on reload, so the address never changes behind the user.
  *
- * `useWallet()` gives the address, the kind, `openConnect()` (opens Privy's modal), disconnect, and `send(calls)`,
- * which sends the calls one by one on Arc (switching first) and resolves with the last transaction hash once mined.
+ * `useWallet()` gives the address, `openConnect()` (opens ConnectKit's modal), disconnect, and `send(calls)`, which
+ * sends the calls one by one on Arc (switching first) and resolves with the last transaction hash once mined.
  * Gas is native USDC from the wallet's own balance; there is no paymaster.
- *
- * Without NEXT_PUBLIC_PRIVY_APP_ID the app still runs: Privy never mounts and Connect says wallets are off.
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import {
-  PrivyProvider,
-  useConnectWallet,
-  useLogin,
-  useLogout,
-  useModalStatus,
-  usePrivy,
-  useWallets,
-  type ConnectedWallet,
-  type PrivyClientConfig,
-} from "@privy-io/react-auth";
-import { createWalletClient, custom, getAddress, type Address, type Hex } from "viem";
-import { ARC_CHAIN, arcClient, type Call } from "@/lib/arc/chain";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { ConnectKitProvider, getDefaultConfig, useModal } from "connectkit";
+import { createConfig, useAccount, useConfig, useDisconnect, WagmiProvider } from "wagmi";
+import { getWalletClient, switchChain } from "wagmi/actions";
+import { getAddress, type Address, type Hex } from "viem";
+import { ARC_CHAIN, arcClient, arcTransport, type Call } from "@/lib/arc/chain";
 import { getLenis } from "@/lib/motion";
 
-// Privy throws on anything but a 25 character app id; a malformed one counts as not configured instead of a crash.
-const RAW_APP_ID = (process.env.NEXT_PUBLIC_PRIVY_APP_ID ?? "").trim();
-const PRIVY_APP_ID = RAW_APP_ID.length === 25 ? RAW_APP_ID : "";
-const PRIVY_CLIENT_ID = process.env.NEXT_PUBLIC_PRIVY_CLIENT_ID || undefined;
-const WALLETCONNECT_PROJECT_ID = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || undefined;
-
-export type WalletKind = "embedded" | "external";
+const WALLETCONNECT_PROJECT_ID = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID ?? "";
 
 type WalletState = {
   address: Address | null;
-  kind: WalletKind | null;
-  /** True until Privy is ready, and while a login's wallet is being made. */
+  /** True while wagmi reconnects the last wallet, or a connection is in progress. */
   connecting: boolean;
   disconnect(): void;
   send(calls: Call[]): Promise<Hex>;
-  /** Opens Privy's login modal. */
+  /** Opens ConnectKit's modal. */
   openConnect(): void;
 };
 
@@ -54,142 +37,88 @@ export function useWallet(): WalletState {
   return v;
 }
 
-/** The wallet the user last chose, so a stale external connection or an old login never takes over silently. */
-type Choice = WalletKind | "off";
-const CHOICE_KEY = "arclaw.wallet";
-const readChoice = (): Choice | null => {
-  if (typeof window === "undefined") return null;
-  const v = window.localStorage.getItem(CHOICE_KEY);
-  return v === "embedded" || v === "external" || v === "off" ? v : null;
-};
-const writeChoice = (c: Choice) => {
-  try {
-    window.localStorage.setItem(CHOICE_KEY, c);
-  } catch {
-    // Private mode: the choice lasts for this page only.
-  }
-};
+function Inner({ children }: { children: ReactNode }) {
+  const config = useConfig();
+  const { address, status } = useAccount();
+  const { disconnect } = useDisconnect();
+  const { open, setOpen } = useModal();
 
-const latestExternal = (wallets: ConnectedWallet[]) =>
-  wallets.filter((w) => w.type === "ethereum" && w.walletClientType !== "privy").sort((a, b) => b.connectedAt - a.connectedAt)[0] ?? null;
-
-function PrivyInner({ children }: { children: ReactNode }) {
-  const { ready, authenticated } = usePrivy();
-  const { wallets } = useWallets();
-  const { logout } = useLogout();
-  const [choice, setChoiceState] = useState<Choice | null>(readChoice);
-
-  const choose = useCallback((c: Choice) => {
-    writeChoice(c);
-    setChoiceState(c);
-  }, []);
-
-  // Privy's modal is not ours: stop the smooth scroller behind it while it is open.
-  const { isOpen } = useModalStatus();
+  // ConnectKit's modal is not ours: stop the smooth scroller behind it while it is open.
   useEffect(() => {
-    if (isOpen) getLenis()?.stop();
+    if (open) getLenis()?.stop();
     else getLenis()?.start();
-  }, [isOpen]);
-
-  // Mounted on every app page, so a Google/X redirect completes wherever it lands. A wallet login is a SIWE login.
-  const { login } = useLogin({ onComplete: ({ loginMethod }) => choose(loginMethod === "siwe" ? "external" : "embedded") });
-  const { connectWallet } = useConnectWallet({ onSuccess: () => choose("external") });
-
-  const embedded = wallets.find((w) => w.walletClientType === "privy") ?? null;
-  const external = latestExternal(wallets);
-  // Embedded is the default choice: a logged-in user gets their Privy wallet.
-  const active = choice === "off" ? null : choice === "external" ? external : authenticated ? embedded : null;
-  const kind: WalletKind | null = active ? (active === embedded ? "embedded" : "external") : null;
-
-  const openConnect = useCallback(() => {
-    if (!authenticated) return login();
-    // Logged in with a stale wallet choice: fall back to the login wallet, or offer the wallet list.
-    // The saved choice was an external wallet that did not reconnect after the reload: ask for that wallet again,
-    // never swap silently to the Privy one (a different address).
-    if (embedded && choice !== "external") return choose("embedded");
-    connectWallet({ walletChainType: "ethereum-only", description: "" });
-  }, [authenticated, choice, choose, connectWallet, embedded, login]);
-
-  const disconnect = useCallback(() => {
-    choose("off");
-    for (const w of wallets) if (w.walletClientType !== "privy") w.disconnect();
-    if (authenticated) void logout();
-  }, [authenticated, choose, logout, wallets]);
+  }, [open]);
 
   const send = useCallback(
     async (calls: Call[]): Promise<Hex> => {
-      if (!active) throw new Error("Connect a wallet first.");
-      if (active.chainId !== `eip155:${ARC_CHAIN.id}`) await active.switchChain(ARC_CHAIN.id);
-      // Asked for after the switch: a provider keeps the chain it was made on.
-      const provider = await active.getEthereumProvider();
-      const client = createWalletClient({ account: getAddress(active.address), chain: ARC_CHAIN, transport: custom(provider) });
+      if (!address) throw new Error("Connect a wallet first.");
+      await switchChain(config, { chainId: ARC_CHAIN.id }).catch(() => undefined);
+      const client = await getWalletClient(config, { chainId: ARC_CHAIN.id });
+      const account = getAddress(address);
+      const pub = arcClient();
       let last: Hex = "0x";
       for (const call of calls) {
         const tx = { to: call.to, data: call.data, value: call.value ?? 0n };
         // Gas and fees come from our own RPCs: a wallet whose saved Arc RPC is rate-limited then only has to sign.
-        const pub = arcClient();
-        const account = getAddress(active.address);
         const [gas, fees] = await Promise.all([pub.estimateGas({ account, ...tx }), pub.estimateFeesPerGas()]);
-        const hash = await client.sendTransaction({ ...tx, gas: (gas * 12n) / 10n, maxFeePerGas: fees.maxFeePerGas, maxPriorityFeePerGas: fees.maxPriorityFeePerGas });
-        const receipt = await arcClient().waitForTransactionReceipt({ hash });
+        const hash = await client.sendTransaction({ ...tx, account, chain: ARC_CHAIN, gas: (gas * 12n) / 10n, maxFeePerGas: fees.maxFeePerGas, maxPriorityFeePerGas: fees.maxPriorityFeePerGas });
+        const receipt = await pub.waitForTransactionReceipt({ hash });
         if (receipt.status !== "success") throw new Error("The transaction reverted.");
         last = hash;
       }
       return last;
     },
-    [active],
+    [address, config],
   );
 
-  // Logged in but the embedded wallet is still being made.
-  const creating = ready && authenticated && choice !== "off" && choice !== "external" && !embedded;
   const value = useMemo<WalletState>(
-    () => ({ address: active ? getAddress(active.address) : null, kind, connecting: !ready || creating, disconnect, send, openConnect }),
-    [active, kind, ready, creating, disconnect, send, openConnect],
+    () => ({
+      address: address ? getAddress(address) : null,
+      connecting: status === "connecting" || status === "reconnecting",
+      disconnect: () => disconnect(),
+      send,
+      openConnect: () => setOpen(true),
+    }),
+    [address, status, disconnect, send, setOpen],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
-const unconfigured: WalletState = {
-  address: null,
-  kind: null,
-  connecting: false,
-  disconnect: () => undefined,
-  send: async () => {
-    throw new Error("Wallets are not configured.");
-  },
-  openConnect: () => window.alert("Wallets are not configured on this site yet (NEXT_PUBLIC_PRIVY_APP_ID)."),
-};
-
-// Privy only takes hex colours: these mirror --color-panel and --color-cream in app/globals.css.
-const PRIVY_CONFIG: PrivyClientConfig = {
-  appearance: {
-    theme: "#141417",
-    accentColor: "#ece6da",
-    logo: "/brand/lockup.svg",
-    landingHeader: "Connect",
-    loginMessage: "Boxes and stocks go to the wallet you connect, on Arc.",
-    showWalletLoginFirst: false,
-    walletChainType: "ethereum-only",
-    walletList: ["detected_ethereum_wallets", "metamask", "coinbase_wallet", "rainbow", "wallet_connect"],
-  },
-  loginMethods: ["email", "google", "twitter", "wallet"],
-  defaultChain: ARC_CHAIN,
-  supportedChains: [ARC_CHAIN],
-  embeddedWallets: {
-    ethereum: { createOnLogin: "all-users" },
-    // The play screen is the confirmation; Privy's own transaction prompt would be a second one.
-    showWalletUIs: false,
-  },
-  legal: { privacyPolicyUrl: "/privacy", termsAndConditionsUrl: "/disclaimer" },
-  ...(WALLETCONNECT_PROJECT_ID ? { walletConnectCloudProjectId: WALLETCONNECT_PROJECT_ID } : {}),
+// These mirror --color-panel, --color-cream and --color-ink in app/globals.css.
+const THEME = {
+  "--ck-font-family": "inherit",
+  "--ck-body-background": "#141417",
+  "--ck-body-color": "#ece6da",
+  "--ck-primary-button-color": "#ece6da",
+  "--ck-primary-button-border-radius": "12px",
+  "--ck-border-radius": "18px",
+  "--ck-overlay-background": "rgba(10,10,12,0.7)",
 };
 
 export function WalletProvider({ children }: { children: ReactNode }) {
-  if (!PRIVY_APP_ID) return <Ctx.Provider value={unconfigured}>{children}</Ctx.Provider>;
+  const [state] = useState(() => ({
+    query: new QueryClient(),
+    wagmi: createConfig(
+      getDefaultConfig({
+        appName: "arclaw",
+        appDescription: "Pay USDC on Arc, play a claw machine, win real stocks.",
+        appIcon: "/brand/lockup.svg",
+        walletConnectProjectId: WALLETCONNECT_PROJECT_ID,
+        enableAaveAccount: false,
+        chains: [ARC_CHAIN],
+        transports: { [ARC_CHAIN.id]: arcTransport() },
+        ssr: true,
+      }),
+    ),
+  }));
   return (
-    <PrivyProvider appId={PRIVY_APP_ID} clientId={PRIVY_CLIENT_ID} config={PRIVY_CONFIG}>
-      <PrivyInner>{children}</PrivyInner>
-    </PrivyProvider>
+    <WagmiProvider config={state.wagmi}>
+      <QueryClientProvider client={state.query}>
+        <ConnectKitProvider theme="midnight" customTheme={THEME} options={{ initialChainId: ARC_CHAIN.id, enforceSupportedChains: true }}>
+          <Inner>{children}</Inner>
+        </ConnectKitProvider>
+      </QueryClientProvider>
+    </WagmiProvider>
   );
 }
