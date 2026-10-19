@@ -97,3 +97,7 @@ Safe delay module (a timelock on owner transactions) is the planned next step, a
 2. Rotate the compromised key (keeper: new key into Convex env; operator: `setOperator` from the Safe).
 3. Reprice or pull a token from the tables if the oracle or desk is the cause.
 4. Tell players what happened on X the same day.
+
+## Audit 9 note
+
+Round 6 was audited twice more with no Medium or higher findings. An IOU that loses its backing again (a VRF top-up payback) can leave a funded IOU short by up to one VRF fee. The deploy script now sets `minBuffer` to 1 wei, so the contract pauses whenever nothing is left unreserved, and the guardian may no longer be the deployer. Fund `totalOwed` plus a little before every unpause.

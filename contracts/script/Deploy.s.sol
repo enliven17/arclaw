@@ -392,7 +392,7 @@ contract Deploy is OddsWriter {
         owner = vm.envOr("OWNER", msg.sender);
         require(operator != msg.sender, "OPERATOR must not be the deployer");
         require(owner != address(0) && operator != address(0), "OWNER and OPERATOR required");
-        require(guardian != address(0), "GUARDIAN required");
+        require(guardian != address(0) && guardian != msg.sender, "GUARDIAN required, not the deployer");
         // _configure reads the same env: the reveal / retry bot must be its own hot key, never the deployer
         address keeper = vm.envOr("KEEPER", operator);
         require(keeper != address(0) && keeper != msg.sender, "KEEPER must be set and not the deployer");
@@ -466,6 +466,8 @@ contract Deploy is OddsWriter {
         box.setKeeper(vm.envOr("KEEPER", operator), true);
         // Pause-only hot key (the keeper host can trip it on alerts); it can never unpause.
         box.setGuardian(guardian);
+        // 1 wei buffer: the contract pauses when nothing is left unreserved, e.g. an IOU nobody has funded (audit 9).
+        box.setGuards(500, 1);
         // ARCLAW luck: the vault ships with no token and no tiers (boosts off) until ARCLAW exists on Arguspad.
         luck = new LuckVault();
         box.setLuck(luck);
