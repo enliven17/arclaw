@@ -16,7 +16,7 @@ import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { useWallet } from "@/components/wallet/WalletProvider";
 import { MachineSwitch } from "@/components/landing/MachineSwitch";
 import { arcClient } from "@/lib/arc/chain";
-import { LINKS, createLinkCall, giftCall, linkFromLogs, readBoxes, readLink, reclaimLinkCall } from "@/lib/arclaw/contract";
+import { LINKS, createLinkCall, giftCall, linkFromLogs, readBoxes, readLink, reclaimLinkCall, revertText } from "@/lib/arclaw/contract";
 import type { Machine } from "@/lib/machines";
 import { usdc } from "@/lib/stocks";
 import { cn } from "@/lib/cn";
@@ -103,7 +103,7 @@ export function GiftComposer({ machines, initial }: { machines: Lite[]; initial?
       }
       await refresh();
     } catch (e) {
-      setStatus(e instanceof Error ? e.message : "The gift did not go through.");
+      setStatus(revertText(e));
     } finally {
       setBusy(false);
     }
@@ -283,7 +283,7 @@ function MyGifts() {
                   void w
                     .send([reclaimLinkCall(BigInt(l.linkId))])
                     .then(() => (setMsg("The boxes are back in your wallet."), load()))
-                    .catch((e: unknown) => setMsg(e instanceof Error ? e.message : "That did not go through."))
+                    .catch((e: unknown) => setMsg(revertText(e)))
                 }
               >
                 Take back

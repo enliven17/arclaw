@@ -106,7 +106,7 @@ export function MachineRoom({ art, machine }: { art: ClawArt; machine: Machine }
     } catch (e) {
       await show;
       claw.current?.reset();
-      setNote(e instanceof Error ? e.message : "The play did not go through.");
+      setNote(revertText(e));
     } finally {
       setBusy(null);
     }

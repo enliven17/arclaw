@@ -14,7 +14,7 @@ import { useWallet } from "@/components/wallet/WalletProvider";
 import { SealedBox } from "@/components/pack/SealedBox";
 import { variantOf } from "@/components/claw/view";
 import { arcClient } from "@/lib/arc/chain";
-import { LINKS, claimDigest, claimLinkCall, readLink, type LinkState } from "@/lib/arclaw/contract";
+import { LINKS, claimDigest, claimLinkCall, readLink, revertText, type LinkState } from "@/lib/arclaw/contract";
 import { MACHINES } from "@/lib/machines";
 
 type Parsed = { key: Hex; linkId: bigint } | null;
@@ -69,7 +69,7 @@ export function ClaimView({ machineSlug, boxes, note }: { machineSlug: string; b
       setDone(true);
       void load();
     } catch (e) {
-      setStatus(e instanceof Error ? e.message : "The claim did not go through.");
+      setStatus(revertText(e));
     } finally {
       setBusy(false);
     }

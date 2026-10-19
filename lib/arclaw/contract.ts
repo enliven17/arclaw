@@ -134,17 +134,29 @@ export async function readTableId(client: PublicClient, machineId: number): Prom
   return n - 1n;
 }
 
-/** Contract reverts the player can hit, in words. Anything else keeps the wallet's own message. */
+/** True when the player said no in their wallet (EIP-1193 code 4001, anywhere in viem's cause chain). */
+export function userRejected(e: unknown): boolean {
+  for (let x: unknown = e, i = 0; x && i < 8; x = (x as { cause?: unknown }).cause, i++) {
+    const err = x as { code?: number; name?: string; shortMessage?: string; message?: string };
+    if (err.code === 4001 || err.name === "UserRejectedRequestError") return true;
+    if (/user (rejected|denied|cancel)|rejected the request|request rejected|denied transaction/i.test(err.shortMessage ?? err.message ?? "")) return true;
+  }
+  return false;
+}
+
+/** Any wallet or contract error, in words a player can act on. Never the raw message: viem's carries the request. */
 export function revertText(e: unknown): string {
+  if (userRejected(e)) return "No problem, you declined in your wallet, so nothing was sent. Try again whenever you are ready.";
   const m = e instanceof Error ? ((e as { shortMessage?: string }).shortMessage ?? e.message) : String(e);
+  if (/insufficient funds|exceeds (the )?balance|gas required exceeds/i.test(m)) return "Your wallet does not have enough USDC for this and its gas. Top it up and try again.";
   if (/TableChanged/.test(m)) return "The prizes for this machine were just updated. Open again to play the new table.";
   if (/TableStale|BelowFloor/.test(m)) return "Prices moved since this machine's prizes were set. Opening is paused until they are updated.";
   if (/VrfMisses/.test(m)) return "Opening is closed for a few hours while the randomness service catches up. Your boxes are safe and open again after 00:00 UTC.";
   if (/VrfFeeTopUp/.test(m)) return "The randomness fee could not be covered right now. Try again in a moment.";
   if (/EnforcedPause/.test(m)) return "The machines are paused for a moment. Your boxes are safe; try again shortly.";
   if (/NotExpired/.test(m)) return "Your boxes can come back once this machine's prize table expires. A new draw is usually faster.";
-  if (/reject|denied|cancel/i.test(m)) return "You cancelled it in your wallet.";
-  return m.length > 160 ? `${m.slice(0, 157)}...` : m;
+  const line = (m.split("\n")[0] ?? "").replace(/(?:https?|wss?):\/\/\S+/g, "").trim();
+  return line ? (line.length > 160 ? `${line.slice(0, 157)}...` : line) : "That did not go through. Try again in a moment.";
 }
 
 /** Live value of a card in 18 dp USDC at the price source's price. */

@@ -13,7 +13,7 @@ import { formatUnits, parseUnits, type Address } from "viem";
 import { useWallet } from "@/components/wallet/WalletProvider";
 import { arcClient } from "@/lib/arc/chain";
 import { ARC } from "@/lib/arc/config";
-import { allowance, approveCall, pullsOf, quoteSell, readHoldings, sellCall, toUsdc, type Pull } from "@/lib/arclaw/contract";
+import { allowance, approveCall, pullsOf, quoteSell, readHoldings, revertText, sellCall, toUsdc, type Pull } from "@/lib/arclaw/contract";
 import { getLenis } from "@/lib/motion";
 import { logoOf, usdc } from "@/lib/stocks";
 import { shareOnX } from "@/lib/share-client";
@@ -212,7 +212,7 @@ function SellSheet({ holding, onClose, onSold }: { holding: Holding | null; onCl
       setStatus(`Sold. ${usdc(toUsdc(quote.out))} USDC is on its way to your wallet.`);
       onSold();
     } catch (e) {
-      setStatus(e instanceof Error ? e.message : "The sale did not go through.");
+      setStatus(revertText(e));
     } finally {
       setBusy(false);
     }
