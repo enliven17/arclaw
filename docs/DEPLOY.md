@@ -26,7 +26,10 @@ cd contracts && forge script script/Deploy.s.sol --tc Deploy --rpc-url https://r
 
 Then:
 
-1. Convex (prod): `npx convex deploy`, then `npx convex env set` for `KEEPER_PRIVATE_KEY` (the keeper wallet from the bundle), `KEEPER_NETWORK=mainnet`, `KEEPER_DEPLOYMENT_JSON` only if the JSON is not yet in the build, `ALERT_TELEGRAM_CHAT_ID` and `TELEGRAM_BOT_TOKEN` when you have them.
+1. Convex (prod): `npx convex deploy`, then `npx convex env set` for `KEEPER_PRIVATE_KEY` (the keeper wallet from the bundle), `KEEPER_NETWORK=mainnet`, `KEEPER_RPC_URL` (private RPC first, see below), `NEXT_PUBLIC_ARC_NETWORK=mainnet` (the indexer reads this one, not `KEEPER_NETWORK`), `ADMIN_QUERY_SECRET`, `KEEPER_DEPLOYMENT_JSON` only if the JSON is not yet in the build, `ALERT_TELEGRAM_CHAT_ID` and `TELEGRAM_BOT_TOKEN` when you have them.
+   - The bot's key must also be the operator (it reprices): the deploy makes them separate, so the Owner Safe calls `setOperator(keeper)` (`safe.mjs exec`). Health shows `not-operator` until it does.
+   - A Convex deployment that ran testnet before keeps testnet state: empty `keeperKv`, `keeperEvents`, `keeperLocks`, `keeperWakes`, `pulls`, `plays`, `players` and `meta` (`npx convex import --prod --table <t> --replace -y empty.jsonl`) right after switching, or the keeper's scan cursor skips the first openings and the leaderboard shows testnet plays.
+   - RPCs: QuickNode's and Circle's keyless endpoints serve 10k-block `eth_getLogs`; Alchemy's free tier caps it at 10 blocks and dRPC at 1000, so they go after them in the list.
 2. Vercel (prod): `NEXT_PUBLIC_ARC_NETWORK=mainnet`, `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID`, `SHARE_SECRET`, `APP_ORIGIN`; then `vercel deploy --prod` from main. Check the WalletConnect allowed domains include the production domain.
 3. Check `pnpm keeper status` (or the Convex `keeper:status` query) shows the Single table priced and healthy.
 4. Play once from your own wallet while the contract is still paused to confirm the UI shows "Paused for a moment", then:
@@ -35,7 +38,7 @@ Then:
 node scripts/mainnet/deploy.mjs unpause --yes
 ```
 
-5. Play one real Single box, open it, sell the stock back.
+5. Play one real Single box, open it, sell the stock back: `scripts/mainnet/smoke.mts` does it from a test wallet.
 6. Enable the bigger machines only after the keeper has priced them and the balance supports them (about 50 USDC for Stack, about 300 for Vault):
 
 ```bash
