@@ -3,8 +3,10 @@
  * (`testnet` default | `mainnet`), picks the chain, the RPCs and our contract addresses (lib/deployments/*.json).
  * Pure and isomorphic: strings only, no SDK imports.
  *
- * Until a deployment record exists for a network (lib/deployments/arc-<network>.json, written by the deploy script),
- * `contracts` is null there and the app says so instead of pointing anywhere.
+ * Until a deployment record exists for a network, `contracts` is null there and the app says so instead of pointing
+ * anywhere. Testnet's record is lib/deployments/arc-testnet.json. Mainnet's addresses are kept out of the repo: they
+ * come from NEXT_PUBLIC_ARC_MAINNET_DEPLOYMENT (the deploy script's JSON, inlined at build), and the committed
+ * arc-mainnet.json stays an empty placeholder the deploy script writes into.
  */
 import mainnetFile from "@/lib/deployments/arc-mainnet.json";
 import testnet from "@/lib/deployments/arc-testnet.json";
@@ -60,6 +62,19 @@ function contractsOf(d: typeof testnet): Contracts {
   };
 }
 
+/** Mainnet's record: the env JSON when set (a malformed one counts as none), else the committed placeholder. */
+function mainnetRecord(): Partial<typeof testnet> {
+  const raw = process.env.NEXT_PUBLIC_ARC_MAINNET_DEPLOYMENT;
+  if (raw) {
+    try {
+      return JSON.parse(raw) as Partial<typeof testnet>;
+    } catch {
+      return {};
+    }
+  }
+  return mainnetFile as Partial<typeof testnet>;
+}
+
 export function arcConfig(network: string | undefined = process.env.NEXT_PUBLIC_ARC_NETWORK): ArcConfig {
   const n: ArcNetwork = network === "mainnet" ? "mainnet" : "testnet";
   const rpc = (process.env.NEXT_PUBLIC_ARC_RPC_URL ?? "").split(",").map((s) => s.trim()).filter(Boolean);
@@ -67,7 +82,7 @@ export function arcConfig(network: string | undefined = process.env.NEXT_PUBLIC_
     return {
       network: n,
       chain: { id: 5042, name: "Arc", rpcUrls: rpc.length ? rpc : ["https://rpc.mainnet.arc.io"], explorer: "https://explorer.arc.io" },
-      contracts: recordOf(mainnetFile as Partial<typeof testnet>),
+      contracts: recordOf(mainnetRecord()),
     };
   }
   return {

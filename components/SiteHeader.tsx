@@ -22,7 +22,6 @@ const NAV = [
   { href: "/#how", label: "How it works" },
   { href: "/#stocks", label: "Stocks" },
   { href: "/#gift", label: "Gift" },
-  { href: "/#token", label: "Token" },
   { href: "/#odds", label: "Odds" },
   { href: "/whitepaper", label: "Whitepaper" },
   { href: "/#faq", label: "FAQ" },

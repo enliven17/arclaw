@@ -3,11 +3,10 @@ import { Breadcrumbs } from "@/components/seo/Breadcrumbs";
 import { ARC, explorerAddress } from "@/lib/arc/config";
 import { MACHINES, fmtMultiplier, fmtPct } from "@/lib/machines";
 import { usdc } from "@/lib/stocks";
-import { ARCLAW_SYMBOL, ARCLAW_TOKEN } from "@/lib/token";
 
 export const metadata: Metadata = {
   title: "Whitepaper",
-  description: "How arclaw works: the claw, the odds, the randomness, the treasury, the security model and the ARCLAW token.",
+  description: "How arclaw works: the claw, the odds, the randomness, the treasury and the security model.",
   alternates: { canonical: "/whitepaper" },
 };
 
@@ -21,7 +20,6 @@ const TOC = [
   ["randomness", "Randomness"],
   ["treasury", "Prizes and the treasury"],
   ["security", "Security model"],
-  ["token", "The ARCLAW token"],
   ["roadmap", "Roadmap"],
   ["risks", "Risks and limits"],
   ["contracts", "Contracts"],
@@ -148,7 +146,7 @@ export default function Whitepaper() {
         </li>
         <li>
           <strong>A return band.</strong> Each machine has its own narrow band for the expected return (for example 74 to 76
-          percent for Single), checked at the largest possible luck boost. A table outside its band is rejected, so the odds
+          percent for Single). A table outside its band is rejected, so the odds
           cannot quietly be made worse than advertised, and the house edge cannot go negative.
         </li>
         <li>
@@ -245,32 +243,7 @@ export default function Whitepaper() {
         oracle failing or being paused, the Arc network, a compromised key. The risks section lists them.
       </p>
 
-      <h2 id="token">7. The ARCLAW token</h2>
-      <p>
-        {ARCLAW_SYMBOL} is arclaw&apos;s token. It launches with mainnet, minted on Arguspad; its contract address is published
-        on this site and on the project&apos;s X account when it exists, and until then nothing else is {ARCLAW_SYMBOL}.
-      </p>
-      <ul>
-        <li>
-          <strong>Luck boost, in the contract.</strong> Staking ARCLAW in the vault for at least a day gives each box you open
-          a chance (up to 1 percent at the top tier) to draw a second pack and keep the better one. At the top tier that is
-          worth about 0.16 percentage points of return, roughly 1.6 USDC per 1,000 USDC played. It is small by design: every
-          machine&apos;s table is checked at the maximum boost, so it can never break the guarantees. A stake only counts
-          after a day, so borrowed or just-bought tokens earn nothing.
-        </li>
-        <li>
-          <strong>Buyback and holder share, by the team.</strong> The team&apos;s policy is to use 25 percent of each month&apos;s
-          net profit to buy ARCLAW on the market and to share another 10 percent with ARCLAW holders, increasing both as
-          profit grows. This is run by the team outside the contracts, is not enforced on chain, can change or stop, and is
-          not a promise: in a month with no net profit there is nothing to buy or share.
-        </li>
-        <li>
-          <strong>Not an investment.</strong> ARCLAW is not a share or a claim on arclaw. It can lose all of its value.
-        </li>
-      </ul>
-      <p>Total supply, allocation and the launch plan are announced with the token.</p>
-
-      <h2 id="roadmap">8. Roadmap</h2>
+      <h2 id="roadmap">7. Roadmap</h2>
       <ol className="mt-4 list-decimal pl-5">
         <li>
           <strong>Testnet.</strong> The full product on Arc testnet with mock stocks: play, open, reveal, sell, gift, leaderboard,
@@ -281,15 +254,15 @@ export default function Whitepaper() {
           desk and oracle before anyone else.
         </li>
         <li>
-          <strong>Public launch.</strong> Machines open, ARCLAW launches, the contract addresses are published.
+          <strong>Public launch.</strong> Machines open and the contract addresses are published.
         </li>
         <li>
-          <strong>After launch.</strong> A professional audit, larger buybacks as profit allows, and more machines and stocks.
+          <strong>After launch.</strong> A professional audit, and more machines and stocks.
           None of this is a commitment on timing.
         </li>
       </ol>
 
-      <h2 id="risks">9. Risks and limits</h2>
+      <h2 id="risks">8. Risks and limits</h2>
       <ul>
         <li>
           <strong>You can lose money.</strong> On average a box returns less than its price. Most boxes are worth less than
@@ -317,7 +290,7 @@ export default function Whitepaper() {
         Read the <a href="/disclaimer">risk disclaimer</a> and the <a href="/privacy">privacy policy</a> before you play.
       </p>
 
-      <h2 id="contracts">10. Contracts</h2>
+      <h2 id="contracts">9. Contracts</h2>
       {c ? (
         <>
           <p>Deployed on {ARC.chain.name}.</p>
@@ -343,18 +316,6 @@ export default function Whitepaper() {
                     </td>
                   </tr>
                 ))}
-                {ARCLAW_TOKEN ? (
-                  <tr className="border-b border-line last:border-b-0">
-                    <th scope="row" className={`${td} text-left font-normal text-muted`}>
-                      {ARCLAW_SYMBOL}
-                    </th>
-                    <td className={`${td} money break-all`}>
-                      <a href={explorerAddress(ARCLAW_TOKEN, ARC)} target="_blank" rel="noreferrer">
-                        {ARCLAW_TOKEN}
-                      </a>
-                    </td>
-                  </tr>
-                ) : null}
               </tbody>
             </table>
           </div>

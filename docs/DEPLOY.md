@@ -56,3 +56,13 @@ Prizes are paid from player revenue. With a float under ten times the biggest en
 ## Safes
 
 The three Safe signers are hot wallets made by `keys.mjs` so everything works today. Before real money grows, add hardware wallets as owners and remove the hot ones through a Safe transaction (`safe.mjs exec`).
+
+## Status (2026-10-20): back on testnet
+
+The mainnet deployment was paused, emptied (`withdraw` and `sweep` from the Owner Safe, reserve floor set to 0 with
+`setJit`) and every role wallet swept to the admin wallet. The site, the keeper and the indexer run on testnet again.
+
+Mainnet addresses are kept out of the repo: `lib/deployments/arc-mainnet.json` is back to the empty placeholder, and the
+record lives in `.env.local` (`NEXT_PUBLIC_ARC_MAINNET_DEPLOYMENT`, read by `lib/arc/config.ts`; `KEEPER_DEPLOYMENT_JSON_MAINNET`
+for the keeper's `KEEPER_DEPLOYMENT_JSON`) and in a backup on the Desktop (`arclaw-mainnet-deployment/`, with the
+resolved odds and the broadcast files). To serve mainnet again, set those env vars where the build and the keeper run.

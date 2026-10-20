@@ -15,7 +15,6 @@ const LINKS = [
   { href: "#machines", label: "Machines" },
   { href: "#how", label: "How it works" },
   { href: "#gift", label: "Gift a box" },
-  { href: "#token", label: "Token" },
   { href: "#odds", label: "Odds" },
   { href: "/whitepaper", label: "Whitepaper" },
   { href: "#about", label: "About" },

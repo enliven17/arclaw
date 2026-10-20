@@ -19,7 +19,7 @@ export function Machines({ art, machines }: { art: Record<Variant, ClawArt>; mac
           <p className="lede max-w-[26em] md:justify-self-end" data-reveal>
             Bigger machine, better odds: the expected return climbs from {fmtPct(machines[0]!.rtp, 0)} on {machines[0]!.name} to{" "}
             {fmtPct(machines.at(-1)!.rtp, 0)} on {machines.at(-1)!.name}. Every box is set to pay at least {fmtPct(Math.min(...machines.map((m) => m.floor)), 0)} back at the
-            table's prices, and up to {fmtMultiplier(Math.max(...machines.map((m) => m.cap)))}.
+            table&apos;s prices, and up to {fmtMultiplier(Math.max(...machines.map((m) => m.cap)))}.
           </p>
         </div>
 

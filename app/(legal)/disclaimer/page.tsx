@@ -42,17 +42,6 @@ export default function Disclaimer() {
         may be delayed or wrong. arclaw does not issue, custody or redeem these tokens.
       </p>
 
-      <h2>The ARCLAW token</h2>
-      <p>
-        arclaw has a token, ARCLAW. Staking it can give a small luck boost on your boxes (a chance of up to 1 percent to draw
-        a second pack and keep the better one); that boost is built into the odds the contract checks. Separately, the team
-        intends to use part of each month's net profit to buy ARCLAW on the market and to share part with ARCLAW holders. That
-        is a discretionary policy run by the team outside the smart contracts. It can change or stop at any time, it is not a
-        promise, a guarantee or an entitlement, and there may be nothing to buy or share in a month with no net profit. ARCLAW
-        is not a share, a security or an investment product, it can lose all of its value, and holding it does not give you any
-        claim on arclaw or its revenue.
-      </p>
-
       <h2>Randomness and smart contracts</h2>
       <p>
         Outcomes use a third party randomness service (D20 VRF). Smart contracts, randomness providers, oracles, wallets

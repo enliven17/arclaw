@@ -11,7 +11,6 @@ import { Hero } from "@/components/landing/Hero";
 import { HowItWorks } from "@/components/landing/HowItWorks";
 import { Machines } from "@/components/landing/Machines";
 import { Odds } from "@/components/landing/Odds";
-import { Tokenomics } from "@/components/landing/Tokenomics";
 import { StocksMarquee } from "@/components/landing/StocksMarquee";
 import { SiteStructuredData } from "@/components/seo/SiteStructuredData";
 import { withResolved } from "@/lib/machines.server";
@@ -47,7 +46,6 @@ export default async function Home() {
         <HowItWorks machines={machines} />
         <StocksMarquee quotes={quotes} />
         <GiftShowcase />
-        <Tokenomics />
         <Odds machines={machines} />
         <AuthorBio />
         <Faq />
