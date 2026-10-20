@@ -66,7 +66,7 @@ export default function Whitepaper() {
       <h2 id="play">2. How a play works</h2>
       <ol className="mt-4 list-decimal pl-5">
         <li>
-          <strong>Connect.</strong> Log in with email, Google or X (a wallet is created for you) or connect your own wallet.
+          <strong>Connect.</strong> Connect your own wallet: a browser wallet such as MetaMask or Rabby, Coinbase Wallet, or any mobile wallet through WalletConnect.
           Gas on Arc is paid in USDC, so one balance does everything.
         </li>
         <li>

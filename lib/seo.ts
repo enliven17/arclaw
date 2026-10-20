@@ -8,6 +8,3 @@ export const SITE_URL = new URL(process.env.APP_ORIGIN?.replace(/\/+$/, "") || "
 
 export const SITE_CARD_ALT = "arclaw: a claw machine that pays in tokenized stocks on Arc";
 
-/** The project on X. */
-export const X_HANDLE = "@arclawapp";
-export const X_URL = "https://x.com/arclawapp";

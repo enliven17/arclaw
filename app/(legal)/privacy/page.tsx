@@ -84,15 +84,6 @@ export default function Privacy() {
 
       <h2>Changes</h2>
       <p>We will update this page when our practices change and change the date at the top.</p>
-
-      <h2>Contact</h2>
-      <p>
-        For privacy requests, message us on X at{" "}
-        <a href="https://x.com/arclawapp" rel="noopener noreferrer" target="_blank">
-          @arclawapp
-        </a>
-        .
-      </p>
     </>
   );
 }

@@ -71,15 +71,6 @@ export default function Disclaimer() {
         you may have a gambling problem, contact a local support service such as BeGambleAware or the National Council
         on Problem Gambling.
       </p>
-
-      <h2>Contact</h2>
-      <p>
-        Questions: message us on X at{" "}
-        <a href="https://x.com/arclawapp" rel="noopener noreferrer" target="_blank">
-          @arclawapp
-        </a>
-        .
-      </p>
     </>
   );
 }

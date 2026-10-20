@@ -8,7 +8,7 @@ import { variantOf, type Variant } from "@/components/claw/view";
 import { Logo } from "@/components/Logo";
 import { SplitHeading } from "@/components/motion/SmoothScroll";
 import type { Machine } from "@/lib/machines";
-import { X_HANDLE, X_URL } from "@/lib/seo";
+import { ARC } from "@/lib/arc/config";
 import { ClawLink } from "@/components/motion/PageTransitions";
 
 const LINKS = [
@@ -17,7 +17,6 @@ const LINKS = [
   { href: "#gift", label: "Gift a box" },
   { href: "#odds", label: "Odds" },
   { href: "/whitepaper", label: "Whitepaper" },
-  { href: "#about", label: "About" },
   { href: "#faq", label: "FAQ" },
 ];
 
@@ -59,12 +58,7 @@ export function Footer({ art, machines }: { art: Record<Variant, ClawArt>; machi
                 </li>
               ))}
               <li>
-                <a className="transition-colors hover:text-cream" href={X_URL} rel="noopener noreferrer" target="_blank">
-                  X {X_HANDLE}
-                </a>
-              </li>
-              <li>
-                <a className="transition-colors hover:text-cream" href="https://explorer.arc.io" rel="noopener noreferrer" target="_blank">
+                <a className="transition-colors hover:text-cream" href={ARC.chain.explorer} rel="noopener noreferrer" target="_blank">
                   Arc explorer
                 </a>
               </li>

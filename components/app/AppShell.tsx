@@ -13,7 +13,6 @@ import { AgeGate } from "@/components/app/AgeGate";
 import { WalletButton } from "@/components/wallet/WalletButton";
 import { WalletProvider } from "@/components/wallet/WalletProvider";
 import { ARC } from "@/lib/arc/config";
-import { X_URL } from "@/lib/seo";
 import { cn } from "@/lib/cn";
 import { ClawLink } from "@/components/motion/PageTransitions";
 
@@ -87,11 +86,6 @@ function Footer() {
           <li>
             <a className="hover:text-cream" href="/privacy">
               Privacy
-            </a>
-          </li>
-          <li>
-            <a className="hover:text-cream" href={X_URL} rel="noopener noreferrer" target="_blank">
-              X
             </a>
           </li>
           <li>

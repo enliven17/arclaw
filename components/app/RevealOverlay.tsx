@@ -324,7 +324,7 @@ export function RevealOverlay({
 function ShareButton({ box }: { box: DrawnBox }) {
   const sum = usdc(box.cards.reduce((t, c) => t + toUsdc(c.valueWei), 0));
   return (
-    <button type="button" className="btn-ghost" disabled={!box.txHash} onClick={() => shareOnX(box.txHash!, box.boxIndex, `Pulled a ${box.tierName} pack on @arclawapp: ${sum} USDC in real stocks.`)}>
+    <button type="button" className="btn-ghost" disabled={!box.txHash} onClick={() => shareOnX(box.txHash!, box.boxIndex, `Pulled a ${box.tierName} pack on arclaw: ${sum} USDC in real stocks.`)}>
       Share on X
     </button>
   );

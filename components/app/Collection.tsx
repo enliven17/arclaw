@@ -125,7 +125,7 @@ export function Collection() {
                       type="button"
                       className="btn-ghost !min-h-[36px] !px-3 !py-2 text-[13px]"
                       disabled={!p.txHash}
-                      onClick={() => shareOnX(p.txHash!, p.boxIndex, `Pulled a ${p.tierName} pack on @arclawapp: ${usdc(sum)} USDC in real stocks.`)}
+                      onClick={() => shareOnX(p.txHash!, p.boxIndex, `Pulled a ${p.tierName} pack on arclaw: ${usdc(sum)} USDC in real stocks.`)}
                     >
                       Share on X
                     </button>
