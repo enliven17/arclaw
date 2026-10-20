@@ -66,3 +66,7 @@ Mainnet addresses are kept out of the repo: `lib/deployments/arc-mainnet.json` i
 record lives in `.env.local` (`NEXT_PUBLIC_ARC_MAINNET_DEPLOYMENT`, read by `lib/arc/config.ts`; `KEEPER_DEPLOYMENT_JSON_MAINNET`
 for the keeper's `KEEPER_DEPLOYMENT_JSON`) and in a backup on the Desktop (`arclaw-mainnet-deployment/`, with the
 resolved odds and the broadcast files). To serve mainnet again, set those env vars where the build and the keeper run.
+
+The Telegram bot is off as well: its webhook is deleted, and `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET` (Vercel)
+and `ALERT_TELEGRAM_CHAT_ID` (Convex) are unset, so `/api/telegram` answers 401 and keeper alerts go only to the event
+log and the admin panel. The Vercel deployments built while the site served mainnet were removed.
