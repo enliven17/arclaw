@@ -3,7 +3,7 @@
  *
  *   wake({ machineId })  a visitor opened a machine whose table is stale: ask the keeper to reprice it. Deduplicated
  *                        (one per machine per 60 s), machineId must be one of lib/machines.json, nothing else is taken.
- *                        The 10 s keeper loop picks it up, so the table is fresh about 10 to 20 s later. A wake also
+ *                        The 30 s keeper heartbeat picks it up, so the table is fresh within about a minute. A wake also
  *                        counts as demand for 60 minutes (docs/OPERATIONS.md, reprice policy).
  *   status({ secret })   last tick, last reprice, health, alerts, recent events, and per machine whether its table is
  *                        fresh. Admin only (ADMIN_QUERY_SECRET, convex/admin.ts): health and events describe the

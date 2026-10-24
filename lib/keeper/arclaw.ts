@@ -33,6 +33,8 @@ export const ARCLAW = {
 
 export const STATUS = { None: 0, Pending: 1, Fulfilled: 2, Revealed: 3, Returned: 4 } as const;
 export const LOG_SPAN = 9_999n;
+/** Deterministic Multicall3 deployment on Arc mainnet and testnet. */
+export const MULTICALL3_ADDRESS = "0xcA11bde05977b3631167028862bE2a173976CA11" as Address;
 
 const priceAbi = parseAbi(["function priceOf(address token) view returns (uint256)"]);
 const erc20Abi = parseAbi(["function decimals() view returns (uint8)", "function balanceOf(address) view returns (uint256)"]);
@@ -80,35 +82,66 @@ export async function readGlobals(c: PublicClient, d: Deployment, me: Address): 
   const a = { address: d.arclaw, abi: arclawAbi } as const;
   const block = await c.getBlock();
   const at = { blockNumber: block.number } as const;
-  const r = <T>(functionName: string, args: readonly unknown[] = []) => c.readContract({ ...a, ...at, functionName: functionName as never, args: args as never }) as Promise<T>;
-  const [paused, pausedSince, balance, reservedCredit, pendingReserve, sealedReserve, totalOwed, reserveFloor, minBuffer, freeBalance, maxTableAge, maxPriceMoveBps, nextOpeningId, operator, isKeeper, priceSource, vrfCoordinator, callbackGasLimit, maxVrfSubsidy, maxBoostBps, machineIds, topUpReserve, resumedAt, guardian, limits] =
-    await Promise.all([
-      r<boolean>("paused"),
-      r<bigint>("pausedSince"),
-      c.getBalance({ address: d.arclaw, ...at }),
-      r<bigint>("reservedCredit"),
-      r<bigint>("pendingReserve"),
-      r<bigint>("sealedReserve"),
-      r<bigint>("totalOwed"),
-      r<bigint>("reserveFloor"),
-      r<bigint>("minBuffer"),
-      r<bigint>("freeBalance"),
-      r<bigint>("maxTableAge"),
-      r<bigint>("maxPriceMoveBps"),
-      r<bigint>("nextOpeningId"),
-      r<Address>("operator"),
-      r<boolean>("keepers", [me]),
-      r<Address>("priceSource"),
-      r<Address>("vrfCoordinator"),
-      r<number>("callbackGasLimit"),
-      r<bigint>("maxVrfSubsidy"),
-      r<bigint>("MAX_BOOST_BPS"),
-      r<readonly bigint[]>("machineIds"),
-      r<bigint>("topUpReserve"),
-      r<bigint>("resumedAt"),
-      r<Address>("guardian"),
-      r<readonly [number, number, number, bigint, bigint]>("limits"),
-    ]);
+  const [reads, balance] = await Promise.all([
+    c.multicall({
+      multicallAddress: MULTICALL3_ADDRESS,
+      blockNumber: block.number,
+      allowFailure: false,
+      contracts: [
+        { ...a, functionName: "paused" },
+        { ...a, functionName: "pausedSince" },
+        { ...a, functionName: "reservedCredit" },
+        { ...a, functionName: "pendingReserve" },
+        { ...a, functionName: "sealedReserve" },
+        { ...a, functionName: "totalOwed" },
+        { ...a, functionName: "reserveFloor" },
+        { ...a, functionName: "minBuffer" },
+        { ...a, functionName: "freeBalance" },
+        { ...a, functionName: "maxTableAge" },
+        { ...a, functionName: "maxPriceMoveBps" },
+        { ...a, functionName: "nextOpeningId" },
+        { ...a, functionName: "operator" },
+        { ...a, functionName: "keepers", args: [me] },
+        { ...a, functionName: "priceSource" },
+        { ...a, functionName: "vrfCoordinator" },
+        { ...a, functionName: "callbackGasLimit" },
+        { ...a, functionName: "maxVrfSubsidy" },
+        { ...a, functionName: "MAX_BOOST_BPS" },
+        { ...a, functionName: "machineIds" },
+        { ...a, functionName: "topUpReserve" },
+        { ...a, functionName: "resumedAt" },
+        { ...a, functionName: "guardian" },
+        { ...a, functionName: "limits" },
+      ] as never,
+    }) as Promise<readonly unknown[]>,
+    c.getBalance({ address: d.arclaw, ...at }),
+  ]);
+  const [paused, pausedSince, reservedCredit, pendingReserve, sealedReserve, totalOwed, reserveFloor, minBuffer, freeBalance, maxTableAge, maxPriceMoveBps, nextOpeningId, operator, isKeeper, priceSource, vrfCoordinator, callbackGasLimit, maxVrfSubsidy, maxBoostBps, machineIds, topUpReserve, resumedAt, guardian, limits] = reads as [
+    boolean,
+    bigint,
+    bigint,
+    bigint,
+    bigint,
+    bigint,
+    bigint,
+    bigint,
+    bigint,
+    bigint,
+    bigint,
+    bigint,
+    Address,
+    boolean,
+    Address,
+    Address,
+    number,
+    bigint,
+    bigint,
+    readonly bigint[],
+    bigint,
+    bigint,
+    Address,
+    readonly [number, number, number, bigint, bigint],
+  ];
   const res = reservedCredit + pendingReserve + sealedReserve + totalOwed + topUpReserve;
   const today = Math.floor(Number(block.timestamp) / 86_400);
   const [lDay, lMisses, lMax, lCap, lSpent] = limits;

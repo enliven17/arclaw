@@ -23,7 +23,7 @@ const fmtUsdc = (wei: bigint) => (Number(wei / 10n ** 12n) / 1e6).toFixed(6);
 
 export const revealable = (o: OpenOpening) => o.status === STATUS.Fulfilled || (o.status === STATUS.Pending && o.req.fulfilled);
 
-export async function reveal(cfg: KeeperConfig, sender: Sender, g: Globals, openings: readonly OpenOpening[], state: KeeperState, deadline = Infinity): Promise<Result> {
+export async function reveal(cfg: KeeperConfig, sender: Sender, g: Pick<Globals, "now" | "isKeeper">, openings: readonly OpenOpening[], state: KeeperState, deadline = Infinity): Promise<Result> {
   const events: KeeperEvent[] = [];
   const issues: Issue[] = [];
   let done = 0;

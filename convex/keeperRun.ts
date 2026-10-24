@@ -1,8 +1,8 @@
 "use node";
 /**
- * The keeper on Convex crons (convex/crons.ts): `reveal` every 10 seconds (fulfilled openings revealed within
- * seconds, and machines with a new wake request repriced if due), `tick` every minute (reveal, VRF retries, reprice
- * when due, health, alerts). `reprice` is for a manual run: npx convex run keeperRun:reprice '{"force":true}'.
+ * The keeper on Convex crons (convex/crons.ts): `heartbeat` every 30 seconds (fulfilled openings revealed and
+ * machine wake requests served), with a full `tick` folded into the heartbeat every five minutes. `reprice` is for
+ * a manual run: npx convex run keeperRun:reprice '{"force":true}'.
  * Same code as the CLI (lib/keeper), storage in convex/keeperState.ts, the public wake and status in convex/keeper.ts
  * (a "use node" file can only hold actions).
  *
@@ -27,6 +27,8 @@ const ref = {
   release: makeFunctionReference<"mutation", { name: string; owner: string }, null>("keeperState:release"),
   wakes: makeFunctionReference<"query", Record<string, never>, Record<string, number>>("keeperState:wakes"),
 };
+
+const FULL_TICK_AFTER_S = 5 * 60;
 
 function convexStore(ctx: GenericActionCtx<GenericDataModel>): KeeperStore {
   const owner = randomUUID();
@@ -53,12 +55,25 @@ function convexStore(ctx: GenericActionCtx<GenericDataModel>): KeeperStore {
   };
 }
 
-async function run(ctx: GenericActionCtx<GenericDataModel>, mode: TickMode, extra: { force?: boolean; only?: number[] } = {}) {
+async function run(ctx: GenericActionCtx<GenericDataModel>, mode: TickMode | "heartbeat", extra: { force?: boolean; only?: number[] } = {}) {
   if (!process.env.KEEPER_PRIVATE_KEY) return { disabled: true };
   const cfg = loadConfig(process.env);
   const signer = loadSigner(process.env);
   const { client, wallet } = makeClients(cfg, signer);
-  const r = await runTick({ cfg, client, sender: new Sender(client, wallet, signer.address, cfg.dryRun), me: signer.address, store: convexStore(ctx) }, { mode, ...extra });
+  let actualMode: TickMode = mode === "heartbeat" ? "reveal" : mode;
+  if (mode === "heartbeat") {
+    const raw = await ctx.runQuery(ref.load, {});
+    let lastHealthAt = 0;
+    if (raw) {
+      try {
+        lastHealthAt = Number((JSON.parse(raw) as { lastHealth?: { at?: number } }).lastHealth?.at ?? 0);
+      } catch {
+        // A malformed state is safe to recover with a full pass.
+      }
+    }
+    actualMode = Math.floor(Date.now() / 1000) - lastHealthAt >= FULL_TICK_AFTER_S ? "full" : "reveal";
+  }
+  const r = await runTick({ cfg, client, sender: new Sender(client, wallet, signer.address, cfg.dryRun), me: signer.address, store: convexStore(ctx) }, { mode: actualMode, ...extra });
   // a summary only: counts and messages, never configuration
   return {
     ok: r.ok,
@@ -73,6 +88,7 @@ async function run(ctx: GenericActionCtx<GenericDataModel>, mode: TickMode, extr
 
 export const tick = internalActionGeneric({ args: {}, handler: (ctx) => run(ctx, "full") });
 export const reveal = internalActionGeneric({ args: {}, handler: (ctx) => run(ctx, "reveal") });
+export const heartbeat = internalActionGeneric({ args: {}, handler: (ctx) => run(ctx, "heartbeat") });
 export const reprice = internalActionGeneric({
   args: { force: v.optional(v.boolean()), machines: v.optional(v.array(v.number())) },
   handler: (ctx, { force, machines }) => run(ctx, "reprice", { force, only: machines }),

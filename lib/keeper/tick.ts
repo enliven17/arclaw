@@ -18,10 +18,10 @@ import { recentVrfActivity } from "./arclaw";
 import { errorLine, notifierOf, reconcileAlerts, type Notify } from "./alert";
 import type { KeeperConfig } from "./config";
 import { assessHealth } from "./health";
-import { probeVrf, retryOrReturn, reveal } from "./ops";
+import { probeVrf, retryOrReturn, reveal, revealable } from "./ops";
 import { reprice, type RepriceOutcome } from "./reprice";
 import { readDemand, type Demand } from "./demand";
-import { readMarkets, readOpenings, type MarketsView } from "./state";
+import { readMarkets, readOpenings, readRevealOpenings, type MarketsView } from "./state";
 import { utcDay, type HealthReport, type Issue, type KeeperEvent, type KeeperState, type KeeperStore } from "./store";
 import type { Sender } from "./tx";
 
@@ -66,6 +66,10 @@ function addSpend(state: KeeperState, sender: Sender, now: number) {
   sender.spentWei = 0n;
 }
 
+function freshWakes(wakes: Record<string, number>, state: KeeperState, cfg: KeeperConfig) {
+  return Object.entries(wakes).filter(([id, at]) => at > (state.wakesHandled[id] ?? 0) && Date.now() - at < cfg.thresholds.wakeWindowSec * 1000);
+}
+
 export type KeeperContext = { cfg: KeeperConfig; client: PublicClient; sender: Sender; me: Address; store: KeeperStore };
 
 export async function tick(ctx: KeeperContext, opts: TickOptions): Promise<TickResult> {
@@ -84,9 +88,37 @@ export async function tick(ctx: KeeperContext, opts: TickOptions): Promise<TickR
   const ev = (e: KeeperEvent[]) => result.events.push(...e);
   let stuck: string | null = null;
   try {
+    // Most heartbeat passes are idle. Read only the opening cursor and VRF coordinator until a wake needs the
+    // full globals/market snapshot, so a quiet deployment does not pay for the health/reprice read set every pass.
+    const wakeSnapshot = opts.mode === "reveal" ? await store.wakes() : null;
+    const wakeFresh = wakeSnapshot ? freshWakes(wakeSnapshot, state, cfg) : [];
+    const quick = opts.mode === "reveal" && !wakeFresh.length ? await readRevealOpenings(client, cfg, me, state) : null;
+    if (quick) {
+      let canSend = true;
+      const ready = quick.openings.some(revealable);
+      if (signs && ready) {
+        const u = await sender.unstick(wall(), state.stuckSince);
+        state.stuckSince = u.stuckSince;
+        if (!u.clear) {
+          canSend = false;
+          const stuck = u.note ?? "pending transaction";
+          ev([{ at: quick.now, kind: "stuck", level: "warn", message: stuck }]);
+        }
+      }
+      if (canSend && ready) {
+        const r = await reveal(cfg, sender, quick, quick.openings, state, deadline);
+        result.revealed = r.done;
+        ev(r.events);
+      }
+      addSpend(state, sender, quick.now);
+      state.lastTick = { at: quick.now, ok: true, summary: `reveal: ${result.revealed}` };
+      state.failures = 0;
+      return result;
+    }
+
     const open = await readOpenings(client, cfg, me, state);
     let canSend = true;
-    if (signs) {
+    if (signs && (opts.mode !== "reveal" || open.openings.some(revealable) || wakeFresh.length > 0)) {
       const u = await sender.unstick(wall(), state.stuckSince);
       state.stuckSince = u.stuckSince;
       if (!u.clear) {
@@ -102,9 +134,8 @@ export async function tick(ctx: KeeperContext, opts: TickOptions): Promise<TickR
       issues.push(...r.issues);
     }
     if (opts.mode === "reveal") {
-      // a visitor woke a machine: reprice it within this 10 s cycle if it is due, without waiting for the full tick
-      const wakes = await store.wakes();
-      const fresh = Object.entries(wakes).filter(([id, at]) => at > (state.wakesHandled[id] ?? 0) && Date.now() - at < cfg.thresholds.wakeWindowSec * 1000);
+      // A visitor woke a machine: reprice it in this heartbeat, without waiting for the next full tick.
+      const fresh = wakeFresh;
       if (canSend && fresh.length) {
         const ids = fresh.map(([id]) => Number(id));
         const markets = await readMarkets(client, cfg, open.g);

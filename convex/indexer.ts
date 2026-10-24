@@ -92,9 +92,10 @@ export const leaderboard = queryGeneric({
     // Public query: the page size is capped here, whatever the caller asks for.
     const limit = Math.min(Math.max(Math.floor(args.limit ?? 20), 1), 50);
     const players = await ctx.db.query("players").withIndex("by_total").order("desc").take(limit);
-    const biggest = await ctx.db.query("pulls").withIndex("by_value").order("desc").take(limit);
+    // The page renders eight biggest pulls and one winner per machine; do not send the unused tail over Convex.
+    const biggest = await ctx.db.query("pulls").withIndex("by_value").order("desc").take(Math.min(limit, 8));
     const byMachine: Record<number, unknown[]> = {};
-    for (const m of [1, 2, 3]) byMachine[m] = await ctx.db.query("pulls").withIndex("by_machine_value", (q) => q.eq("machineId", m)).order("desc").take(10);
+    for (const m of [1, 2, 3]) byMachine[m] = await ctx.db.query("pulls").withIndex("by_machine_value", (q) => q.eq("machineId", m)).order("desc").take(1);
     const updatedBlock = (await ctx.db.query("meta").withIndex("by_key", (q) => q.eq("key", CURSOR)).unique())?.block ?? 0;
     return { players: players.filter((p) => p.packs > 0), biggest, byMachine, updatedBlock };
   },

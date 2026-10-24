@@ -8,7 +8,8 @@
  * so a tick never rereads the whole history.
  */
 import { getAddress, type Address, type PublicClient } from "viem";
-import { STATUS, decimalsOf, priceOf, readGlobals, readMachine, readOpening, readRequest, type Globals, type MachineState, type Opening, type PriceRead, type RequestState } from "./arclaw";
+import { arclawAbi } from "../abi";
+import { MULTICALL3_ADDRESS, STATUS, decimalsOf, priceOf, readGlobals, readMachine, readOpening, readRequest, type Globals, type MachineState, type Opening, type PriceRead, type RequestState } from "./arclaw";
 import { tokensOf, type KeeperConfig } from "./config";
 import { usMarket, type MarketClock } from "./market";
 import type { KeeperState } from "./store";
@@ -33,6 +34,9 @@ export async function mapLimit<T, R>(items: readonly T[], limit: number, fn: (x:
 export type OpenOpening = Opening & { req: RequestState };
 export type OpeningsView = { g: Globals; market: MarketClock; keeperBalance: bigint; openings: OpenOpening[]; vrfImpl: Address | null };
 
+/** The small chain snapshot needed by the frequent reveal heartbeat. */
+export type RevealView = { block: bigint; now: number; isKeeper: boolean; vrfCoordinator: Address; openings: OpenOpening[] };
+
 /** The EIP-1967 implementation slot of a proxy, or null when it cannot be read. */
 const IMPL_SLOT = "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc";
 async function implementationOf(c: PublicClient, proxy: Address): Promise<Address | null> {
@@ -55,6 +59,37 @@ export async function readOpenings(c: PublicClient, cfg: KeeperConfig, me: Addre
   }));
   st.scan = { next: String(end > next ? end : next), open: open.map((o) => String(o.id)) };
   return { g, market: usMarket(g.now, cfg.market), keeperBalance, openings: withReq.sort((a, b) => (a.id < b.id ? -1 : 1)), vrfImpl };
+}
+
+/**
+ * Cheap path for the reveal heartbeat. It avoids the full globals snapshot, balance and proxy implementation
+ * checks until a full tick or a wake actually needs them. On an idle deployment this is one block read plus one
+ * multicall instead of the keeper's full contract snapshot on every heartbeat.
+ */
+export async function readRevealOpenings(c: PublicClient, cfg: KeeperConfig, me: Address, st: KeeperState): Promise<RevealView> {
+  const d = cfg.deployment;
+  const block = await c.getBlock();
+  const [nextOpeningId, isKeeper, vrfCoordinator] = (await c.multicall({
+    multicallAddress: MULTICALL3_ADDRESS,
+    blockNumber: block.number,
+    allowFailure: false,
+    contracts: [
+      { address: d.arclaw, abi: arclawAbi, functionName: "nextOpeningId" },
+      { address: d.arclaw, abi: arclawAbi, functionName: "keepers", args: [me] },
+      { address: d.arclaw, abi: arclawAbi, functionName: "vrfCoordinator" },
+    ] as never,
+  })) as [bigint, boolean, Address];
+  const next = BigInt(st.scan.next);
+  const end = nextOpeningId < next + SCAN_PER_TICK ? nextOpeningId : next + SCAN_PER_TICK;
+  const ids = [...new Set([...st.scan.open.map(BigInt), ...Array.from({ length: Number(end > next ? end - next : 0n) }, (_, k) => next + BigInt(k))].map(String))].map(BigInt);
+  const read = await mapLimit(ids, 8, (id) => readOpening(c, d, id));
+  const open = read.filter((o) => o.status === STATUS.Pending || o.status === STATUS.Fulfilled);
+  const withReq = await mapLimit(open, 8, async (o) => ({
+    ...o,
+    req: o.status === STATUS.Pending ? await readRequest(c, vrfCoordinator, o.requestId, Number(block.timestamp)) : { fulfilled: true, refunded: false, deadline: 0, expired: false, readable: true },
+  }));
+  st.scan = { next: String(end > next ? end : next), open: open.map((o) => String(o.id)) };
+  return { block: block.number, now: Number(block.timestamp), isKeeper, vrfCoordinator, openings: withReq.sort((a, b) => (a.id < b.id ? -1 : 1)) };
 }
 
 export type MachineView = MachineState & {

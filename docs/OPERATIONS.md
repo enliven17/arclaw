@@ -11,16 +11,16 @@ only when someone can use what it pays for.
 
 | Job | When | Code |
 |---|---|---|
-| Reveal fulfilled openings | every 10 s (Convex) or every 5 s (`keeper watch`) | `lib/keeper/ops.ts` reveal |
-| Serve wake requests | every 10 s: a machine a visitor woke is repriced at once if it is due | `lib/keeper/tick.ts` |
-| Retry expired VRF requests | every minute, once per opening (Arclaw allows one), logged with openingRetries | `lib/keeper/ops.ts` retryOrReturn |
+| Reveal fulfilled openings | every 30 s (Convex) or every 5 s (`keeper watch`) | `lib/keeper/ops.ts` reveal |
+| Serve wake requests | every 30 s: a machine a visitor woke is repriced at once if it is due | `lib/keeper/tick.ts` |
+| Retry expired VRF requests | every five minutes in Convex, once per opening (Arclaw allows one), logged with openingRetries | `lib/keeper/ops.ts` retryOrReturn |
 | Probe a failing VRF | `pauseIfVrfDown` only when opens keep failing, at most every 10 minutes | `lib/keeper/ops.ts` probeVrf |
-| Reprice tables | every minute it checks the policy below | `lib/keeper/reprice.ts`, `lib/keeper/demand.ts` |
-| Health and alerts | every minute | `lib/keeper/health.ts`, `lib/keeper/alert.ts` |
+| Reprice tables | every five minutes it checks the policy below | `lib/keeper/reprice.ts`, `lib/keeper/demand.ts` |
+| Health and alerts | every five minutes | `lib/keeper/health.ts`, `lib/keeper/alert.ts` |
 
 It runs two ways, same code:
 
-- **Convex crons** (production): `convex/keeperRun.ts` (`"use node"` actions `reveal`, `tick`, `reprice`), scheduled
+- **Convex crons** (production): `convex/keeperRun.ts` (`"use node"` actions `heartbeat`, `reveal`, `tick`, `reprice`), scheduled
   in `convex/crons.ts`; storage in `convex/keeperState.ts`; the public `keeper:wake` and the admin-only `keeper:status` in
   `convex/keeper.ts` (a `"use node"` file can only hold actions). The actions do nothing until `KEEPER_PRIVATE_KEY` is
   set in the Convex env. Manual reprice: `npx convex run keeperRun:reprice '{"force":true}'`.
@@ -28,7 +28,7 @@ It runs two ways, same code:
 
 ```
 pnpm keeper tick                    one full pass: reveal, retry, probe, reprice if due, health, alerts
-pnpm keeper tick --reveal-only      reveals and wake requests only (what the 10 s cron runs)
+pnpm keeper tick --reveal-only      reveals and wake requests only (what the 30 s heartbeat runs)
 pnpm keeper reprice                 reprice the machines that are due under the policy
 pnpm keeper reprice --force         reprice every machine now: ignores demand and the daily cap, still fails closed on bad prices
 pnpm keeper reprice --force --machine 3
@@ -138,13 +138,13 @@ A machine nobody used for a day sleeps with a stale table. When a visitor opens 
    log, and takes `ADMIN_QUERY_SECRET` (Convex and Vercel env): only `/api/admin` reads it.
 2. If it is not fresh, the app calls `keeper:wake({ machineId })` (public mutation; only ids from `lib/machines.json`;
    one per machine per 60 s, a repeat answers `{ accepted: false }`) and shows "getting the machine ready".
-3. The 10 s cron sees the new wake, reprices the machine if it is due (stale, aged or moved) and saves its new state;
-   `keeper:status` then reports it fresh, typically 10 to 20 seconds after the first visitor.
+3. The 30 s heartbeat sees the new wake, reprices the machine if it is due (stale, aged or moved) and saves its new state;
+   `keeper:status` then reports it fresh, typically within a minute after the first visitor.
 4. The wake keeps counting as demand for 60 minutes, so the machine stays fresh while people are looking at it.
 
 A wake on a fresh machine costs nothing (no reprice is due). A wake on a switched-off machine, while the contract is
 paused, or while the miss breaker has closed opens, does nothing; `keeper:status` then reports `openable: false`
-and `opensClosedUntil` (the next 00:00 UTC). Convex caches queries, so `fresh` is as of the keeper's last state write (every 10 s or minute);
+and `opensClosedUntil` (the next 00:00 UTC). Convex caches queries, so `fresh` is as of the keeper's last state write (every 30 s or five minutes);
 `staleAt` lets the UI judge between writes.
 
 ## Weekends and market closed
