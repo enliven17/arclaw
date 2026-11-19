@@ -8,7 +8,7 @@ Rebuild the images with `node brand/social/render.mjs`. They draw from `lib/bran
 | `profile-claw.png` | 1000 x 1000 | Alternate avatar for small sizes or launch periods |
 | `banner.png` | 1500 x 500 | X header, Farcaster, Discord banner. The avatar covers the bottom left corner on X, so nothing important lives there. |
 | `grab.png` | 1600 x 900 | X post: the Single machine as the site draws it, "Come grab a box." Rebuild with `node brand/social/grab.mjs` (captures the live machine). |
-| `stack.png` | 1600 x 900 | X post: built on Arc (@arc), Astock (@TryArcStocks) and D20DAO (@d20dao), and the three steps of a play. Marks come from `components/landing/BuiltOn.tsx`. Rebuild with `node brand/social/stack.mjs`. |
+| `stack.png` | 1600 x 900 | X post: built on Solana, MagicBlock, Circle and xStocks, and the three steps of a play. Marks come from `components/landing/BuiltOn.tsx`. Rebuild with `node brand/social/stack.mjs`. |
 
 ## Name and handle
 
@@ -24,24 +24,24 @@ Pick one per platform. No em dashes, no dot separators.
 - Claw machines that pay out in stocks.
 - One USDC, one claw, three stock cards.
 - The claw always wins. So do you, at least half.
-- Every box opens into real tokenized stocks on Arc.
+- Every box opens into test stock tokens on Solana devnet.
 
 ## Bios
 
 **X (160 max)**
-> Claw machines on Arc. Pay USDC, grab a box, rip a pack of three stock cards. NVDA, TSLA, AAPL and more, straight to your wallet.
+> Claw machines on Solana devnet. Pay USDC, grab a box, rip a pack of three stock cards. NVDA, TSLA, AAPL and more, straight to your wallet.
 
 **X, short**
-> Grab a box. Pull real stocks. Claw machines on Arc.
+> Grab a box. Pull real stocks. Claw machines on Solana devnet.
 
 **Farcaster**
-> Claw machines on Arc. Every play wins a box, every box opens into three tokenized stock cards. Odds are on-chain and every box returns at least half.
+> Claw machines on Solana devnet. Every play wins a box, every box opens into three tokenized stock cards. Odds are on-chain and every box returns at least half.
 
 **Telegram / Discord about**
-> arclaw is a claw machine arcade on Arc. Pick a machine (1, 5 or 10 USDC), the claw grabs a sealed box, and the box opens into a pack of three cards. Each card is a real tokenized stock, paid to your wallet. Randomness comes from VRF, the odds table lives on-chain, and every box pays back at least 50% of what you played. Gift boxes to friends with a link.
+> arclaw is a claw machine arcade on Solana devnet. Pick a machine (1, 5 or 10 USDC), the claw grabs a sealed box, and the box opens into a pack of three cards. Each card is a real tokenized stock, paid to your wallet. Randomness comes from MagicBlock VRF, the odds table lives on-chain, and every box pays back at least 50% of what you played. Gift boxes to friends with a link.
 
 **Pinned post**
-> arclaw is live on Arc.
+> arclaw is live on Solana devnet.
 >
 > Three machines: 1, 5 and 10 USDC.
 > Every play wins a box. Every box is a pack of three stock cards.

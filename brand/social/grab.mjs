@@ -40,7 +40,7 @@ html, body { width: ${W}px; height: ${H}px; background: ${INK}; color: ${CREAM};
 <div style="position:absolute;left:110px;top:96px;width:200px">${logoSvg.lockup("dark").replace("<svg ", '<svg width="200" ')}</div>
 <div style="position:absolute;left:110px;top:270px;width:760px">
   <h1 style="font-weight:500;font-size:112px;line-height:0.98;letter-spacing:-0.045em">Come grab<br>a box.</h1>
-  <p style="margin-top:40px;font-size:34px;line-height:1.3;letter-spacing:-0.01em">arclaw is live on Arc mainnet.</p>
+  <p style="margin-top:40px;font-size:34px;line-height:1.3;letter-spacing:-0.01em">arclaw is live on Solana devnet.</p>
   <p style="margin-top:14px;font-size:28px;line-height:1.4;color:${MUTED}"><span class="mono" style="color:${CREAM}">1 USDC</span> a play. Every play wins a pack of real stocks.</p>
 </div>
 <div class="mono" style="position:absolute;left:110px;bottom:92px;font-size:28px">arclaw.app</div>

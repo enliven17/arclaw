@@ -1,5 +1,5 @@
 /**
- * X post image: what arclaw is built on (Arc, Astock, D20DAO) and how one play runs through them. 1600 x 900.
+ * X post image: Solana, MagicBlock, Circle and xStocks, and how a play runs. 1600 x 900.
  * The partner marks are read from components/landing/BuiltOn.tsx, so the post and the site never drift.
  * Run: `node brand/social/stack.mjs` → brand/social/stack.png
  */
@@ -15,18 +15,19 @@ const PANEL = "#141417";
 const LINE = "rgba(236,230,218,0.08)";
 const font = (p) => `data:font/woff2;base64,${readFileSync(join(ROOT, "node_modules/geist/dist/fonts", p)).toString("base64")}`;
 
-// Arc, Astock, D20 marks, in BuiltOn.tsx order, drawn in cream like on the site.
+// The Solana and Circle marks, drawn in cream like on the site.
 const marks = [...readFileSync(join(ROOT, "components/landing/BuiltOn.tsx"), "utf8").matchAll(/<svg viewBox="([^"]+)"[^>]*>([\s\S]*?)<\/svg>/g)].map(
   ([, box, inner]) => `<svg viewBox="${box}" height="64" fill="${CREAM}">${inner.replace(/\s*\/>/g, "/>")}</svg>`,
 );
-if (marks.length !== 3) throw new Error(`expected 3 partner marks in BuiltOn.tsx, found ${marks.length}`);
+if (marks.length !== 2) throw new Error(`expected 2 partner marks in BuiltOn.tsx, found ${marks.length}`);
 
 const PARTNERS = [
-  { name: "Arc", handle: "@arc", role: "The chain", line: "Circle's Layer-1, where USDC is the gas. Every play, box and card is on chain." },
-  { name: "Astock", handle: "@TryArcStocks", role: "The stocks", line: "Every card is a tokenized stock, bought on the Astock desk and sent to your wallet." },
-  { name: "D20DAO", handle: "@d20dao", role: "The draw", line: "Verifiable randomness on Arc. Anyone can replay the proof behind a box." },
+  { name: "Solana", handle: "solana.com", role: "The chain", mark: marks[0], line: "Every play, box and card settles on Solana. Network fees are paid in SOL." },
+  { name: "MagicBlock", handle: "magicblock.gg", role: "The claw and draw", line: "Gasless claw moves on ephemeral rollups. Verifiable pack draws with MagicBlock VRF." },
+  { name: "Circle", handle: "circle.com", role: "The money", mark: marks[1], line: "Pay Circle USDC for every box. Devnet uses faucet USDC with no monetary value." },
+  { name: "xStocks", handle: "xstocks.com", role: "Future mainnet prizes", line: "Tokenized equities on Solana. The current devnet pays test stock tokens." },
 ];
-const STEPS = ["Pay USDC on Arc", "D20 draws your box", "Astock stocks land in your wallet"];
+const STEPS = ["Pay Circle USDC", "Steer and draw on MagicBlock", "Settle on Solana"];
 
 const W = 1600, H = 900;
 const html = `<!doctype html><html><head><style>
@@ -39,12 +40,12 @@ html, body { width: ${W}px; height: ${H}px; background: ${INK}; color: ${CREAM};
 </style></head><body>
 <div style="position:absolute;left:100px;top:84px;width:170px">${logoSvg.lockup("dark").replace("<svg ", '<svg width="170" ')}</div>
 <h1 style="position:absolute;left:100px;top:170px;font-weight:500;font-size:84px;line-height:1;letter-spacing:-0.04em">Built on.</h1>
-<div style="position:absolute;left:100px;right:100px;top:310px;display:grid;grid-template-columns:repeat(3,1fr);gap:28px">
+<div style="position:absolute;left:100px;right:100px;top:310px;display:grid;grid-template-columns:repeat(4,1fr);gap:20px">
   ${PARTNERS.map((p, i) => `
   <div style="background:${PANEL};border:1px solid ${LINE};border-radius:20px;padding:34px 36px;height:400px;display:flex;flex-direction:column">
     <div style="font-size:20px;color:${MUTED}">${p.role}</div>
-    <div style="margin-top:22px;display:flex;align-items:center;gap:20px">${marks[i]}<span style="font-size:58px;letter-spacing:-0.04em">${p.name}</span></div>
-    <div style="margin-top:auto;font-size:22px;line-height:1.45;color:${MUTED}">${p.line}</div>
+    <div style="margin-top:22px;display:flex;align-items:center;gap:10px">${p.mark ? p.mark.replace('height="64"', 'height="28"') : ""}<span style="font-size:38px;letter-spacing:-0.04em">${p.name}</span></div>
+    <div style="margin-top:auto;font-size:20px;line-height:1.45;color:${MUTED}">${p.line}</div>
     <div class="mono" style="margin-top:18px;font-size:20px">${p.handle}</div>
   </div>`).join("")}
 </div>

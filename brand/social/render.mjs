@@ -60,7 +60,7 @@ const banner = (w, h) =>
     h,
     `<div style="position:absolute;left:96px;top:84px">${logoSvg.lockup("dark").replace("<svg ", '<svg height="40" ')}</div>
      <div style="position:absolute;left:96px;top:176px;font-size:76px;font-weight:500;letter-spacing:-0.035em;line-height:1">Grab a box.<br/>Pull real stocks.</div>
-     <div style="position:absolute;left:96px;top:356px;font-size:24px;color:${MUTED}">Claw machines on Arc. Every box pays out in tokenized stocks.</div>
+     <div style="position:absolute;left:96px;top:356px;font-size:24px;color:${MUTED}">Claw machines on Solana. Powered by MagicBlock.</div>
      ${card(CARDS[0], -8, w - 700, 110)}${card(CARDS[2], 8, w - 270, 110)}${card(CARDS[1], 0, w - 485, 86)}`,
   );
 

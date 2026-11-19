@@ -24,5 +24,11 @@ live devnet round have passed; these checks are not an independent audit. Rule f
 
 ## Open items
 
+Deployment validation on 19 November 2026: 26 TypeScript checks and six Rust unit tests pass; a live devnet round paid
+all three test stock cards and a timed-out round returned its box. Next.js is pinned to 16.4.6. Native bigint conversion
+has been replaced with a small JavaScript compatibility package, with SPL mint and integer-boundary tests.
+`pnpm audit --prod` reports no critical or high findings and three moderate findings in the transitive `stream-json`
+dependency through `jayson`. These checks do not replace a program audit.
+
 See "Trust model and what is not ported yet" in [`SOLANA.md`](SOLANA.md): stock in the vault is not reserved, card
 values are not checked against a live oracle, there is no refund path for boxes of a machine switched off for good.
