@@ -1,6 +1,52 @@
 {
   "programId": "DJMcHeBR4sSN2e7kx56fennhEdQpbAV7nmxLTAYS7WeW",
   "usdcMint": "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
-  "deploySlot": 0,
-  "stocks": {}
+  "deploySlot": 524079653,
+  "stocks": {
+    "NVDA": {
+      "mint": "B5xAoMV2oSRSXWa7RhPdZTbwV2Zde6yyWN1kgKRqPrzv",
+      "decimals": 8,
+      "program": "token"
+    },
+    "AAPL": {
+      "mint": "2rcBtJLBmTVLzTUSahRsEweUyLcyj2GDHh8Vu62pY9PT",
+      "decimals": 8,
+      "program": "token"
+    },
+    "TSLA": {
+      "mint": "GH7bYC6QifCLyZMZ2JcgPdWz2gMm95MM4GevxMzdjDub",
+      "decimals": 8,
+      "program": "token"
+    },
+    "MSFT": {
+      "mint": "HWMK9WZ5dA3YDn4LkErh7ZoypsWpaqJyBRs2QEWTuS1u",
+      "decimals": 8,
+      "program": "token"
+    },
+    "AMZN": {
+      "mint": "4DUzMqaJqbgsJTP5iZwaVnnmdALQ2thpsH93C65eyJjc",
+      "decimals": 8,
+      "program": "token"
+    },
+    "GOOGL": {
+      "mint": "5S9QCuZqRx3McSuGSkfq98AK3eCxSVkexRVTmProipBo",
+      "decimals": 8,
+      "program": "token"
+    },
+    "META": {
+      "mint": "2JaRNqmf5zXGkNQxLKoFbc2yvbeafCDqg4HTWgo3wHaD",
+      "decimals": 8,
+      "program": "token"
+    },
+    "SPY": {
+      "mint": "ByAmuybeY2n8FECz5NNCfQ8GvPkZsBnvZWP76v6EcsD9",
+      "decimals": 8,
+      "program": "token"
+    },
+    "QQQ": {
+      "mint": "HKbRKSBpQ8dvUv1332ezNygtY627g1sZwrsHgKUwFDhB",
+      "decimals": 8,
+      "program": "token"
+    }
+  }
 }
