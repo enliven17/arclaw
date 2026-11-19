@@ -133,7 +133,7 @@ async function main() {
   console.log("done");
 }
 
-main().catch((e: unknown) => {
+main().then(() => process.exit(0)).catch((e: unknown) => {
   console.error(e);
   process.exit(1);
 });
