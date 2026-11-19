@@ -11,7 +11,8 @@
     "cabinet": "tsx scripts/assets/cabinet-bake.tsx",
     "brand": "node brand/render.mjs",
     "shots": "node scripts/dev/shots.mjs",
-    "solana:setup": "tsx scripts/solana/setup.ts",
+    "solana:setup": "tsx --env-file=.env.local scripts/solana/setup.ts",
+    "solana:smoke": "tsx --env-file=.env.local scripts/solana/smoke.ts",
     "test": "tsx --test lib/**/*.test.ts"
   },
   "packageManager": "pnpm@10.33.0",

@@ -1,5 +1,40 @@
 # Deploy
 
+## Active devnet (2026-11-19)
+
+The `magicblock` branch runs on Solana devnet. Program and mint addresses are recorded in
+[`lib/deployments/solana-devnet.json`](../lib/deployments/solana-devnet.json); the matching packs are in
+[`lib/machines.resolved.json`](../lib/machines.resolved.json).
+
+| Component | Deployment |
+|---|---|
+| Solana program | `DJMcHeBR4sSN2e7kx56fennhEdQpbAV7nmxLTAYS7WeW` |
+| Config / stock vault authority | `HaXkdpWDbz8oSiCTaSKTzB1TVEVgNWThCY5TUudi8Jos` |
+| MagicBlock rollup | `https://devnet-as.magicblock.app`, default Asia validator |
+| USDC | Circle devnet mint `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU` |
+| Convex project | `kiro2:arclaw-solana` (new account, no imported data) |
+| Convex production | `https://blissful-frog-587.eu-west-1.convex.cloud` |
+| Convex development | `https://perceptive-turtle-543.eu-west-1.convex.cloud` |
+| Web | `https://arclaw.app` |
+
+All three machines have active six-outcome tables. Snapshot RTP: Single 75.01%, Stack 80.01%, Vault 85.01%.
+Each of the nine test stock vaults was funded with 100,000 test shares. Devnet tokens have no monetary value.
+
+Validated on devnet: pay Circle USDC, start and delegate a round, move the claw, receive MagicBlock VRF, commit and
+undelegate, settle all three stock cards, and close the round. A timed-out round was also voided and its box returned.
+Successful settlement:
+[`GqbaYxAy...N25f8G`](https://explorer.solana.com/tx/GqbaYxAyG3u4hy6v6HAYbv2cEJcMNDA74GJ1KjDXGYybcesJCwShK4piLjscWSQ1T7wDwhLEuMq4Npe9nN25f8G?cluster=devnet).
+The new Convex indexer records the same 0.8 USDC test pack. History reads accept Solana transaction versions through v1.
+
+Copy `.env.example` to `.env.local`, set `SOLANA_KEYPAIR` and `NEXT_PUBLIC_SOLANA_RPC_URL`, then use
+`pnpm solana:setup` or `pnpm solana:smoke`. Both scripts load `.env.local`. The smoke test spends 1 devnet USDC if no
+Single box is already held, and a little devnet SOL. Program / buffer keypairs stay outside the repository.
+
+Vercel production uses the production Convex URL and `NEXT_PUBLIC_SOLANA_NETWORK=devnet`. Both Convex deployments and
+Vercel use a configured Helius devnet RPC; its API key is kept in environment variables. The obsolete Arc, Privy and
+WalletConnect production settings have been removed. `.vercelignore` excludes private env files, program builds,
+keypairs and the legacy contracts while retaining `lib/brand` and `public/brand`.
+
 ## Program (devnet)
 
 The full runbook is in [`solana/README.md`](../solana/README.md): `anchor keys sync`, `anchor build`,
