@@ -755,10 +755,6 @@
       "accounts": [
         {
           "name": "vrf_program_identity",
-          "docs": [
-            "Scoped VRF identity PDA, bound to this program. Its presence as a signer proves",
-            "the callback was issued by the VRF program for this program."
-          ],
           "signer": true
         },
         {
@@ -784,7 +780,7 @@
     {
       "name": "finish_round",
       "docs": [
-        "Ends the round on the rollup and sends it back to Solana. The driver may end an Armed round (the box comes",
+        "Ends the round on the rollup and sends it back to Solana. The driver (or the player) may end an Armed round (the box comes",
         "back) and a draw that never landed after VRF_TIMEOUT_S; anyone may send home a Drawn or Void round, so a",
         "keeper can finish what a closed tab left behind."
       ],

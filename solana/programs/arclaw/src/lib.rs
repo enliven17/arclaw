@@ -39,6 +39,9 @@ declare_id!("DJMcHeBR4sSN2e7kx56fennhEdQpbAV7nmxLTAYS7WeW");
 
 const SLOT_HASHES_ID: Pubkey = pubkey!("SysvarS1otHashes111111111111111111111111111");
 const PROGRAM_IDENTITY: Pubkey = vrf_sdk::consts::program_identity_pubkey(&crate::ID);
+// Force PDA derivation at compile time. Evaluating the callback macro's const fn in an account constraint can
+// otherwise exhaust the VRF fulfillment's 300k compute budget before the draw handler runs.
+const VRF_CALLBACK_IDENTITY: Pubkey = Pubkey::new_from_array(vrf_sdk::consts::scoped_vrf_identity_const(&crate::ID).0);
 
 #[ephemeral]
 #[program]
@@ -791,6 +794,8 @@ pub struct DropClaw<'info> {
 #[vrf_callback]
 #[derive(Accounts)]
 pub struct RevealRound<'info> {
+    #[account(address = VRF_CALLBACK_IDENTITY)]
+    pub vrf_program_identity: Signer<'info>,
     #[account(mut, seeds = [ROUND_SEED, round.player.as_ref(), &round.round_id.to_le_bytes()], bump = round.bump)]
     pub round: Account<'info, Round>,
     #[account(seeds = [MACHINE_SEED, &[round.machine_id]], bump = machine.bump)]
