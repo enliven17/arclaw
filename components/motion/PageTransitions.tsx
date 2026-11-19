@@ -32,6 +32,7 @@ export function ClawLink({ href, onClick, children, ...rest }: ComponentProps<ty
   return (
     <Link
       href={href}
+      prefetch={false}
       {...rest}
       onClick={(e) => {
         onClick?.(e);
