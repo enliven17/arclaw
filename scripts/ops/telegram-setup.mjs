@@ -30,7 +30,7 @@ await call("setMyCommands", {
     { command: "start", description: "The intro" },
   ],
 });
-await call("setMyShortDescription", { short_description: "Claw machines on Arc. Every box opens into three tokenized stock cards." });
+await call("setMyShortDescription", { short_description: "Claw machines on Solana with MagicBlock. Every box opens into three stock cards. Devnet uses test tokens." });
 await call("setMyDescription", {
   description:
     "Grab a box. Pull real stocks.\n\nPick a machine (1, 5 or 10 USDC), the claw grabs a sealed box, and it opens into a pack of three tokenized stock cards paid to your wallet. Every box returns at least half.",

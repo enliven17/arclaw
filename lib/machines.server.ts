@@ -17,7 +17,7 @@ const isObj = (v: unknown): v is Loose => typeof v === "object" && v !== null;
 
 function cardOf(c: unknown): PullCard | null {
   if (!isObj(c)) return null;
-  const ticker = String(c.ticker ?? c.symbol ?? "").toUpperCase().replace(/\.ARC$/, "");
+  const ticker = String(c.ticker ?? c.symbol ?? "").toUpperCase();
   // USDC value only: `amount` in the resolved file is raw token units, not dollars.
   const amount = Number(c.valueUsdc ?? c.amountUsdc ?? c.usdc);
   if (!/^[A-Z]{1,6}$/.test(ticker) || !Number.isFinite(amount) || amount < 0) return null;
@@ -25,10 +25,11 @@ function cardOf(c: unknown): PullCard | null {
 }
 
 export function withResolved(): Machine[] {
-  const file = join(process.cwd(), SOLANA.network === "mainnet" ? "lib/machines.resolved.mainnet.json" : "lib/machines.resolved.json");
+  const file = join(process.cwd(), "lib", SOLANA.network === "mainnet" ? "machines.resolved.mainnet.json" : "machines.resolved.json");
   if (!existsSync(file)) return [...MACHINES];
   try {
     const json: unknown = JSON.parse(readFileSync(file, "utf8"));
+    if (!isObj(json) || json.network !== SOLANA.network || json.programId !== SOLANA.deployment?.programId) return [...MACHINES];
     const list = isObj(json) && Array.isArray(json.machines) ? json.machines : [];
     return MACHINES.map((m) => {
       const r = list.find((x): x is Loose => isObj(x) && Number(x.id) === m.id);

@@ -2,7 +2,7 @@
 
 /**
  * The app's frame: a compact fixed header (logo, nav, sound, wallet), the connect sheet, and a quiet footer with
- * the legal links. Wallets (ConnectKit) live here, so the marketing pages never load them.
+ * the legal links. Solana wallets live here, so the marketing pages never load them.
  */
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -38,7 +38,7 @@ function Header() {
                 const on = path === n.href || path.startsWith(`${n.href}/`);
                 return (
                   <li key={n.href}>
-                    <Link href={n.href} aria-current={on ? "page" : undefined} className={cn("rounded-[10px] px-3 py-2 text-[14px] transition-colors", on ? "text-cream" : "text-muted hover:text-cream")}>
+                    <Link href={n.href} prefetch={false} aria-current={on ? "page" : undefined} className={cn("rounded-[10px] px-3 py-2 text-[14px] transition-colors", on ? "text-cream" : "text-muted hover:text-cream")}>
                       {n.label}
                     </Link>
                   </li>
@@ -60,7 +60,7 @@ function Header() {
             const on = path === n.href || path.startsWith(`${n.href}/`);
             return (
               <li key={n.href}>
-                <Link href={n.href} aria-current={on ? "page" : undefined} className={cn("block py-2.5 text-center text-[13px]", on ? "text-cream" : "text-muted")}>
+                <Link href={n.href} prefetch={false} aria-current={on ? "page" : undefined} className={cn("block py-2.5 text-center text-[13px]", on ? "text-cream" : "text-muted")}>
                   {n.label}
                 </Link>
               </li>
@@ -105,6 +105,15 @@ export function AppShell({ children }: { children: ReactNode }) {
       <AgeGate />
       <Header />
       <main id="main" className="app-enter min-h-dvh pt-[96px] md:pt-14">
+        {SOLANA.network === "devnet" ? (
+          <aside className="border-b border-line py-3 text-[13px] text-muted" aria-label="Test network">
+            <div className="wrap flex flex-wrap items-center gap-x-5 gap-y-2">
+              <p>Solana devnet. Test USDC and test stock tokens have no monetary value.</p>
+              <a href="https://faucet.circle.com" target="_blank" rel="noopener noreferrer" className="underline underline-offset-4 hover:text-cream">Get devnet USDC</a>
+              <a href="https://faucet.solana.com" target="_blank" rel="noopener noreferrer" className="underline underline-offset-4 hover:text-cream">Get devnet SOL</a>
+            </div>
+          </aside>
+        ) : null}
         {children}
       </main>
       <Footer />

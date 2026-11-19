@@ -67,8 +67,8 @@ export function Footer({ art, machines }: { art: Record<Variant, ClawArt>; machi
         </div>
         <div className="wrap pb-10">
           <p className="max-w-[60em] text-[13px] leading-relaxed text-muted">
-            Built on Arc. Prizes are Astock tokenized stocks held in your own wallet, and they can lose value. Nothing here is
-            investment advice. For players 18 and over.
+            Built on Solana with MagicBlock. Devnet prizes are test stock tokens with no monetary value. Mainnet tokenized
+            stocks can lose value. Nothing here is investment advice. For players 18 and over.
           </p>
           <p className="mt-3 flex gap-5 text-[13px] text-muted">
             <a className="underline-offset-4 transition-colors hover:text-cream hover:underline" href="/disclaimer">

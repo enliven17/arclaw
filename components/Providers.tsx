@@ -2,7 +2,7 @@
 
 /**
  * App-wide client providers: smooth scroll, the cursor, the splash, sound and Vercel Analytics. Analytics gets the path
- * only: a claim link carries its private key after the #, and a share link its signed fields after the ?. Wallets (ConnectKit) mount in the app
+ * only: a claim link carries its private key after the #, and a share link its signed fields after the ?. Solana wallets mount in the app
  * shell only (components/app/AppShell.tsx), so the marketing pages never load them.
  */
 import { useEffect, type ReactNode } from "react";
