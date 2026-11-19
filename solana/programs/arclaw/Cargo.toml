@@ -1,0 +1,28 @@
+[package]
+name = "arclaw"
+version = "0.1.0"
+description = "arclaw: claw machines that pay sealed packs of tokenized stock, on Solana with MagicBlock"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "arclaw"
+
+[features]
+default = []
+cpi = ["no-entrypoint"]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
+anchor-debug = []
+custom-heap = []
+custom-panic = []
+
+[dependencies]
+anchor-lang = { version = "1.2.2", features = ["init-if-needed"] }
+anchor-spl = { version = "1.2.2", features = ["token", "token_2022", "associated_token"] }
+ephemeral-rollups-sdk = { version = "0.20.0", features = ["anchor", "vrf"] }
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_os, values("solana"))'] }
