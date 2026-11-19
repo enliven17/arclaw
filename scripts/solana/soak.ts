@@ -47,7 +47,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const clean = (e: unknown) => String(e instanceof Error ? e.message : e).replace(/(?:https?|wss?):\/\/\S+/g, "[rpc]").slice(0, 500);
 type Sale = { items: { mint: string; amount: string; decimals: number; value: string }[]; value: string; signature?: string; lastValidBlockHeight?: number; raw?: string };
 type Progress = { completed: number; attempts: number; round?: { address: string; id: string; machineId: number; settleSignature?: string }; sale?: Sale; error?: string; voids: number };
-type State = { version: number; program: string; wallets: string[]; machines: number[]; passes: number; startedAt: string; rows: Record<string, Progress>; initial?: Inventory; finishedAt?: string };
+type State = { version: number; program: string; wallets: string[]; machines: number[]; passes: number; startedAt: string; rows: Record<string, Progress>; initial?: Inventory; finishedAt?: string; recycle?: { each: string; paid: number; receipt?: Sale } };
 type Inventory = { wallets: { wallet: string; usdc: string; lamports: number; stocks: Record<string, string> }[]; treasury: string; adminUsdc: string; adminLamports: number };
 const statePath = join(root, "state.json");
 const identities = wallets.map((w) => w.publicKey.toBase58());
@@ -194,13 +194,22 @@ async function sellStocks(wallet: Keypair, progress: Progress) {
 }
 /** Recycle this run's unreserved box revenue into reusable wallet USDC. Initial treasury funds stay in place. */
 async function recycleUsdc() {
-  const cfg = decodeConfig((await conn.getAccountInfo(configPda()))!.data);
-  const free = (await amount(treasuryAta())) - cfg.sealedReserve - cfg.owedTotal - BigInt(state.initial!.treasury);
-  const each = free / BigInt(wallets.length);
-  if (each <= 0n) return;
-  for (let i = 0; i < wallets.length; i += 8) {
+  if (!state.recycle) {
+    const cfg = decodeConfig((await conn.getAccountInfo(configPda()))!.data);
+    const free = (await amount(treasuryAta())) - cfg.sealedReserve - cfg.owedTotal - BigInt(state.initial!.treasury);
+    const each = free / BigInt(wallets.length);
+    if (each <= 0n) return;
+    state.recycle = { each: `${each}`, paid: 0 }; save();
+  }
+  const plan = state.recycle, each = BigInt(plan.each);
+  for (let i = plan.paid; i < wallets.length; i += 8) {
     const group = wallets.slice(i, i + 8);
-    const signature = await send(new Transaction().add(...group.map((w) => withdrawIx(admin.publicKey, ata(w.publicKey), each))), []);
+    let signature = plan.receipt?.signature;
+    if (plan.receipt) await confirmSale(plan.receipt);
+    else signature = await send(new Transaction().add(...group.map((w) => withdrawIx(admin.publicKey, ata(w.publicKey), each))), [], (signature, raw, lastValidBlockHeight) => {
+      plan.receipt = { items: [], value: `${each * BigInt(group.length)}`, signature, raw, lastValidBlockHeight }; save();
+    });
+    plan.paid = i + group.length; delete plan.receipt; save();
     log("recycle-usdc", undefined, { signature, wallets: group.length, eachMicroUsdc: `${each}` });
   }
 }
