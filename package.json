@@ -11,19 +11,21 @@
     "cabinet": "tsx scripts/assets/cabinet-bake.tsx",
     "brand": "node brand/render.mjs",
     "shots": "node scripts/dev/shots.mjs",
-    "keeper": "tsx scripts/keeper/cli.ts",
-    "keeper:e2e": "tsx scripts/keeper-e2e.ts",
-    "keeper:test": "tsx --test lib/keeper/*.test.ts",
-    "keeper:fixture": "tsx scripts/keeper/fixture.ts",
-    "keeper:simulate": "tsx scripts/keeper/simulate.ts"
+    "solana:setup": "tsx scripts/solana/setup.ts",
+    "test": "tsx --test lib/**/*.test.ts"
   },
   "packageManager": "pnpm@10.33.0",
   "dependencies": {
     "@gsap/react": "^2.1.2",
-    "@tanstack/react-query": "5.104.4",
+    "@solana-mobile/wallet-standard-mobile": "0.7.1",
+    "@solana/spl-token": "0.4.15",
+    "@solana/wallet-adapter-base": "0.9.28",
+    "@solana/wallet-adapter-react": "0.15.40",
+    "@solana/web3.js": "1.99.0",
     "@vercel/analytics": "^2.0.1",
+    "bs58": "6.0.0",
+    "buffer": "6.0.3",
     "clsx": "^2.1.1",
-    "connectkit": "1.9.2",
     "convex": "^1.47.0",
     "geist": "^1.8.1",
     "gsap": "^3.15.0",
@@ -32,9 +34,7 @@
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "server-only": "^0.0.1",
-    "tailwind-merge": "^3.7.0",
-    "viem": "^2.57.7",
-    "wagmi": "2.19.5"
+    "tailwind-merge": "^3.7.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.3",
@@ -52,7 +52,6 @@
   },
   "pnpm": {
     "overrides": {
-      "viem": "2.57.7",
       "uuid@<11.1.1": "^11.1.1",
       "decode-uri-component@<0.5.0": "^0.5.0"
     }

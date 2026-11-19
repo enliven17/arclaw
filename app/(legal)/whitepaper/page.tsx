@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Breadcrumbs } from "@/components/seo/Breadcrumbs";
-import { ARC, explorerAddress } from "@/lib/arc/config";
+import { SOLANA, explorerAddress } from "@/lib/solana/config";
+import { VRF_PROGRAM_ID, DELEGATION_PROGRAM_ID, configPda } from "@/lib/solana/program";
 import { MACHINES, fmtMultiplier, fmtPct } from "@/lib/machines";
 import { usdc } from "@/lib/stocks";
 
@@ -10,8 +11,8 @@ export const metadata: Metadata = {
   alternates: { canonical: "/whitepaper" },
 };
 
-const VERSION = "1.0";
-const UPDATED = "October 2026";
+const VERSION = "2.0";
+const UPDATED = "November 2026";
 
 const TOC = [
   ["summary", "Summary"],
@@ -29,7 +30,7 @@ const th = "px-3 py-3 text-left text-[13px] font-normal text-muted";
 const td = "px-3 py-3 text-[15px] text-cream";
 
 export default function Whitepaper() {
-  const c = ARC.contracts;
+  const c = SOLANA.deployment;
   return (
     <>
       <Breadcrumbs className="mb-10" items={[{ label: "Home", href: "/" }, { label: "Whitepaper", href: "/whitepaper" }]} />
@@ -52,44 +53,60 @@ export default function Whitepaper() {
 
       <h2 id="summary">1. Summary</h2>
       <p>
-        arclaw is a claw machine on the Arc network. You pay USDC, watch a claw grab a sealed box, and open it into a pack of
-        three cards. Every card is a real tokenized stock (an Astock token) paid straight to your wallet. Every play wins a
-        box: the claw is theatre, and a smart contract decides what is inside, using verifiable randomness.
+        arclaw is a claw machine on Solana. You pay USDC, steer a claw live, grab a sealed box, and open it into a pack of
+        three cards. Every card is a real tokenized stock paid straight to your wallet. Every play wins a box: the claw is
+        theatre, and an on-chain program decides what is inside, using verifiable randomness.
       </p>
       <p>
-        The game is designed around three promises that the contracts enforce, not the website: the odds are fixed in a
-        published table, every box is worth at least half of its price at the prices its table was set with, and the house
-        always keeps a positive edge so the game can pay its prizes. This paper explains each of them, the machinery behind
-        them, and the risks that remain.
+        The claw runs on a MagicBlock ephemeral rollup, so every move of the joystick is a real transaction that confirms
+        in milliseconds without a wallet prompt or a fee. The draw comes from MagicBlock VRF. When the round is over it is
+        committed back to Solana, where the pack is paid.
+      </p>
+      <p>
+        The game is designed around three promises that the program enforces, not the website: the odds are fixed in a
+        published table, every box is worth at least half of its price at the values its table was set with, and the
+        house always keeps a positive edge so the game can pay its prizes. This paper explains each of them, the machinery
+        behind them, and the risks that remain.
       </p>
 
       <h2 id="play">2. How a play works</h2>
       <ol className="mt-4 list-decimal pl-5">
         <li>
-          <strong>Connect.</strong> Connect your own wallet: a browser wallet such as MetaMask or Rabby, Coinbase Wallet, or any mobile wallet through WalletConnect.
-          Gas on Arc is paid in USDC, so one balance does everything.
+          <strong>Connect.</strong> Connect any Solana wallet: Phantom, Solflare, Backpack or any Wallet Standard wallet,
+          or Mobile Wallet Adapter to play from an Android phone. Boxes are paid in Circle&apos;s USDC; network fees are paid
+          in SOL.
         </li>
         <li>
-          <strong>Pick a machine and pay.</strong> Three machines cost 1, 5 or 10 USDC per play. A play mints one sealed box
-          to you. A box is a token you can hold, send or gift.
+          <strong>Pick a machine and pay.</strong> Three machines cost 1, 5 or 10 USDC per play. A play adds one sealed box
+          to your account in the program. You can hold it, send it or gift it.
         </li>
         <li>
-          <strong>Open.</strong> Opening burns the box and asks the randomness service for a number. The contract fixes the
-          outcome table you were shown at that moment; if the table changed in between, the open is refused.
+          <strong>Start a round.</strong> One wallet signature turns a sealed box into a round and hands it to a MagicBlock
+          ephemeral rollup. The round records the outcome table it started on.
         </li>
         <li>
-          <strong>Reveal.</strong> When the random number is in, the keeper reveals within seconds (you can reveal your own box at
-          once, and anyone can after an hour). The contract picks a pack from the machine&apos;s table and sends you three
-          Astock tokens. In the app you tear the pack and flip the cards.
+          <strong>Steer and drop.</strong> You move the claw with a joystick. Every move is a rollup transaction signed by a
+          session key that lives in your browser tab: no wallet prompt, no fee, confirmed in milliseconds. The session key
+          can only move and drop the claw; it cannot touch your funds. When you drop, the round asks MagicBlock VRF for a
+          random number, and the program draws a pack from the machine&apos;s table. Where the claw lands does not change
+          the odds.
         </li>
         <li>
-          <strong>Keep, send or sell.</strong> The cards are ERC-20 tokens in your wallet. Keep them, send them, or sell them
-          back to USDC on the Astock desk from the app.
+          <strong>Settle.</strong> The round is committed back to Solana, and a second wallet signature pays the three
+          cards to your wallet. In the app you tear the pack and flip the cards.
+        </li>
+        <li>
+          <strong>Keep, send or sell.</strong> The cards are tokens in your wallet. Keep them or send them. On mainnet, sell
+          them for USDC through a swap on Jupiter, which the app opens for you.
         </li>
       </ol>
       <p>
-        Boxes can be gifted to an address or through a claim link. A claim link carries a one-time key that signs the
-        recipient&apos;s address, so nobody can front-run the claim, and the sender can reclaim an unclaimed box.
+        A closed tab never loses a box: a round left half way is found on your next visit and can be finished from there.
+      </p>
+      <p>
+        Boxes can be gifted to any Solana address or through a claim link. A claim link carries a one-time key that
+        co-signs the recipient&apos;s claim transaction, so nobody who sees the link first can redirect the box. If a link
+        is not claimed within 7 days, the sender can take the boxes back.
       </p>
 
       <h2 id="odds">3. The machines and the odds</h2>
@@ -134,104 +151,98 @@ export default function Whitepaper() {
           </table>
         </div>
       ))}
-      <p>What the contract enforces on every machine, whoever operates it:</p>
+      <p>What the program enforces on every machine, whoever operates it:</p>
       <ul>
         <li>
-          <strong>A floor.</strong> No outcome is worth less than 50 percent of the price at the prices its table was set
-          with, and the floor is checked again against live prices when you open. The lowest outcome is built a little above
-          the floor (52.65 percent) so ordinary price moves never break it.
+          <strong>A floor.</strong> No outcome is worth less than 50 percent of the price, at the USDC values recorded
+          when its table was set. The program refuses any machine whose floor is set lower. The lowest outcome is built a
+          little above the floor (52.65 percent).
         </li>
         <li>
-          <strong>A cap.</strong> No outcome is worth more than 10 times the price. The jackpot is built 1 percent under the cap (9.9 times) so a price move between the table and the open cannot push it over.
+          <strong>A cap.</strong> No outcome is worth more than the machine&apos;s cap. Every machine launches with a cap of
+          10 times the price, and the jackpot sits at that cap.
         </li>
         <li>
           <strong>A return band.</strong> Each machine has its own narrow band for the expected return (for example 74 to 76
-          percent for Single). A table outside its band is rejected, so the odds
-          cannot quietly be made worse than advertised, and the house edge cannot go negative.
+          percent for Single). A table outside its band is rejected, so the odds cannot quietly be made worse than
+          advertised. The program never accepts a band above 95 percent, so the house edge cannot go negative.
         </li>
         <li>
-          <strong>Rules that only tighten.</strong> The floor and the lower end of the band can be raised after launch, never
-          lowered.
+          <strong>Fixed prices.</strong> A machine&apos;s price cannot change once it is set. Changing a machine&apos;s rules
+          clears its table, so a new table has to pass the new rules.
         </li>
       </ul>
       <p>
-        These are guarantees about the table, measured in prices. Because prizes are stocks, what a card is worth in dollars
-        moves with the market after you receive it.
+        These are guarantees about the table, measured in USDC values. Because prizes are stocks, what a card is worth in
+        dollars moves with the market after you receive it.
       </p>
 
       <h2 id="randomness">4. Randomness</h2>
       <p>
-        Outcomes come from the D20DAO verifiable randomness service (a VRF) on Arc, behind a small interface so it can be
-        swapped. According to D20DAO, each epoch commits a round of the public drand beacon, and a fixed-input VRF binds a
-        future block to the result; proofs are verified on chain and the whole thing can be replayed from public data by
-        anyone. A request that is not fulfilled within 60 seconds becomes refundable.
+        Outcomes come from MagicBlock VRF, a verifiable random function. When you drop the claw, the round asks the VRF for
+        a random number on the rollup, and the answer comes back with a proof that it was produced honestly. The program
+        then makes one weighted draw from the table the round started on. Your seed and the position of the claw are mixed
+        into the request so every request is distinct, but they cannot steer the result.
       </p>
       <p>
-        In arclaw, an open that is not answered can be retried a limited number of times, or you can take your boxes back. A third party keeper reveals fulfilled opens within seconds, so nobody holds a free option on an outcome they
-        have already seen.
+        A round can never end on an outcome it was not entitled to. If the draw does not arrive within 120 seconds, the
+        round is void and your box comes back. The same happens if you abandon a round before the drop, or if the
+        machine&apos;s table was replaced while your round was waiting.
       </p>
       <p>
-        The trust model is explicit: the randomness service has an operator, a beacon and an upgrade authority, and the
-        contracts rely on them to deliver. Its guarantees are theirs; arclaw adds retry limits and refund paths so a failure
-        costs you time, not boxes.
+        The trust model is explicit: the VRF and the rollup are run by MagicBlock, and the program relies on them to
+        deliver. Their guarantees are theirs; arclaw adds a timeout and a void path so a failure costs you time, not boxes.
       </p>
 
       <h2 id="treasury">5. Prizes and the treasury</h2>
       <ul>
         <li>
-          <strong>The box pays for its pack.</strong> Revenue from a play funds the prizes. When a revealed card&apos;s stock
-          is not in inventory, the contract buys it on the Astock desk at that moment with the box revenue, within a price
-          tolerance and per-reveal limits.
+          <strong>Prizes come from a vault.</strong> The program holds the prize stocks in a vault it controls and pays each
+          card from it when a round is settled. On mainnet the prizes are xStocks; on devnet they are test tokens.
         </li>
         <li>
-          <strong>Liabilities first.</strong> Money owed to players (unopened boxes, pending opens, credits, refunds) is
-          reserved. The owner and the operator can withdraw or spend only what is left above those reserves, and never
-          below a configured float.
+          <strong>Your box is reserved.</strong> The price of every box that has not been settled yet is reserved in the
+          treasury. Nobody can withdraw it: the admin can only withdraw USDC above the reserve and what is owed.
         </li>
         <li>
-          <strong>A float for big wins.</strong> A native USDC float covers the rare large prizes. Simulations of the real
-          tables show a float of 500 USDC makes an out-of-money pause practically impossible at any volume, which is why it is
-          the launch setting.
+          <strong>If the vault is short</strong> for a card, that card is refunded at its table value in USDC. If the
+          treasury has no free USDC at that moment, the refund is recorded as owed to you and you can claim it once the
+          treasury can pay.
         </li>
         <li>
-          <strong>If a prize cannot be bought</strong> (desk down, stale price, a limit hit), the card is paid in USDC at the
-          lower of its table value and its last known price. Anything the contract cannot pay at once is written down as a
-          claim and the machines pause until it is settled.
+          <strong>Fresh tables.</strong> Each table records when it was set, and the program can be configured to refuse
+          new rounds on a table older than a set age.
         </li>
         <li>
-          <strong>Fresh tables.</strong> A table records when it was priced; opens refuse tables older than a day and any
-          table whose stock prices have moved more than 5 percent. A keeper reprices the tables on a schedule and after
-          market moves.
-        </li>
-        <li>
-          <strong>Exits.</strong> If a machine is switched off, tables go stale or the contract stays paused for days, holders
-          of unopened boxes can burn them for the price they paid.
+          <strong>Void rounds.</strong> A round that is void, for any of the reasons in the randomness section, returns its
+          box to you.
         </li>
       </ul>
 
       <h2 id="security">6. Security model</h2>
       <p>
-        Prizes are real money, so the contracts were built to be boring and to be attacked before anyone plays them.
+        Prizes are real money, so the program was built to be boring and to be attacked before anyone plays it.
       </p>
       <ul>
         <li>
-          <strong>Review.</strong> The contracts went through six rounds of independent adversarial review by AI-assisted security
-          reviewers (two independent reviewers per round, each writing exploit tests for what they found), plus a separate red-team pass over the whole
-          system and its economics. Every finding became a test. The suite has nearly 200 tests, including invariant tests
-          that fuzz play, open, reveal, refunds and withdrawals and check that the contract can always cover what it owes.
+          <strong>Small rules, tested.</strong> The table rules and the weighted draw are plain functions with their own
+          unit tests, separate from the rest of the program.
         </li>
         <li>
-          <strong>No external audit yet.</strong> These reviews are not a substitute for a professional audit firm, and
-          arclaw has not been audited by one. Treat the contracts as new software and play accordingly.
+          <strong>No external audit yet.</strong> The program has not been audited by a professional firm. Mainnet waits
+          for audits. Until then, treat it as new software and play accordingly.
         </li>
         <li>
-          <strong>Roles.</strong> The owner is a multi-signature Safe; ownership moves in two steps so it cannot be sent to a
-          wrong address. An operator reprices tables inside the on-chain rules, a keeper reveals and retries, and a guardian
-          can pause but never unpause. Renouncing ownership is disabled.
+          <strong>Roles.</strong> An admin key sets machines, pauses play, withdraws free USDC and moves prize stock in and out of the vault. An operator key can set
+          tables, inside each machine&apos;s rules.
         </li>
         <li>
-          <strong>Limits on every role.</strong> The operator and keeper cannot touch reserved funds, cannot make a table
-          outside its band, and cannot lower the floor.
+          <strong>Limits on every role.</strong> No role can touch the reserve of unsettled boxes or what is owed, make a
+          table outside its band, set a floor under 50 percent, or change a machine&apos;s price.
+        </li>
+        <li>
+          <strong>Session keys.</strong> The key in your browser can only steer and drop the claw in a round it was named
+          for. Paying for boxes and receiving cards always takes your wallet&apos;s signature.
         </li>
         <li>
           <strong>On the website.</strong> A strict content policy, no framing, signed share links that only show packs read
@@ -239,26 +250,20 @@ export default function Whitepaper() {
         </li>
       </ul>
       <p>
-        What can still go wrong: a bug nobody found, the randomness service failing or misbehaving, the Astock tokens, desk or
-        oracle failing or being paused, the Arc network, a compromised key. The risks section lists them.
+        What can still go wrong: a bug nobody found, the VRF or the rollup failing or misbehaving, the stock tokens or their
+        issuer failing or being paused, the Solana network, a compromised key. Prize stock in the vault is not reserved the
+        way box prices are, which is why a short vault falls back to a USDC refund. The risks section lists the rest.
       </p>
 
       <h2 id="roadmap">7. Roadmap</h2>
       <ol className="mt-4 list-decimal pl-5">
         <li>
-          <strong>Testnet.</strong> The full product on Arc testnet with mock stocks: play, open, reveal, sell, gift, leaderboard,
-          the keeper and the Telegram bot.
+          <strong>Devnet, now.</strong> The full product on Solana devnet with Circle USDC from the faucet and test stocks:
+          play, steer, draw, settle, gift and the leaderboard.
         </li>
         <li>
-          <strong>Mainnet, closed test.</strong> Deployed paused. The team plays with its own funds against the real Astock
-          desk and oracle before anyone else.
-        </li>
-        <li>
-          <strong>Public launch.</strong> Machines open and the contract addresses are published.
-        </li>
-        <li>
-          <strong>After launch.</strong> A professional audit, and more machines and stocks.
-          None of this is a commitment on timing.
+          <strong>Mainnet, later.</strong> After audits, the program goes to mainnet with xStocks as prizes and the program
+          address is published here. None of this is a commitment on timing.
         </li>
       </ol>
 
@@ -269,11 +274,11 @@ export default function Whitepaper() {
           the play price. Only play with money you can afford to lose.
         </li>
         <li>
-          <strong>Stocks move.</strong> Cards are tokenized stocks issued by Astock. They are not shares, they can fall in
-          value, and they depend on Astock&apos;s reserves, issuers and bridges. A token can be paused or delisted.
+          <strong>Stocks move.</strong> On mainnet, cards are xStocks issued by Backed. They are not shares, they can fall
+          in value, and they depend on the issuer, its reserves and its custodians. A token can be paused or delisted.
         </li>
         <li>
-          <strong>Smart contract and service risk.</strong> Contracts, the randomness service, oracles, wallets and the Arc
+          <strong>Program and service risk.</strong> The program, MagicBlock&apos;s rollup and VRF, wallets and the Solana
           network can fail or be attacked. Blockchain transactions cannot be reversed.
         </li>
         <li>
@@ -282,8 +287,8 @@ export default function Whitepaper() {
           where you are and for taxes on what you win or sell. Nothing here is financial, legal or tax advice.
         </li>
         <li>
-          <strong>Governance of the team.</strong> Parameters such as tables, the float and caps are set by the owner within
-          the on-chain rules above. The rules protect you from the worst changes, not from all of them.
+          <strong>Governance of the team.</strong> Machines, tables and pauses are set by the team within the on-chain
+          rules above. The rules protect you from the worst changes, not from all of them.
         </li>
       </ul>
       <p>
@@ -293,16 +298,17 @@ export default function Whitepaper() {
       <h2 id="contracts">9. Contracts</h2>
       {c ? (
         <>
-          <p>Deployed on {ARC.chain.name}.</p>
+          <p>Deployed on Solana {SOLANA.network === "devnet" ? "devnet" : "mainnet"}.</p>
           <div className="mt-4 overflow-hidden rounded-[14px] border border-line bg-panel">
             <table className="w-full border-collapse">
               <tbody>
                 {(
                   [
-                    ["arclaw", c.arclaw],
-                    ["Price source", c.priceSource],
-                    ["Astock desk", c.desk],
-                    ["Randomness coordinator", c.vrfCoordinator],
+                    ["arclaw program", c.programId],
+                    ["Treasury and vault owner", configPda().toBase58()],
+                    ["USDC (Circle)", c.usdcMint],
+                    ["MagicBlock VRF", VRF_PROGRAM_ID.toBase58()],
+                    ["MagicBlock delegation", DELEGATION_PROGRAM_ID.toBase58()],
                   ] as const
                 ).map(([name, address]) => (
                   <tr key={name} className="border-b border-line last:border-b-0">
@@ -310,7 +316,7 @@ export default function Whitepaper() {
                       {name}
                     </th>
                     <td className={`${td} money break-all`}>
-                      <a href={explorerAddress(address, ARC)} target="_blank" rel="noreferrer">
+                      <a href={explorerAddress(address)} target="_blank" rel="noreferrer">
                         {address}
                       </a>
                     </td>
@@ -321,11 +327,12 @@ export default function Whitepaper() {
           </div>
         </>
       ) : (
-        <p>The mainnet contract addresses are published here at launch.</p>
+        <p>The mainnet program address is published here at launch.</p>
       )}
       <p>
-        Source and tests are in the project repository. The randomness service is <a href="https://d20dao.org">D20DAO</a>, the
-        chain is <a href="https://www.arc.io">Arc</a> and the stocks are <a href="https://astock.fi">Astock</a>.
+        Source and tests are in the project repository. The chain is <a href="https://solana.com">Solana</a>, the real time
+        claw and the randomness run on <a href="https://www.magicblock.gg">MagicBlock</a> (ephemeral rollups and VRF), USDC is
+        Circle&apos;s and the stocks are <a href="https://xstocks.com">xStocks</a>.
       </p>
     </>
   );

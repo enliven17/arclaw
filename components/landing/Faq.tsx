@@ -4,7 +4,7 @@ import { StructuredData } from "@/components/seo/StructuredData";
 const FAQ_ITEMS = [
   {
     question: "What do I win with a play?",
-    answer: "Every play gives you one sealed box. Opening the box reveals a pack of three tokenized stock cards paid to your wallet on Arc.",
+    answer: "Every play gives you one sealed box. Opening the box reveals a pack of three tokenized stock cards paid to your Solana wallet.",
   },
   {
     question: "How much does a play cost?",
@@ -12,7 +12,7 @@ const FAQ_ITEMS = [
   },
   {
     question: "Is the claw skill-based?",
-    answer: "No. The claw is the show. The arclaw smart contract decides the box contents with a verifiable random draw.",
+    answer: "No. You steer the claw live, but it is the show. The arclaw program decides the box contents with a verifiable random draw from MagicBlock VRF.",
   },
   {
     question: "Can I lose money?",
@@ -20,7 +20,7 @@ const FAQ_ITEMS = [
   },
   {
     question: "Can I gift a sealed box?",
-    answer: "Yes. You can send a box to an Arc address or create a claim link from the gifts area of the app.",
+    answer: "Yes. You can send a box to any Solana address or create a claim link from the gifts area of the app.",
   },
 ];
 

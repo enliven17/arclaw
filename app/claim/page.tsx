@@ -24,7 +24,7 @@ export async function generateMetadata({ searchParams }: { searchParams: Search 
   const image = { url: `/api/og/gift?${p.toString()}`, width: 1200, height: 630, alt: title };
   return {
     title,
-    description: `Claim ${g.count === 1 ? "a sealed box" : `${g.count} sealed boxes`} from an arclaw gift link on Arc.`,
+    description: `Claim ${g.count === 1 ? "a sealed box" : `${g.count} sealed boxes`} from an arclaw gift link on Solana.`,
     alternates: { canonical: "/claim" },
     robots: { index: false, follow: true },
     openGraph: { title, images: [image] },

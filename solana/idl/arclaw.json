@@ -1,0 +1,1496 @@
+{
+  "address": "66SUbtvATDc22btwfEcgNnb3uuoEJTYkmgTWfaTnSXpF",
+  "metadata": {
+    "name": "arclaw",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "arclaw: claw machines that pay sealed packs of tokenized stock, on Solana with MagicBlock"
+  },
+  "instructions": [
+    {
+      "name": "initialize",
+      "discriminator": [
+        175,
+        175,
+        109,
+        31,
+        13,
+        152,
+        155,
+        237
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true
+        },
+        {
+          "name": "usdc_mint"
+        },
+        {
+          "name": "treasury",
+          "writable": true
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "associated_token_program"
+        },
+        {
+          "name": "system_program"
+        }
+      ],
+      "args": [
+        {
+          "name": "operator",
+          "type": "pubkey"
+        },
+        {
+          "name": "max_table_age",
+          "type": "i64"
+        }
+      ]
+    },
+    {
+      "name": "set_admin",
+      "discriminator": [
+        251,
+        163,
+        0,
+        52,
+        91,
+        194,
+        187,
+        92
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "admin",
+          "type": "pubkey"
+        },
+        {
+          "name": "operator",
+          "type": "pubkey"
+        },
+        {
+          "name": "paused",
+          "type": "bool"
+        },
+        {
+          "name": "max_table_age",
+          "type": "i64"
+        }
+      ]
+    },
+    {
+      "name": "set_machine",
+      "docs": [
+        "Creates or updates a machine's rules. The price is fixed after the first call."
+      ],
+      "discriminator": [
+        94,
+        242,
+        229,
+        57,
+        15,
+        153,
+        161,
+        60
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config"
+        },
+        {
+          "name": "machine",
+          "writable": true
+        },
+        {
+          "name": "system_program"
+        }
+      ],
+      "args": [
+        {
+          "name": "id",
+          "type": "u8"
+        },
+        {
+          "name": "price",
+          "type": "u64"
+        },
+        {
+          "name": "floor_bps",
+          "type": "u16"
+        },
+        {
+          "name": "cap_bps",
+          "type": "u32"
+        },
+        {
+          "name": "rtp_min_bps",
+          "type": "u16"
+        },
+        {
+          "name": "rtp_max_bps",
+          "type": "u16"
+        },
+        {
+          "name": "active",
+          "type": "bool"
+        }
+      ]
+    },
+    {
+      "name": "set_table",
+      "docs": [
+        "Replaces a machine's outcome table. Admin or operator; either way the machine's rules are enforced."
+      ],
+      "discriminator": [
+        184,
+        194,
+        161,
+        111,
+        110,
+        108,
+        162,
+        197
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "signer": true
+        },
+        {
+          "name": "config"
+        },
+        {
+          "name": "machine",
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "_id",
+          "type": "u8"
+        },
+        {
+          "name": "input",
+          "type": {
+            "vec": {
+              "defined": {
+                "name": "arclaw::state::OutcomeInput"
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "withdraw",
+      "docs": [
+        "Takes free USDC out of the treasury: never the reserve of unsettled boxes, never what is owed."
+      ],
+      "discriminator": [
+        183,
+        18,
+        70,
+        156,
+        148,
+        109,
+        161,
+        34
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "signer": true
+        },
+        {
+          "name": "config"
+        },
+        {
+          "name": "usdc_mint"
+        },
+        {
+          "name": "treasury",
+          "writable": true
+        },
+        {
+          "name": "to",
+          "writable": true
+        },
+        {
+          "name": "token_program"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "sweep",
+      "docs": [
+        "Moves prize stock out of the vault (rebalancing, retiring a stock). Stock is not reserved: see the trust note in",
+        "docs/SOLANA.md."
+      ],
+      "discriminator": [
+        40,
+        23,
+        234,
+        175,
+        14,
+        61,
+        154,
+        177
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "signer": true
+        },
+        {
+          "name": "config"
+        },
+        {
+          "name": "mint"
+        },
+        {
+          "name": "vault",
+          "writable": true
+        },
+        {
+          "name": "to",
+          "writable": true
+        },
+        {
+          "name": "token_program"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "play",
+      "docs": [
+        "Pays `boxes * price` USDC and adds that many sealed boxes."
+      ],
+      "discriminator": [
+        213,
+        157,
+        193,
+        142,
+        228,
+        56,
+        248,
+        150
+      ],
+      "accounts": [
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true
+        },
+        {
+          "name": "machine"
+        },
+        {
+          "name": "player",
+          "writable": true
+        },
+        {
+          "name": "usdc_mint"
+        },
+        {
+          "name": "payer_usdc",
+          "writable": true
+        },
+        {
+          "name": "treasury",
+          "writable": true
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "system_program"
+        }
+      ],
+      "args": [
+        {
+          "name": "machine_id",
+          "type": "u8"
+        },
+        {
+          "name": "boxes",
+          "type": "u32"
+        }
+      ]
+    },
+    {
+      "name": "gift",
+      "docs": [
+        "Sends sealed boxes to any wallet."
+      ],
+      "discriminator": [
+        166,
+        241,
+        165,
+        114,
+        166,
+        138,
+        63,
+        165
+      ],
+      "accounts": [
+        {
+          "name": "sender",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "sender_state",
+          "writable": true
+        },
+        {
+          "name": "recipient"
+        },
+        {
+          "name": "recipient_state",
+          "writable": true
+        },
+        {
+          "name": "system_program"
+        }
+      ],
+      "args": [
+        {
+          "name": "machine_id",
+          "type": "u8"
+        },
+        {
+          "name": "boxes",
+          "type": "u32"
+        }
+      ]
+    },
+    {
+      "name": "create_link",
+      "docs": [
+        "Escrows boxes behind a fresh link key. The link (a URL holding the key) is the gift: whoever opens it names",
+        "themselves as recipient in a transaction the link key co-signs, so nobody can redirect the boxes in flight."
+      ],
+      "discriminator": [
+        103,
+        114,
+        207,
+        84,
+        216,
+        71,
+        234,
+        61
+      ],
+      "accounts": [
+        {
+          "name": "sender",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "sender_state",
+          "writable": true
+        },
+        {
+          "name": "link",
+          "writable": true
+        },
+        {
+          "name": "system_program"
+        }
+      ],
+      "args": [
+        {
+          "name": "link_key",
+          "type": "pubkey"
+        },
+        {
+          "name": "machine_id",
+          "type": "u8"
+        },
+        {
+          "name": "boxes",
+          "type": "u32"
+        },
+        {
+          "name": "expires_at",
+          "type": "i64"
+        }
+      ]
+    },
+    {
+      "name": "claim_link",
+      "discriminator": [
+        87,
+        206,
+        8,
+        104,
+        149,
+        12,
+        185,
+        250
+      ],
+      "accounts": [
+        {
+          "name": "recipient",
+          "docs": [
+            "The recipient names and pays for themselves; the link key co-signs, so the recipient cannot be swapped."
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "link_key",
+          "signer": true
+        },
+        {
+          "name": "link",
+          "writable": true
+        },
+        {
+          "name": "sender",
+          "writable": true
+        },
+        {
+          "name": "recipient_state",
+          "writable": true
+        },
+        {
+          "name": "system_program"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "reclaim_link",
+      "discriminator": [
+        82,
+        250,
+        235,
+        95,
+        109,
+        75,
+        223,
+        30
+      ],
+      "accounts": [
+        {
+          "name": "sender",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "link",
+          "writable": true
+        },
+        {
+          "name": "sender_state",
+          "writable": true
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "start_round",
+      "docs": [
+        "Burns one sealed box into a Round the browser's session key drives."
+      ],
+      "discriminator": [
+        144,
+        144,
+        43,
+        7,
+        193,
+        42,
+        217,
+        215
+      ],
+      "accounts": [
+        {
+          "name": "player",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true
+        },
+        {
+          "name": "machine"
+        },
+        {
+          "name": "player_state",
+          "writable": true
+        },
+        {
+          "name": "round",
+          "writable": true
+        },
+        {
+          "name": "system_program"
+        }
+      ],
+      "args": [
+        {
+          "name": "machine_id",
+          "type": "u8"
+        },
+        {
+          "name": "driver",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "delegate_round",
+      "docs": [
+        "Hands the Round to the ephemeral rollup. `validator` picks the ER region; None takes the default."
+      ],
+      "discriminator": [
+        4,
+        60,
+        37,
+        224,
+        19,
+        130,
+        106,
+        111
+      ],
+      "accounts": [
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "buffer_round",
+          "writable": true
+        },
+        {
+          "name": "delegation_record_round",
+          "writable": true
+        },
+        {
+          "name": "delegation_metadata_round",
+          "writable": true
+        },
+        {
+          "name": "round",
+          "writable": true
+        },
+        {
+          "name": "owner_program"
+        },
+        {
+          "name": "delegation_program"
+        },
+        {
+          "name": "system_program"
+        }
+      ],
+      "args": [
+        {
+          "name": "round_id",
+          "type": "u64"
+        },
+        {
+          "name": "validator",
+          "type": {
+            "option": "pubkey"
+          }
+        }
+      ]
+    },
+    {
+      "name": "move_claw",
+      "docs": [
+        "One joystick step (ER). Clamped to the cabinet and to MAX_STEP per call."
+      ],
+      "discriminator": [
+        203,
+        22,
+        32,
+        45,
+        79,
+        124,
+        91,
+        113
+      ],
+      "accounts": [
+        {
+          "name": "driver",
+          "signer": true
+        },
+        {
+          "name": "round",
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "dx",
+          "type": "i16"
+        },
+        {
+          "name": "dz",
+          "type": "i16"
+        }
+      ]
+    },
+    {
+      "name": "drop_claw",
+      "docs": [
+        "Drops the claw (ER, or Solana if the round was never delegated): asks MagicBlock VRF for the word."
+      ],
+      "discriminator": [
+        176,
+        101,
+        112,
+        189,
+        15,
+        40,
+        96,
+        244
+      ],
+      "accounts": [
+        {
+          "name": "payer",
+          "docs": [
+            "The round's driver: pays the request on the rollup."
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "round",
+          "writable": true
+        },
+        {
+          "name": "machine"
+        },
+        {
+          "name": "oracle_queue",
+          "writable": true
+        },
+        {
+          "name": "slot_hashes"
+        },
+        {
+          "name": "program_identity"
+        },
+        {
+          "name": "vrf_program"
+        },
+        {
+          "name": "system_program"
+        }
+      ],
+      "args": [
+        {
+          "name": "client_seed",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "reveal_round",
+      "docs": [
+        "VRF callback: one weighted draw from the table the round started on."
+      ],
+      "discriminator": [
+        146,
+        249,
+        2,
+        210,
+        169,
+        145,
+        120,
+        6
+      ],
+      "accounts": [
+        {
+          "name": "vrf_program_identity",
+          "docs": [
+            "Scoped VRF identity PDA, bound to this program. Its presence as a signer proves",
+            "the callback was issued by the VRF program for this program."
+          ],
+          "signer": true
+        },
+        {
+          "name": "round",
+          "writable": true
+        },
+        {
+          "name": "machine"
+        }
+      ],
+      "args": [
+        {
+          "name": "randomness",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "finish_round",
+      "docs": [
+        "Ends the round on the rollup and sends it back to Solana. The driver may end an Armed round (the box comes",
+        "back) and a draw that never landed after VRF_TIMEOUT_S; anyone may send home a Drawn or Void round, so a",
+        "keeper can finish what a closed tab left behind."
+      ],
+      "discriminator": [
+        23,
+        104,
+        163,
+        186,
+        110,
+        225,
+        11,
+        242
+      ],
+      "accounts": [
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "round",
+          "writable": true
+        },
+        {
+          "name": "magic_program"
+        },
+        {
+          "name": "magic_context",
+          "writable": true
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "void_round",
+      "docs": [
+        "Same as finish_round for a round that was never delegated (the Solana-only fallback): marks it Void if it",
+        "may be, so settle_round can return the box."
+      ],
+      "discriminator": [
+        102,
+        72,
+        126,
+        187,
+        12,
+        18,
+        16,
+        96
+      ],
+      "accounts": [
+        {
+          "name": "signer",
+          "signer": true
+        },
+        {
+          "name": "round",
+          "writable": true
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "settle_round",
+      "docs": [
+        "Pays the pack (Solana). Remaining accounts, four per card in order: mint, vault ATA (config's), player ATA,",
+        "token program. A card the vault cannot cover is refunded at its table value in USDC, or owed if the treasury",
+        "has no free USDC. A void round returns its box. Anyone may settle; the cards and the rent go to the player."
+      ],
+      "discriminator": [
+        40,
+        101,
+        18,
+        1,
+        31,
+        129,
+        52,
+        77
+      ],
+      "accounts": [
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "player",
+          "writable": true
+        },
+        {
+          "name": "player_state",
+          "writable": true
+        },
+        {
+          "name": "round",
+          "writable": true
+        },
+        {
+          "name": "config",
+          "writable": true
+        },
+        {
+          "name": "machine"
+        },
+        {
+          "name": "usdc_mint"
+        },
+        {
+          "name": "treasury",
+          "writable": true
+        },
+        {
+          "name": "player_usdc",
+          "writable": true
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "associated_token_program"
+        },
+        {
+          "name": "system_program"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "claim_owed",
+      "docs": [
+        "Pays what a short treasury owed, once it can."
+      ],
+      "discriminator": [
+        200,
+        254,
+        0,
+        109,
+        32,
+        151,
+        223,
+        144
+      ],
+      "accounts": [
+        {
+          "name": "player",
+          "signer": true
+        },
+        {
+          "name": "player_state",
+          "writable": true
+        },
+        {
+          "name": "config",
+          "writable": true
+        },
+        {
+          "name": "usdc_mint"
+        },
+        {
+          "name": "treasury",
+          "writable": true
+        },
+        {
+          "name": "player_usdc",
+          "writable": true
+        },
+        {
+          "name": "token_program"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "process_undelegation",
+      "discriminator": [
+        196,
+        28,
+        41,
+        206,
+        48,
+        37,
+        51,
+        167
+      ],
+      "accounts": [
+        {
+          "name": "base_account",
+          "writable": true
+        },
+        {
+          "name": "buffer"
+        },
+        {
+          "name": "payer",
+          "writable": true
+        },
+        {
+          "name": "system_program"
+        }
+      ],
+      "args": [
+        {
+          "name": "account_seeds",
+          "type": {
+            "vec": "bytes"
+          }
+        }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "arclaw::state::Config",
+      "discriminator": [
+        155,
+        12,
+        170,
+        224,
+        30,
+        250,
+        204,
+        130
+      ]
+    },
+    {
+      "name": "arclaw::state::Link",
+      "discriminator": [
+        90,
+        57,
+        179,
+        207,
+        13,
+        91,
+        161,
+        190
+      ]
+    },
+    {
+      "name": "arclaw::state::Machine",
+      "discriminator": [
+        25,
+        102,
+        22,
+        13,
+        58,
+        243,
+        138,
+        79
+      ]
+    },
+    {
+      "name": "arclaw::state::Player",
+      "discriminator": [
+        205,
+        222,
+        112,
+        7,
+        165,
+        155,
+        206,
+        218
+      ]
+    },
+    {
+      "name": "arclaw::state::Round",
+      "discriminator": [
+        87,
+        127,
+        165,
+        51,
+        73,
+        78,
+        116,
+        174
+      ]
+    }
+  ],
+  "types": [
+    {
+      "name": "arclaw::state::Card",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "docs": [
+              "Base units of the stock token."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "value",
+            "docs": [
+              "USDC (6 dp) the card was worth when the table was set; the refund if the vault is short."
+            ],
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "arclaw::state::Config",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "admin",
+            "type": "pubkey"
+          },
+          {
+            "name": "operator",
+            "docs": [
+              "Hot key of the keeper: may reprice tables, never move funds."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "usdc_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "paused",
+            "type": "bool"
+          },
+          {
+            "name": "sealed_reserve",
+            "docs": [
+              "Price paid for every box sold and not yet settled. Never withdrawable."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "owed_total",
+            "docs": [
+              "Refunds the treasury could not pay at settle time; players claim them later."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "max_table_age",
+            "docs": [
+              "Tables older than this cannot start a round (0 = no limit)."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "rounds",
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "arclaw::state::Link",
+      "docs": [
+        "A claim link: boxes held in escrow until whoever holds the link key names a recipient."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "sender",
+            "type": "pubkey"
+          },
+          {
+            "name": "link_key",
+            "type": "pubkey"
+          },
+          {
+            "name": "machine_id",
+            "type": "u8"
+          },
+          {
+            "name": "boxes",
+            "type": "u32"
+          },
+          {
+            "name": "expires_at",
+            "type": "i64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "arclaw::state::Machine",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "u8"
+          },
+          {
+            "name": "price",
+            "docs": [
+              "USDC 6 dp per box. Immutable once set: sold boxes are reserved at this price."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "floor_bps",
+            "type": "u16"
+          },
+          {
+            "name": "cap_bps",
+            "type": "u32"
+          },
+          {
+            "name": "rtp_min_bps",
+            "type": "u16"
+          },
+          {
+            "name": "rtp_max_bps",
+            "type": "u16"
+          },
+          {
+            "name": "active",
+            "type": "bool"
+          },
+          {
+            "name": "table_id",
+            "docs": [
+              "Bumped on every new table; a round drawn against an older table is void and its box comes back."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "priced_at",
+            "type": "i64"
+          },
+          {
+            "name": "total_weight",
+            "type": "u64"
+          },
+          {
+            "name": "rtp_bps",
+            "type": "u16"
+          },
+          {
+            "name": "outcomes",
+            "type": {
+              "vec": {
+                "defined": {
+                  "name": "arclaw::state::Outcome"
+                }
+              }
+            }
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "arclaw::state::Outcome",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "weight",
+            "type": "u32"
+          },
+          {
+            "name": "tier",
+            "type": "u8"
+          },
+          {
+            "name": "value",
+            "docs": [
+              "Sum of the card values."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "cards",
+            "type": {
+              "array": [
+                {
+                  "defined": {
+                    "name": "arclaw::state::Card"
+                  }
+                },
+                3
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "arclaw::state::OutcomeInput",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "weight",
+            "type": "u32"
+          },
+          {
+            "name": "tier",
+            "type": "u8"
+          },
+          {
+            "name": "cards",
+            "type": {
+              "array": [
+                {
+                  "defined": {
+                    "name": "arclaw::state::Card"
+                  }
+                },
+                3
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "arclaw::state::Player",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "sealed",
+            "docs": [
+              "Sealed boxes by machine id - 1."
+            ],
+            "type": {
+              "array": [
+                "u32",
+                4
+              ]
+            }
+          },
+          {
+            "name": "plays",
+            "type": "u32"
+          },
+          {
+            "name": "packs",
+            "type": "u32"
+          },
+          {
+            "name": "spent",
+            "docs": [
+              "USDC 6 dp paid for boxes, and the table value of every pack settled (the leaderboard reads these)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "won",
+            "type": "u64"
+          },
+          {
+            "name": "owed",
+            "type": "u64"
+          },
+          {
+            "name": "next_round",
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "arclaw::state::Round",
+      "docs": [
+        "One claw round. Created on Solana, delegated to a MagicBlock ephemeral rollup for the real time claw, drawn by",
+        "MagicBlock VRF there, committed back and settled (cards paid) on Solana."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "player",
+            "type": "pubkey"
+          },
+          {
+            "name": "driver",
+            "docs": [
+              "Session key the browser holds: signs claw moves on the rollup so the wallet is asked only twice per round."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "round_id",
+            "type": "u64"
+          },
+          {
+            "name": "machine_id",
+            "type": "u8"
+          },
+          {
+            "name": "table_id",
+            "type": "u32"
+          },
+          {
+            "name": "status",
+            "type": {
+              "defined": {
+                "name": "arclaw::state::RoundStatus"
+              }
+            }
+          },
+          {
+            "name": "claw_x",
+            "type": "i16"
+          },
+          {
+            "name": "claw_z",
+            "type": "i16"
+          },
+          {
+            "name": "moves",
+            "type": "u16"
+          },
+          {
+            "name": "started_at",
+            "type": "i64"
+          },
+          {
+            "name": "requested_at",
+            "type": "i64"
+          },
+          {
+            "name": "randomness",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "outcome",
+            "type": "u8"
+          },
+          {
+            "name": "tier",
+            "type": "u8"
+          },
+          {
+            "name": "value",
+            "type": "u64"
+          },
+          {
+            "name": "cards",
+            "type": {
+              "array": [
+                {
+                  "defined": {
+                    "name": "arclaw::state::Card"
+                  }
+                },
+                3
+              ]
+            }
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "arclaw::state::RoundStatus",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Armed"
+          },
+          {
+            "name": "Requested"
+          },
+          {
+            "name": "Drawn"
+          },
+          {
+            "name": "Void"
+          }
+        ]
+      }
+    }
+  ]
+}

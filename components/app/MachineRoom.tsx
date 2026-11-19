@@ -3,70 +3,67 @@
 /**
  * Inside a machine: the cabinet, big, and its control panel.
  *
- *   Play    pays boxes * price in one transaction. The claw starts on submit (coin, travel, drop) and holds; once the
- *           payment confirms it grips, lifts and drops the box down the chute, then a fresh box lands on the pile.
- *   Open    burns sealed boxes and asks the VRF for a draw (the house covers its fee). When the draw is in, the app
- *           sends the reveal as a second transaction and the full-screen reveal plays. If the draw expires, the
- *           opener can ask again or take the boxes back.
+ *   Play     pays boxes * price in Circle USDC on Solana: that many sealed boxes are yours.
+ *   Grab     one wallet signature turns a sealed box into a round on the MagicBlock ephemeral rollup. The joystick then
+ *            drives the claw live: every move is a rollup transaction signed by a session key in this tab, so there is
+ *            no prompt and no fee, and the claw on screen follows the round's state on chain.
+ *   Drop     the claw drops, MagicBlock VRF draws the pack on the rollup, the round is committed back to Solana, and a
+ *            second signature pays the three stock cards. The full-screen reveal plays.
  *
- * The first play asks for the 18+ and risk acknowledgement, kept in localStorage.
+ * A round left half way (a closed tab) is found on the next visit and can be finished from here. The first play asks
+ * for the 18+ and risk acknowledgement, kept in localStorage.
  */
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Hex } from "viem";
+import { Transaction } from "@solana/web3.js";
 import { ClawMachine, type ClawHandle } from "@/components/claw/ClawMachine";
 import type { ClawArt } from "@/components/claw/geometry";
 import { useWallet } from "@/components/wallet/WalletProvider";
 import { RevealOverlay, type RevealWaiting } from "./RevealOverlay";
 import { CabinetMorph } from "@/components/motion/PageTransitions";
-import { arcClient } from "@/lib/arc/chain";
-import { explorerTx } from "@/lib/arc/config";
-import {
-  STATUS,
-  VRF_EXPIRY_S,
-  boxesFromLogs,
-  openCall,
-  readTableId,
-  revertText,
-  openingFromLogs,
-  playCall,
-  readBoxes,
-  readOpening,
-  retryCall,
-  returnBoxesCall,
-  revealCall,
-  revealedBoxes,
-  vrfTopUp,
-  type DrawnBox,
-} from "@/lib/arclaw/contract";
+import { explorerTx } from "@/lib/solana/config";
+import { erConnection, errorText, readBoxes, type DrawnBox } from "@/lib/solana/client";
+import { decodeRound, playIx } from "@/lib/solana/program";
+import { ClawDriver, dropAndDraw, finishRound, pendingRound, settle, startRound, voidOnBase, waitOnRollup, type RoundHandle } from "@/lib/solana/round";
 import { fmtMultiplier, fmtPct, type Machine } from "@/lib/machines";
 import { useMachineStatus } from "./useMachineStatus";
 import { usdc } from "@/lib/stocks";
 import { cn } from "@/lib/cn";
 
 const ACK_KEY = "arclaw:ack-18";
-const MAX_OPEN = 20;
+const MAX_BOXES = 20;
 const GRIP_AT = 3.4;
-const KEEPER_GRACE_MS = 12_000;
+/** Claw travel on chain is -1000..1000 per axis; joystick speed in chain units per second at full lean. */
+const RANGE = 1000;
+const SPEED = 900;
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+type Phase = "idle" | "starting" | "aiming" | "drawing" | "returning" | "settling";
+
+/** Chain claw position to a gantry offset from home, inside the cabinet (components/claw/view.ts). */
+const toWorld = (x: number, z: number) => ({ x: ((x + RANGE) / (2 * RANGE)) * 70 - 10, y: -((z + RANGE) / (2 * RANGE)) * 70 + 4 });
 
 export function MachineRoom({ art, machine }: { art: ClawArt; machine: Machine }) {
   const w = useWallet();
   const status = useMachineStatus(machine.id);
-  // Off and paused are not the player's to fix; a stale table is the keeper's, and clears in seconds.
   const blocked = status === "off" || status === "paused" || status === "stale";
   const blockedLabel = status === "off" ? "Opens soon" : status === "paused" ? "Paused for a moment" : "Getting the machine ready";
   const claw = useRef<ClawHandle>(null);
   const [count, setCount] = useState(1);
   const [sealed, setSealed] = useState<number | null>(null);
-  const [busy, setBusy] = useState<null | "play" | "open">(null);
+  const [busy, setBusy] = useState(false);
+  const [phase, setPhase] = useState<Phase>("idle");
   const [note, setNote] = useState<string | null>(null);
   const [ack, setAck] = useState(true);
   const [overlay, setOverlay] = useState(false);
   const [boxes, setBoxes] = useState<DrawnBox[] | null>(null);
   const [waiting, setWaiting] = useState<RevealWaiting>(null);
   const [txUrl, setTxUrl] = useState<string | undefined>();
+  const [pending, setPending] = useState<Awaited<ReturnType<typeof pendingRound>>>(null);
+  const [chainPos, setChainPos] = useState<{ x: number; z: number; moves: number } | null>(null);
+
+  const handle = useRef<RoundHandle | null>(null);
+  const driver = useRef<ClawDriver | null>(null);
+  const pos = useRef({ x: 0, z: 0 });
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage only exists in the browser.
@@ -74,141 +71,245 @@ export function MachineRoom({ art, machine }: { art: ClawArt; machine: Machine }
   }, []);
 
   const refresh = useCallback(async () => {
-    if (!w.address) return setSealed(null);
+    if (!w.publicKey) return setSealed(null);
     try {
-      const b = await readBoxes(arcClient(), w.address, [machine.id]);
-      setSealed(b[machine.id] ?? 0);
+      setSealed((await readBoxes(w.publicKey))[machine.id] ?? 0);
+      const p = await pendingRound(w.publicKey);
+      setPending(p && p.machineId === machine.id ? p : null);
     } catch {
       setSealed(null);
     }
-  }, [w.address, machine.id]);
+  }, [w.publicKey, machine.id]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- reads the chain when the wallet or machine changes
     void refresh();
   }, [refresh]);
 
-  const total = machine.priceUsdc * count;
+  /* ---------- the live claw: optimistic locally, mirrored from the rollup ---------- */
+
+  const aimAt = (x: number, z: number) => {
+    const p = toWorld(x, z);
+    claw.current?.aim(p.x, p.y);
+  };
+
+  useEffect(() => {
+    if (phase !== "aiming" || !handle.current) return;
+    const conn = erConnection();
+    const id = conn.onAccountChange(
+      handle.current.round,
+      (info) => {
+        try {
+          const r = decodeRound(info.data);
+          setChainPos({ x: r.clawX, z: r.clawZ, moves: r.moves });
+        } catch {
+          // not a round (yet)
+        }
+      },
+      { commitment: "processed" },
+    );
+    return () => void conn.removeAccountChangeListener(id);
+  }, [phase]);
+
+  const stick = useRef({ x: 0, z: 0, raf: 0, last: 0 });
+  const steer = useCallback((vx: number, vz: number) => {
+    const s = stick.current;
+    s.x = vx;
+    s.z = vz;
+    if (s.raf || (vx === 0 && vz === 0)) return;
+    const loop = (now: number) => {
+      const dt = s.last ? Math.min(0.05, (now - s.last) / 1000) : 1 / 60;
+      s.last = now;
+      if (s.x === 0 && s.z === 0) {
+        s.raf = 0;
+        s.last = 0;
+        return;
+      }
+      const dx = s.x * SPEED * dt;
+      const dz = s.z * SPEED * dt;
+      const p = pos.current;
+      const nx = Math.max(-RANGE, Math.min(RANGE, p.x + dx));
+      const nz = Math.max(-RANGE, Math.min(RANGE, p.z + dz));
+      driver.current?.push(nx - p.x, nz - p.z);
+      pos.current = { x: nx, z: nz };
+      aimAt(nx, nz);
+      s.raf = requestAnimationFrame(loop);
+    };
+    s.raf = requestAnimationFrame(loop);
+  }, []);
+
+  // Arrow keys and WASD while aiming.
+  useEffect(() => {
+    if (phase !== "aiming") return;
+    const held = new Set<string>();
+    const apply = () => steer((held.has("right") ? 1 : 0) - (held.has("left") ? 1 : 0), (held.has("up") ? 1 : 0) - (held.has("down") ? 1 : 0));
+    const dir = (k: string) => ({ ArrowLeft: "left", a: "left", ArrowRight: "right", d: "right", ArrowUp: "up", w: "up", ArrowDown: "down", s: "down" })[k];
+    const down = (e: KeyboardEvent) => {
+      const d = dir(e.key);
+      if (!d) return;
+      e.preventDefault();
+      held.add(d);
+      apply();
+    };
+    const up = (e: KeyboardEvent) => {
+      const d = dir(e.key);
+      if (!d) return;
+      held.delete(d);
+      apply();
+    };
+    window.addEventListener("keydown", down);
+    window.addEventListener("keyup", up);
+    return () => {
+      window.removeEventListener("keydown", down);
+      window.removeEventListener("keyup", up);
+      steer(0, 0);
+    };
+  }, [phase, steer]);
+
+  /* ---------- buying boxes ---------- */
 
   const onPlay = async () => {
-    if (!w.address) return w.openConnect();
+    if (!w.sender) return w.openConnect();
     if (!ack) return setNote("Confirm you are 18 or over and accept the risk disclaimer first.");
-    setBusy("play");
+    setBusy(true);
     setNote(null);
-    const show = claw.current?.run(0, GRIP_AT);
     try {
-      await w.send([playCall(machine.id, count, machine.priceUsdc)]);
-      await show;
-      await claw.current?.run(GRIP_AT, claw.current.duration);
-      void claw.current?.respawn();
+      await w.sender.send(new Transaction().add(playIx(w.sender.publicKey, machine.id, count)));
       await refresh();
-      setNote(count === 1 ? "A sealed box is yours. Open it whenever you like." : `${count} sealed boxes are yours. Open them whenever you like.`);
+      setNote(count === 1 ? "A sealed box is yours. Grab it with the claw whenever you like." : `${count} sealed boxes are yours. Grab them one by one.`);
     } catch (e) {
-      await show;
-      claw.current?.reset();
-      setNote(revertText(e));
+      setNote(errorText(e));
     } finally {
-      setBusy(null);
+      setBusy(false);
     }
   };
 
-  /** Wait for the draw, then reveal; handles a draw that expires and a reveal someone else sent. */
-  const settle = useCallback(
-    async (openingId: bigint, fromBlock: bigint) => {
-      const client = arcClient();
-      let fulfilledAt = 0;
-      for (;;) {
-        const s = await readOpening(client, openingId);
-        if (s.status === STATUS.Revealed) {
-          setBoxes(await revealedBoxes(client, openingId, fromBlock));
-          return;
-        }
-        if (s.status === STATUS.Returned) {
-          setWaiting({ label: "The boxes went back to your wallet." });
-          return;
-        }
-        // The keeper reveals a fulfilled opening at once; asking the opener too races it and their tx reverts
-        // (NotPending). Give the keeper a few seconds, and only ask for a signature if it has not come through.
-        if (s.status === STATUS.Fulfilled) {
-          fulfilledAt ||= Date.now();
-          if (Date.now() - fulfilledAt > KEEPER_GRACE_MS) break;
-        }
-        if (Date.now() / 1000 > s.requestedAt + VRF_EXPIRY_S + 5) {
-          setWaiting({
-            label: "The draw took too long. Ask again, or take your boxes back.",
-            action: {
-              label: "Ask again",
-              onClick: () => {
-                setWaiting({ label: "Asking for a new draw" });
-                void (async () => {
-                  try {
-                    await w.send([retryCall(openingId, await vrfTopUp(client))]);
-                    await settle(openingId, fromBlock);
-                  } catch {
-                    try {
-                      await w.send([returnBoxesCall(openingId)]);
-                      setWaiting({ label: "The boxes went back to your wallet." });
-                      await refresh();
-                    } catch (e) {
-                      setWaiting({ label: revertText(e) });
-                    }
-                  }
-                })();
-              },
-            },
-          });
-          return;
-        }
-        await sleep(1500);
-      }
-      const unseal = async () => {
-        setWaiting({ label: "Confirm once more in your wallet to unseal your cards" });
-        try {
-          const hash = await w.send([revealCall(openingId)]);
-          const receipt = await client.getTransactionReceipt({ hash });
-          if (receipt.status !== "success") throw new Error("reveal reverted");
-          setTxUrl(explorerTx(hash));
-          setBoxes(await boxesFromLogs(client, receipt.logs));
-        } catch {
-          // Already revealed by someone else, or the user declined: read it back, or offer the button.
-          const s = await readOpening(client, openingId);
-          if (s.status === STATUS.Revealed) setBoxes(await revealedBoxes(client, openingId, fromBlock));
-          else setWaiting({ label: "Your draw is in. One confirmation unseals it.", action: { label: "Unseal", onClick: () => void unseal() } });
-        }
-      };
-      await unseal();
-    },
-    [w, refresh],
-  );
+  /* ---------- a round ---------- */
 
-  const onOpen = async (n: number) => {
-    if (!w.address) return w.openConnect();
-    setBusy("open");
+  const beginAiming = async (h: RoundHandle, at?: { x: number; z: number }) => {
+    handle.current = h;
+    const r = await waitOnRollup(h);
+    pos.current = at ?? { x: r.clawX, z: r.clawZ };
+    setChainPos({ x: r.clawX, z: r.clawZ, moves: r.moves });
+    aimAt(pos.current.x, pos.current.z);
+    driver.current = new ClawDriver(h);
+    driver.current.start();
+    setPhase("aiming");
+  };
+
+  const onGrab = async () => {
+    if (!w.sender) return w.openConnect();
+    if (!ack) return setNote("Confirm you are 18 or over and accept the risk disclaimer first.");
     setNote(null);
-    setBoxes(null);
-    setTxUrl(undefined);
-    setWaiting({ label: "Opening your box" });
-    setOverlay(true);
+    setPhase("starting");
     try {
-      const client = arcClient();
-      const hash: Hex = await w.send([openCall(machine.id, n, await readTableId(client, machine.id), await vrfTopUp(client))]);
-      const receipt = await client.getTransactionReceipt({ hash });
-      const o = openingFromLogs(receipt.logs);
-      if (!o) throw new Error("The open went through but no draw was found.");
-      setWaiting({ label: "Drawing your cards" });
-      await refresh();
-      await settle(o.openingId, receipt.blockNumber);
+      const h = await startRound(w.sender, machine.id);
+      void refresh();
+      await beginAiming(h);
     } catch (e) {
-      setOverlay(false);
-      setNote(revertText(e));
-    } finally {
-      setBusy(null);
+      setPhase("idle");
+      setNote(errorText(e));
       void refresh();
     }
   };
 
-  const openN = Math.min(sealed ?? 0, MAX_OPEN);
+  /** Everything after the claw drops: draw, commit back, pay. */
+  const complete = async (h: RoundHandle, skipDraw = false) => {
+    const sender = w.sender;
+    if (!sender) return;
+    let show: Promise<void> | undefined;
+    try {
+      if (!skipDraw) {
+        setPhase("drawing");
+        driver.current?.stop();
+        claw.current?.aim(0, 0);
+        await new Promise((r) => setTimeout(r, 450));
+        show = claw.current?.run(0, GRIP_AT);
+        const drawn = await dropAndDraw(h);
+        if (drawn?.status === "requested") setNote("The draw is slow today. If it does not land, the round is voided and your box comes back.");
+      }
+      setPhase("returning");
+      const back = await finishRound(h, sender);
+      await show;
+      if (back.status === "drawn") await claw.current?.run(GRIP_AT, claw.current.duration);
+      else claw.current?.reset();
+      void claw.current?.respawn();
+      await doSettle(h, back);
+    } catch (e) {
+      await show;
+      claw.current?.reset();
+      setPhase("idle");
+      setNote(errorText(e));
+      void refresh();
+    }
+  };
+
+  const doSettle = async (h: RoundHandle, round: Parameters<typeof settle>[1]) => {
+    const sender = w.sender;
+    if (!sender) return;
+    setPhase("settling");
+    if (round.status === "drawn") {
+      setBoxes(null);
+      setTxUrl(undefined);
+      setWaiting({ label: "Confirm once more in your wallet to unseal your cards" });
+      setOverlay(true);
+    }
+    const run = async () => {
+      try {
+        const { signature, box } = await settle(h, round, sender);
+        setTxUrl(explorerTx(signature));
+        if (box) setBoxes([box]);
+        else setNote("The round was void, so your box is back with your sealed boxes.");
+      } catch (e) {
+        if (round.status === "drawn") setWaiting({ label: errorText(e), action: { label: "Unseal", onClick: () => void run() } });
+        else setNote(errorText(e));
+      } finally {
+        setPhase("idle");
+        handle.current = null;
+        driver.current = null;
+        void refresh();
+      }
+    };
+    await run();
+  };
+
+  const onDrop = () => {
+    const h = handle.current;
+    if (h) void complete(h);
+  };
+
+  /** Picks a half-finished round back up wherever it stopped. */
+  const onResume = async () => {
+    const p = pending;
+    const sender = w.sender;
+    if (!p || !sender) return;
+    setPending(null);
+    setNote(null);
+    try {
+      if (!p.delegated) {
+        if (p.state && (p.state.status === "drawn" || p.state.status === "void")) return void (await doSettle(p, p.state));
+        setPhase("returning");
+        await voidOnBase(p, sender);
+        const again = await pendingRound(sender.publicKey);
+        if (again?.state) return void (await doSettle(p, again.state));
+        return setPhase("idle");
+      }
+      if (p.state?.status === "armed" && p.driver) return void (await beginAiming(p, { x: p.state.clawX, z: p.state.clawZ }));
+      if (p.state?.status === "requested" && p.driver) {
+        setPhase("drawing");
+        handle.current = p;
+      }
+      await complete(p, true);
+    } catch (e) {
+      setPhase("idle");
+      setNote(errorText(e));
+      void refresh();
+    }
+  };
+
   const top = machine.tiers[machine.tiers.length - 1]!;
+  const total = machine.priceUsdc * count;
+  const inRound = phase !== "idle";
 
   return (
     <div className="wrap grid gap-8 py-8 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)] lg:items-center lg:gap-12 lg:py-10">
@@ -235,77 +336,84 @@ export function MachineRoom({ art, machine }: { art: ClawArt; machine: Machine }
           </Link>
         </p>
 
-        <div className="mt-6 flex items-center justify-between gap-4 border-t border-line pt-6">
-          <label htmlFor="boxes" className="text-[15px] text-cream">
-            Boxes
-          </label>
-          <div className="flex items-center rounded-[10px] border border-line-strong bg-panel-2">
-            <button type="button" aria-label="One box fewer" className="size-11 rounded-l-[10px] text-[20px] hover:bg-panel disabled:opacity-40" disabled={count <= 1 || !!busy} onClick={() => setCount((c) => Math.max(1, c - 1))}>
-              -
-            </button>
-            <input
-              id="boxes"
-              inputMode="numeric"
-              value={count}
-              disabled={!!busy}
-              onChange={(e) => setCount(Math.min(MAX_OPEN, Math.max(1, Number(e.target.value.replace(/\D/g, "")) || 1)))}
-              className="money h-11 w-12 bg-transparent text-center text-[18px] outline-none"
-            />
-            <button type="button" aria-label="One box more" className="size-11 rounded-r-[10px] text-[20px] hover:bg-panel disabled:opacity-40" disabled={count >= MAX_OPEN || !!busy} onClick={() => setCount((c) => Math.min(MAX_OPEN, c + 1))}>
-              +
-            </button>
-          </div>
-        </div>
-        <div className="mt-4 flex items-center justify-between">
-          <span className="text-[15px] text-muted">Total</span>
-          <span className="money text-[22px]">{usdc(total)} USDC</span>
-        </div>
+        {inRound ? (
+          <RoundPanel phase={phase} chainPos={chainPos} onSteer={steer} onDrop={onDrop} />
+        ) : (
+          <>
+            <div className="mt-6 flex items-center justify-between gap-4 border-t border-line pt-6">
+              <label htmlFor="boxes" className="text-[15px] text-cream">
+                Boxes
+              </label>
+              <div className="flex items-center rounded-[10px] border border-line-strong bg-panel-2">
+                <button type="button" aria-label="One box fewer" className="size-11 rounded-l-[10px] text-[20px] hover:bg-panel disabled:opacity-40" disabled={count <= 1 || busy} onClick={() => setCount((c) => Math.max(1, c - 1))}>
+                  -
+                </button>
+                <input
+                  id="boxes"
+                  inputMode="numeric"
+                  value={count}
+                  disabled={busy}
+                  onChange={(e) => setCount(Math.min(MAX_BOXES, Math.max(1, Number(e.target.value.replace(/\D/g, "")) || 1)))}
+                  className="money h-11 w-12 bg-transparent text-center text-[18px] outline-none"
+                />
+                <button type="button" aria-label="One box more" className="size-11 rounded-r-[10px] text-[20px] hover:bg-panel disabled:opacity-40" disabled={count >= MAX_BOXES || busy} onClick={() => setCount((c) => Math.min(MAX_BOXES, c + 1))}>
+                  +
+                </button>
+              </div>
+            </div>
+            <div className="mt-4 flex items-center justify-between">
+              <span className="text-[15px] text-muted">Total</span>
+              <span className="money text-[22px]">{usdc(total)} USDC</span>
+            </div>
 
-        {!ack ? (
-          <label className="mt-5 flex items-start gap-3 text-[14px] leading-relaxed text-muted">
-            <input
-              type="checkbox"
-              className="mt-1 size-4 accent-[var(--color-cream)]"
-              onChange={(e) => {
-                if (!e.target.checked) return;
-                localStorage.setItem(ACK_KEY, "1");
-                setAck(true);
-                setNote(null);
-              }}
-            />
-            <span>
-              By playing you confirm you are 18 or over and accept the{" "}
-              <a className="text-cream underline underline-offset-4" href="/disclaimer" target="_blank">
-                risk disclaimer
-              </a>
-              .
-            </span>
-          </label>
-        ) : null}
-
-        <button type="button" className="btn mt-5 w-full" disabled={!!busy || blocked || (!!w.address && !ack)} onClick={() => void onPlay()}>
-          {blocked ? blockedLabel : !w.address ? "Connect to play" : busy === "play" ? "Playing" : <>Play for <span className="money">{usdc(total)} USDC</span></>}
-        </button>
-
-        <div className="mt-6 flex items-center justify-between gap-4 border-t border-line pt-6">
-          <div>
-            <p className="text-[15px] text-cream">Sealed boxes</p>
-            <p className="money mt-1 text-[22px]">{sealed ?? "0"}</p>
-          </div>
-          <div className="flex gap-2">
-            <button type="button" className="btn-cream" disabled={!openN || !!busy || status === "stale" || status === "paused"} onClick={() => void onOpen(1)}>
-              Open one
-            </button>
-            {openN > 1 ? (
-              <button type="button" className="btn-ghost" disabled={!!busy || status === "stale" || status === "paused"} onClick={() => void onOpen(openN)}>
-                Open {openN}
-              </button>
+            {!ack ? (
+              <label className="mt-5 flex items-start gap-3 text-[14px] leading-relaxed text-muted">
+                <input
+                  type="checkbox"
+                  className="mt-1 size-4 accent-[var(--color-cream)]"
+                  onChange={(e) => {
+                    if (!e.target.checked) return;
+                    localStorage.setItem(ACK_KEY, "1");
+                    setAck(true);
+                    setNote(null);
+                  }}
+                />
+                <span>
+                  By playing you confirm you are 18 or over and accept the{" "}
+                  <a className="text-cream underline underline-offset-4" href="/disclaimer" target="_blank">
+                    risk disclaimer
+                  </a>
+                  .
+                </span>
+              </label>
             ) : null}
-          </div>
-        </div>
-        <Link href={`/app/gifts?machine=${machine.slug}`} className="mt-4 inline-block text-[14px] text-muted underline-offset-4 hover:text-cream hover:underline">
-          Gift a box instead
-        </Link>
+
+            <button type="button" className="btn mt-5 w-full" disabled={busy || blocked || (!!w.address && !ack)} onClick={() => void onPlay()}>
+              {blocked ? blockedLabel : !w.address ? "Connect to play" : busy ? "Paying" : <>Buy for <span className="money">{usdc(total)} USDC</span></>}
+            </button>
+
+            <div className="mt-6 flex items-center justify-between gap-4 border-t border-line pt-6">
+              <div>
+                <p className="text-[15px] text-cream">Sealed boxes</p>
+                <p className="money mt-1 text-[22px]">{sealed ?? "0"}</p>
+              </div>
+              <button type="button" className="btn-cream" disabled={!sealed || busy || status === "stale" || status === "paused"} onClick={() => void onGrab()}>
+                Grab one with the claw
+              </button>
+            </div>
+            {pending ? (
+              <div className="mt-4 flex items-center justify-between gap-4 rounded-[12px] border border-line bg-panel-2 p-4">
+                <p className="text-[14px] text-cream">You have a round in progress on this machine.</p>
+                <button type="button" className="btn-ghost shrink-0" onClick={() => void onResume()}>
+                  Finish it
+                </button>
+              </div>
+            ) : null}
+            <Link href={`/app/gifts?machine=${machine.slug}`} className="mt-4 inline-block text-[14px] text-muted underline-offset-4 hover:text-cream hover:underline">
+              Gift a box instead
+            </Link>
+          </>
+        )}
 
         <p role="status" className={cn("mt-4 min-h-[1.5em] text-[14px]", note ? "text-cream" : "text-muted")}>
           {note}
@@ -319,8 +427,95 @@ export function MachineRoom({ art, machine }: { art: ClawArt; machine: Machine }
         waiting={waiting}
         explorerUrl={txUrl}
         onClose={() => setOverlay(false)}
-        onAnother={(sealed ?? 0) > 0 ? () => void onOpen(1) : undefined}
+        onAnother={(sealed ?? 0) > 0 ? () => {
+          setOverlay(false);
+          void onGrab();
+        } : undefined}
       />
+    </div>
+  );
+}
+
+const PHASE_LABEL: Record<Phase, string> = {
+  idle: "",
+  starting: "Confirm in your wallet to start the round",
+  aiming: "Steer the claw, then drop it",
+  drawing: "Drawing your pack with MagicBlock VRF",
+  returning: "Sending the round back to Solana",
+  settling: "Paying your cards",
+};
+
+/** The round's controls: a drag pad (touch and mouse), the drop button, and the claw's position on the rollup. */
+function RoundPanel({ phase, chainPos, onSteer, onDrop }: { phase: Phase; chainPos: { x: number; z: number; moves: number } | null; onSteer: (x: number, z: number) => void; onDrop: () => void }) {
+  const pad = useRef<HTMLDivElement>(null);
+  const [knob, setKnob] = useState({ x: 0, y: 0 });
+  const aiming = phase === "aiming";
+
+  const move = (e: React.PointerEvent) => {
+    const r = pad.current?.getBoundingClientRect();
+    if (!r) return;
+    let x = ((e.clientX - r.left) / r.width) * 2 - 1;
+    let y = ((e.clientY - r.top) / r.height) * 2 - 1;
+    const len = Math.hypot(x, y);
+    if (len > 1) {
+      x /= len;
+      y /= len;
+    }
+    setKnob({ x, y });
+    onSteer(x, -y);
+  };
+  const release = () => {
+    setKnob({ x: 0, y: 0 });
+    onSteer(0, 0);
+  };
+
+  return (
+    <div className="mt-6 border-t border-line pt-6">
+      <p className="text-[15px] text-cream">{PHASE_LABEL[phase]}</p>
+      {aiming ? (
+        <>
+          <div className="mt-5 flex items-center gap-6">
+            <div
+              ref={pad}
+              role="application"
+              aria-label="Joystick: drag to steer the claw, or use the arrow keys"
+              className="relative size-36 shrink-0 touch-none rounded-full border border-line-strong bg-panel-2"
+              onPointerDown={(e) => {
+                e.currentTarget.setPointerCapture(e.pointerId);
+                move(e);
+              }}
+              onPointerMove={(e) => {
+                if (e.buttons) move(e);
+              }}
+              onPointerUp={release}
+              onPointerCancel={release}
+            >
+              <span
+                className="absolute left-1/2 top-1/2 size-14 rounded-full border border-line-strong bg-cream"
+                style={{ transform: `translate(calc(-50% + ${knob.x * 44}px), calc(-50% + ${knob.y * 44}px))` }}
+              />
+            </div>
+            <button type="button" className="btn flex-1" onClick={onDrop}>
+              Drop the claw
+            </button>
+          </div>
+          <dl className="mt-5 grid grid-cols-3 gap-2 text-[13px]">
+            <div>
+              <dt className="text-muted">Claw on chain</dt>
+              <dd className="money text-cream">{chainPos ? `${chainPos.x}, ${chainPos.z}` : "..."}</dd>
+            </div>
+            <div>
+              <dt className="text-muted">Moves</dt>
+              <dd className="money text-cream">{chainPos?.moves ?? 0}</dd>
+            </div>
+            <div>
+              <dt className="text-muted">Running on</dt>
+              <dd className="text-cream">MagicBlock ER</dd>
+            </div>
+          </dl>
+          <p className="mt-4 text-[13px] leading-relaxed text-muted">Every move is a transaction on the ephemeral rollup, signed in this tab: no wallet prompt and no fee. Where you drop does not change the odds: the VRF picks the pack.</p>
+        </>
+      ) : null}
     </div>
   );
 }

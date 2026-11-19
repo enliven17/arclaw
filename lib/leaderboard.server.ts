@@ -1,21 +1,20 @@
 /**
  * The leaderboard, server side. From the Convex indexer when NEXT_PUBLIC_CONVEX_URL is set (convex/indexer.ts);
- * otherwise read straight from the chain's logs with the same decoding (lib/arclaw/events.ts), which is fine while the
- * chain is young. Either way the page caches it for a minute.
+ * otherwise read straight from the program's transactions with the same decoding (lib/solana/events.ts), which is
+ * fine while the program is young. Either way the page caches it for a minute.
  */
 import "server-only";
 import { ConvexHttpClient } from "convex/browser";
 import { makeFunctionReference } from "convex/server";
-import { arcClient } from "./arc/chain";
-import { ARC } from "./arc/config";
-import { aggregate, readRange, type Leaderboard } from "./arclaw/events";
+import { baseConnection } from "./solana/client";
+import { SOLANA } from "./solana/config";
+import { aggregate, readSince, type Leaderboard } from "./solana/events";
 
 export type LeaderboardSource = "convex" | "chain";
 
 const leaderboardRef = makeFunctionReference<"query", { limit?: number }, Leaderboard>("indexer:leaderboard");
 
 type Result = { board: Leaderboard; source: LeaderboardSource };
-/** In-process memo: one chain read a minute at most, and the last good board if a read fails. */
 let memo: { at: number; value: Result } | null = null;
 const TTL_MS = 60_000;
 
@@ -35,12 +34,10 @@ async function readLeaderboard(): Promise<Result | null> {
       // Fall through to the chain.
     }
   }
-  if (!ARC.contracts) return null;
+  if (!SOLANA.deployment) return null;
   try {
-    const client = arcClient();
-    const head = await client.getBlockNumber();
-    const { plays, pulls } = await readRange(client, ARC.contracts.deployBlock, head);
-    return { board: aggregate(plays, pulls, Number(head)), source: "chain" };
+    const { plays, pulls } = await readSince(baseConnection(), null, 1000);
+    return { board: aggregate(plays, pulls), source: "chain" };
   } catch (e) {
     console.error("leaderboard: chain read failed", e instanceof Error ? e.message.slice(0, 300) : e);
     return null;

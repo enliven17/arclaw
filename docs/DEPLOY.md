@@ -1,72 +1,29 @@
-# Mainnet deploy
+# Deploy
 
-Everything runs from `scripts/mainnet/`, reading the key bundle on the Desktop (`arclaw-mainnet-keys.txt`, outside the repo, never committed). Nothing secret is printed.
+## Program (devnet)
 
-## Before you start
+The full runbook is in [`solana/README.md`](../solana/README.md): `anchor keys sync`, `anchor build`,
+`anchor deploy --provider.cluster devnet`, then `pnpm solana:setup` from the repo root (test stock mints, vault
+inventory, `initialize` with Circle's devnet USDC, the three machines and their tables from `lib/machines.json`).
+The setup script writes `lib/deployments/solana-devnet.json` and `lib/machines.resolved.json`; commit both.
 
-1. Both contract audits of the final commit are closed and `forge test` is green (`docs/SECURITY.md`).
-2. `node scripts/mainnet/keys.mjs` has made the bundle. Back it up, then keep one copy off the machine.
-3. The deployer holds USDC on Arc mainnet. The deploy itself costs about 1 USDC of gas; whatever is left is spread by the script.
+## Mainnet
 
-Suggested funding: 2 USDC works (small float, see the risk below), 12 USDC is comfortable, 25 USDC makes an empty float very unlikely for a Single-only launch (keeper simulation, `docs/OPERATIONS.md`).
+Not yet: the program needs two independent audits first (`docs/SECURITY.md`). When it goes: admin key in a Squads
+multisig, stocks are xStocks (Token-2022) bought on Jupiter into the vault, USDC is Circle's mainnet mint, and the
+deployment JSON goes in `lib/deployments/solana-mainnet.json` or `NEXT_PUBLIC_SOLANA_MAINNET_DEPLOYMENT`.
 
-## Steps
+## Web (Vercel)
 
-```bash
-node scripts/mainnet/deploy.mjs check            # balances and what it would spread
-node scripts/mainnet/deploy.mjs deploy --yes     # Safes, contracts (paused, Single only), ownership, funding
-node scripts/mainnet/deploy.mjs status           # paused, balance, machines
-```
+| Variable | Value |
+|---|---|
+| `NEXT_PUBLIC_SOLANA_NETWORK` | `devnet` (default) or `mainnet` |
+| `NEXT_PUBLIC_SOLANA_RPC_URL` | a private RPC (Helius, Triton...) in production |
+| `NEXT_PUBLIC_MAGICBLOCK_RPC_URL`, `NEXT_PUBLIC_MAGICBLOCK_VALIDATOR` | only to pick another rollup region (they must match) |
+| `NEXT_PUBLIC_CONVEX_URL`, `APP_ORIGIN`, `SHARE_SECRET`, Telegram | as before (`.env.example`) |
 
-`deploy` writes `lib/deployments/arc-mainnet.json` and `lib/machines.resolved.mainnet.json`. Commit both. Publish the sources on the explorer so anyone can match the bytecode to this repo (a separate step, so an explorer outage cannot stop a deploy half way; safe to repeat):
+## Convex
 
-```bash
-cd contracts && forge script script/Deploy.s.sol --tc Deploy --rpc-url https://rpc.mainnet.arc.io --resume --verify --verifier blockscout --verifier-url https://explorer.arc.io/api/
-```
-
-Then:
-
-1. Convex (prod): `npx convex deploy`, then `npx convex env set` for `KEEPER_PRIVATE_KEY` (the keeper wallet from the bundle), `KEEPER_NETWORK=mainnet`, `KEEPER_RPC_URL` (private RPC first, see below), `NEXT_PUBLIC_ARC_NETWORK=mainnet` (the indexer reads this one, not `KEEPER_NETWORK`), `ADMIN_QUERY_SECRET`, `KEEPER_DEPLOYMENT_JSON` only if the JSON is not yet in the build, `ALERT_TELEGRAM_CHAT_ID` and `TELEGRAM_BOT_TOKEN` when you have them.
-   - The bot's key must also be the operator (it reprices): the deploy makes them separate, so the Owner Safe calls `setOperator(keeper)` (`safe.mjs exec`). Health shows `not-operator` until it does.
-   - A Convex deployment that ran testnet before keeps testnet state: empty `keeperKv`, `keeperEvents`, `keeperLocks`, `keeperWakes`, `pulls`, `plays`, `players` and `meta` (`npx convex import --prod --table <t> --replace -y empty.jsonl`) right after switching, or the keeper's scan cursor skips the first openings and the leaderboard shows testnet plays.
-   - RPCs: QuickNode's and Circle's keyless endpoints serve 10k-block `eth_getLogs`; Alchemy's free tier caps it at 10 blocks and dRPC at 1000, so they go after them in the list.
-2. Vercel (prod): `NEXT_PUBLIC_ARC_NETWORK=mainnet`, `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID`, `SHARE_SECRET`, `APP_ORIGIN`; then `vercel deploy --prod` from main. Check the WalletConnect allowed domains include the production domain.
-3. Check `pnpm keeper status` (or the Convex `keeper:status` query) shows the Single table priced and healthy.
-4. Play once from your own wallet while the contract is still paused to confirm the UI shows "Paused for a moment", then:
-
-```bash
-node scripts/mainnet/deploy.mjs unpause --yes
-```
-
-5. Play one real Single box, open it, sell the stock back: `scripts/mainnet/smoke.mts` does it from a test wallet.
-6. Enable the bigger machines only after the keeper has priced them and the balance supports them (about 50 USDC for Stack, about 300 for Vault):
-
-```bash
-node scripts/mainnet/deploy.mjs enable --machine 2 --yes
-```
-
-## The ARCLAW token
-
-When the token exists, send me the address. It goes into `lib/token.ts` and `LuckVault.setLuckToken` is called from the Owner Safe.
-
-## Known limits of a small float
-
-Prizes are paid from player revenue. With a float under ten times the biggest enabled price, an early jackpot can leave the contract owing the difference (an IOU) and the contract pauses itself until the keeper tops it up. Players are not lost: they can always get their money back through refunds. Raise the float by sending USDC to the Arclaw address.
-
-## Safes
-
-The three Safe signers are hot wallets made by `keys.mjs` so everything works today. Before real money grows, add hardware wallets as owners and remove the hot ones through a Safe transaction (`safe.mjs exec`).
-
-## Status (2026-10-20): back on testnet
-
-The mainnet deployment was paused, emptied (`withdraw` and `sweep` from the Owner Safe, reserve floor set to 0 with
-`setJit`) and every role wallet swept to the admin wallet. The site, the keeper and the indexer run on testnet again.
-
-Mainnet addresses are kept out of the repo: `lib/deployments/arc-mainnet.json` is back to the empty placeholder, and the
-record lives in `.env.local` (`NEXT_PUBLIC_ARC_MAINNET_DEPLOYMENT`, read by `lib/arc/config.ts`; `KEEPER_DEPLOYMENT_JSON_MAINNET`
-for the keeper's `KEEPER_DEPLOYMENT_JSON`) and in a backup on the Desktop (`arclaw-mainnet-deployment/`, with the
-resolved odds and the broadcast files). To serve mainnet again, set those env vars where the build and the keeper run.
-
-The Telegram bot is off as well: its webhook is deleted, and `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET` (Vercel)
-and `ALERT_TELEGRAM_CHAT_ID` (Convex) are unset, so `/api/telegram` answers 401 and keeper alerts go only to the event
-log and the admin panel. The Vercel deployments built while the site served mainnet were removed.
+`npx convex deploy`. The only cron is `indexer:sync` (every minute): it reads the program's transactions after its
+cursor and fills the leaderboard tables. It needs `NEXT_PUBLIC_SOLANA_NETWORK` (and a private RPC in
+`NEXT_PUBLIC_SOLANA_RPC_URL`) in the Convex env.

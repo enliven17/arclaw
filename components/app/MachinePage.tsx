@@ -18,8 +18,8 @@ export function machineTitle(slug: string) {
 export function machineDescription(slug: string) {
   const m = withResolved().find((x) => x.slug === slug);
   return m
-    ? `Play the ${m.name} machine for ${m.priceUsdc} USDC on Arc. Every play gives one sealed box with three tokenized stock cards.`
-    : "Play an arclaw machine with USDC on Arc and open sealed boxes into tokenized stock cards.";
+    ? `Play the ${m.name} machine for ${m.priceUsdc} USDC on Solana. Every play gives one sealed box with three tokenized stock cards.`
+    : "Play an arclaw machine with USDC on Solana and open sealed boxes into tokenized stock cards.";
 }
 
 export function MachinePage({ slug }: { slug: string }) {

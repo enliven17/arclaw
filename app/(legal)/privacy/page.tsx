@@ -7,7 +7,7 @@ export const metadata: Metadata = {
   alternates: { canonical: "/privacy" },
 };
 
-const UPDATED = "18 October 2026";
+const UPDATED = "19 November 2026";
 
 export default function Privacy() {
   return (
@@ -20,7 +20,7 @@ export default function Privacy() {
       <ul>
         <li>
           <strong>Wallet address and on-chain activity.</strong> When you connect a wallet we see its public address. Plays,
-          boxes, prizes, gifts and sales happen on the Arc blockchain, which is public; we read and index those events to
+          boxes, prizes, gifts and sales happen on the Solana blockchain, which is public; we read and index those events to
           show your collection and the leaderboard.
         </li>
         <li>
@@ -58,8 +58,16 @@ export default function Privacy() {
       <h2>Who else processes it</h2>
       <ul>
         <li>Vercel (hosting) and Convex (database) store and serve the app.</li>
-        <li>WalletConnect relays the connection if you link a mobile wallet. Circle provides the Arc network.</li>
-        <li>Astock provides the tokenized stocks and prices; D20 provides randomness.</li>
+        <li>
+          Your wallet app (such as Phantom, Solflare or Backpack) connects you and signs your transactions, including
+          through Mobile Wallet Adapter on Android.
+        </li>
+        <li>
+          Solana RPC providers relay your transactions and our reads of the chain. MagicBlock runs the ephemeral rollup
+          your claw rounds play on and provides randomness.
+        </li>
+        <li>Circle issues USDC. Backed issues the xStocks prizes on mainnet. A third party price feed supplies display prices.</li>
+        <li>Jupiter, if you sell a card from the app.</li>
         <li>Telegram, if you use the bot.</li>
       </ul>
       <p>Each handles data under its own privacy policy.</p>

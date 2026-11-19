@@ -7,12 +7,12 @@ import { Breadcrumbs } from "@/components/seo/Breadcrumbs";
 import { getLeaderboard } from "@/lib/leaderboard.server";
 import { MACHINES } from "@/lib/machines";
 import { usdc } from "@/lib/stocks";
-import { explorerTx } from "@/lib/arc/config";
+import { explorerTx } from "@/lib/solana/config";
 import { cn } from "@/lib/cn";
 
 export const metadata: Metadata = {
   title: "Leaderboard",
-  description: "See the biggest arclaw pulls and the players who have opened the most tokenized stock packs on Arc.",
+  description: "See the biggest arclaw pulls and the players who have opened the most tokenized stock packs on Solana.",
   alternates: { canonical: "/app/leaderboard" },
 };
 export const revalidate = 60;
@@ -92,7 +92,7 @@ export default async function LeaderboardPage() {
                       </span>
                       <span className="money block text-[13px] text-muted">{short(x.player)}</span>
                     </span>
-                    <a className="money shrink-0 text-[15px] hover:underline" href={explorerTx(x.txHash)} target="_blank" rel="noopener noreferrer">
+                    <a className="money shrink-0 text-[15px] hover:underline" href={explorerTx(x.signature)} target="_blank" rel="noopener noreferrer">
                       {usdc(x.valueUsdc)} USDC
                     </a>
                   </li>

@@ -38,7 +38,7 @@ const PLAY: Keyboard = {
 const WELCOME = [
   "<b>Grab a box. Pull real stocks.</b>",
   "",
-  "Pick a machine, pay in USDC on Arc, and the claw grabs you a sealed box. Every box opens into a pack of three tokenized stock cards, paid straight to your wallet.",
+  "Pick a machine, pay in USDC on Solana, steer the claw, and it grabs you a sealed box. Every box opens into a pack of three tokenized stock cards, paid straight to your wallet.",
   "",
   MACHINES.map((m) => `${m.name}: ${usdc(m.priceUsdc)} USDC, ${fmtPct(m.rtp, 0)} expected return`).join("\n"),
   "",

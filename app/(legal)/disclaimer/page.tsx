@@ -7,7 +7,7 @@ export const metadata: Metadata = {
   alternates: { canonical: "/disclaimer" },
 };
 
-const UPDATED = "17 October 2026";
+const UPDATED = "19 November 2026";
 
 export default function Disclaimer() {
   return (
@@ -18,16 +18,16 @@ export default function Disclaimer() {
 
       <h2>What a play is</h2>
       <p>
-        Each play costs a fixed amount of USDC on the Arc network (1, 5 or 10 USDC, depending on the machine) and always
-        gives you one sealed box. A box opens into a pack of three cards. Each card is a transfer of a tokenized stock to
-        your wallet. The claw animation is for show: the contents of every box are decided by the arclaw smart contract
-        using verifiable randomness, not by skill.
+        Each play costs a fixed amount of USDC on Solana (1, 5 or 10 USDC, depending on the machine) and always gives you
+        one sealed box. Network fees are paid in SOL. A box opens into a pack of three cards. Each card is a transfer of a
+        tokenized stock to your wallet. You steer the claw yourself, but where it lands does not change anything: the
+        contents of every box are decided by the arclaw program using verifiable randomness, not by skill.
       </p>
 
       <h2>You can get back less than you paid</h2>
       <p>
         The contract guarantees that every box is worth at least half of what you paid for that machine, measured at the
-        prices used when the prize table was set, and never more than ten times. On average a box returns less than its
+        values recorded when the prize table was set, and never more than ten times. On average a box returns less than its
         price; the expected return of each machine is published in the odds table and enforced on-chain. Most boxes are
         worth less than the play price. Do not play with money you cannot afford to lose, and do not play expecting a
         profit.
@@ -35,19 +35,19 @@ export default function Disclaimer() {
 
       <h2>Tokenized stocks are not shares</h2>
       <p>
-        Prizes are tokens issued by Astock on Arc, each designed to track one stock or fund and backed by tokenized
-        stock held in reserve on another network. Holding them does not make you a shareholder of the company: you do
-        not get voting rights, and you rely on Astock, its reserves, its bridges and its issuers to keep each token
-        redeemable. Their value moves with the market and can fall. Prices shown on arclaw come from third parties and
-        may be delayed or wrong. arclaw does not issue, custody or redeem these tokens.
+        On mainnet, prizes are xStocks: tokens issued by Backed on Solana, each designed to track one stock or fund and
+        backed by the underlying held in reserve. Holding them does not make you a shareholder of the company: you do not
+        get voting rights, and you rely on the issuer, its reserves and its custodians to keep each token redeemable.
+        Their value moves with the market and can fall. On devnet, prizes are test tokens with no value. Prices shown on
+        arclaw come from third parties and may be delayed or wrong. arclaw does not issue, custody or redeem these tokens.
       </p>
 
       <h2>Randomness and smart contracts</h2>
       <p>
-        Outcomes use a third party randomness service (D20 VRF). Smart contracts, randomness providers, oracles, wallets
-        and the Arc network can fail, be attacked, be paused or behave unexpectedly. Transactions on a blockchain are
-        final; arclaw cannot reverse them. If a randomness request fails, the contract lets you retry it or get your
-        boxes back.
+        Outcomes use a third party randomness service (MagicBlock VRF), and each round runs on a MagicBlock ephemeral
+        rollup before it is committed back to Solana. Programs, rollups, randomness providers, wallets and the Solana
+        network can fail, be attacked, be paused or behave unexpectedly. Transactions on a blockchain are final; arclaw
+        cannot reverse them. If a draw does not arrive within two minutes, the round is void and your box comes back.
       </p>
 
       <h2>Eligibility</h2>

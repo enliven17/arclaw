@@ -400,12 +400,14 @@ pub mod arclaw {
         Ok(())
     }
 
-    /// Ends the round on the rollup and sends it back to Solana. The driver may end an Armed round (the box comes
+    /// Ends the round on the rollup and sends it back to Solana. The driver (or the player) may end an Armed round (the box comes
     /// back) and a draw that never landed after VRF_TIMEOUT_S; anyone may send home a Drawn or Void round, so a
     /// keeper can finish what a closed tab left behind.
     pub fn finish_round(ctx: Context<FinishRound>) -> Result<()> {
         let now = Clock::get()?.unix_timestamp;
-        let is_driver = ctx.accounts.payer.key() == ctx.accounts.round.driver;
+        // The player may stand in for the driver: a closed tab loses the session key, never the box.
+        let payer = ctx.accounts.payer.key();
+        let is_driver = payer == ctx.accounts.round.driver || payer == ctx.accounts.round.player;
         {
             let r = &mut ctx.accounts.round;
             match r.status {

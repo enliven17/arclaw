@@ -19,7 +19,7 @@ import { BoosterPack } from "@/components/pack/BoosterPack";
 import { SealedBox } from "@/components/pack/SealedBox";
 import { StockCard } from "@/components/landing/StockCard";
 import { variantOf } from "@/components/claw/view";
-import { toUsdc, type DrawnBox } from "@/lib/arclaw/contract";
+import type { DrawnBox } from "@/lib/solana/client";
 import { shareOnX } from "@/lib/share-client";
 import { usdc } from "@/lib/stocks";
 import { cn } from "@/lib/cn";
@@ -61,7 +61,7 @@ export function RevealOverlay({
 
   const box = boxes?.[index] ?? null;
   const ready = Boolean(box);
-  const total = useMemo(() => (boxes ?? []).reduce((s, b) => s + b.cards.reduce((t, c) => t + toUsdc(c.valueWei), 0), 0), [boxes]);
+  const total = useMemo(() => (boxes ?? []).reduce((s, b) => s + b.cards.reduce((t, c) => t + c.valueUsdc, 0), 0), [boxes]);
 
   useEffect(() => {
     const d = dialog.current;
@@ -268,10 +268,10 @@ export function RevealOverlay({
                       data-rv-card=""
                       className="relative z-10 col-start-1 row-start-1 w-[27%]"
                       tabIndex={step === "flip" && !flipped[i] ? 0 : -1}
-                      aria-label={flipped[i] ? `${c.ticker}, ${usdc(toUsdc(c.valueWei))} USDC` : `Turn card ${i + 1}`}
+                      aria-label={flipped[i] ? `${c.ticker}, ${usdc(c.valueUsdc)} USDC` : `Turn card ${i + 1}`}
                       onClick={() => step === "flip" && flip(i)}
                     >
-                      <StockCard card={{ ticker: c.ticker, name: c.name, amount: toUsdc(c.valueWei) }} tier={box!.tierName} index={i} />
+                      <StockCard card={{ ticker: c.ticker, name: c.name, amount: c.valueUsdc }} tier={box!.tierName} index={i} />
                     </button>
                   ))}
                 </div>
@@ -282,7 +282,7 @@ export function RevealOverlay({
               {step === "done" && box ? (
                 <>
                   <p className={cn("text-[clamp(28px,3.4vw,44px)] leading-none tracking-[-0.03em]", BIG.has(box.tierName) && "text-prize")}>
-                    {box.tierName} <span className="money text-cream">{usdc(box.cards.reduce((t, c) => t + toUsdc(c.valueWei), 0))} USDC</span>
+                    {box.tierName} <span className="money text-cream">{usdc(box.cards.reduce((t, c) => t + c.valueUsdc, 0))} USDC</span>
                   </p>
                   <div className="flex flex-wrap justify-center gap-2">
                     <ShareButton box={box} />
@@ -322,9 +322,9 @@ export function RevealOverlay({
 }
 
 function ShareButton({ box }: { box: DrawnBox }) {
-  const sum = usdc(box.cards.reduce((t, c) => t + toUsdc(c.valueWei), 0));
+  const sum = usdc(box.cards.reduce((t, c) => t + c.valueUsdc, 0));
   return (
-    <button type="button" className="btn-ghost" disabled={!box.txHash} onClick={() => shareOnX(box.txHash!, box.boxIndex, `Pulled a ${box.tierName} pack on arclaw: ${sum} USDC in real stocks.`)}>
+    <button type="button" className="btn-ghost" disabled={!box.signature} onClick={() => shareOnX(box.signature!, `Pulled a ${box.tierName} pack on arclaw: ${sum} USDC in real stocks.`)}>
       Share on X
     </button>
   );
@@ -340,8 +340,8 @@ function Summary({ boxes, total, explorerUrl, onAnother, onClose }: { boxes: Dra
         {boxes.map((b) => (
           <li key={b.boxIndex} className="flex flex-col gap-3 rounded-[14px] border border-line bg-panel p-4 md:flex-row md:items-center md:justify-between">
             <p className={cn("text-[18px]", BIG.has(b.tierName) ? "text-prize" : "text-cream")}>{b.tierName}</p>
-            <p className="money text-[15px] text-muted">{b.cards.map((c) => `${c.ticker} ${usdc(toUsdc(c.valueWei))}`).join("   ")}</p>
-            <p className="money text-[16px]">{usdc(b.cards.reduce((t, c) => t + toUsdc(c.valueWei), 0))} USDC</p>
+            <p className="money text-[15px] text-muted">{b.cards.map((c) => `${c.ticker} ${usdc(c.valueUsdc)}`).join("   ")}</p>
+            <p className="money text-[16px]">{usdc(b.cards.reduce((t, c) => t + c.valueUsdc, 0))} USDC</p>
           </li>
         ))}
       </ul>

@@ -68,7 +68,7 @@ export function Hero({ art, machines }: { art: Record<Variant, ClawArt>; machine
         <div className="flex flex-col items-start">
           <SplitHeading as="h1" id="hero-title" className="h-display whitespace-nowrap !text-[clamp(46px,6vw,104px)]" lines={["Grab a box.", "Pull real stocks."]} />
           <p className="lede mt-7 max-w-[26em]" data-reveal>
-            Every play wins a sealed pack of three tokenized stocks, paid straight to your wallet on Arc.
+            Every play wins a sealed pack of three tokenized stocks, paid straight to your Solana wallet.
           </p>
           <div className="mt-9 w-full max-w-[460px]" data-reveal>
             <MachineSwitch machines={machines} value={id} onChange={setId} label="Machine" />

@@ -21,7 +21,7 @@ export function SiteStructuredData() {
           name: SITE_NAME,
           url,
           logo: new URL("/brand/lockup.svg", SITE_URL).toString(),
-          description: "An on-chain arcade where every play opens into tokenized stock cards on Arc.",
+          description: "An on-chain arcade where every play opens into tokenized stock cards on Solana.",
         }}
       />
     </>

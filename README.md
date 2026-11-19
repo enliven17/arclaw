@@ -1,35 +1,39 @@
 # arclaw
 
-Pay USDC on Arc, play a 3D claw machine, win a sealed box. A box opens into a pack of three cards, and every card is a
-real tokenized stock (an Astock `.arc` token). The claw is theatre; a smart contract decides the contents with verifiable
-randomness. Product rules live in [`CLAUDE.md`](CLAUDE.md), the odds and treasury in [`docs/TOKENOMICS.md`](docs/TOKENOMICS.md).
+An arcade claw you play from your phone, stocked with tokenized stocks instead of plush toys. Pay Circle USDC on Solana,
+steer the claw live on a MagicBlock ephemeral rollup, and every play wins a sealed box that opens into a pack of three
+cards, each a real tokenized stock. The claw is theatre; MagicBlock VRF and the program's weighted tables decide the
+pack. Product rules live in [`CLAUDE.md`](CLAUDE.md), the architecture in [`docs/SOLANA.md`](docs/SOLANA.md), the odds
+and treasury in [`docs/TOKENOMICS.md`](docs/TOKENOMICS.md).
 
-Live: https://arclaw.app (testnet until the mainnet launch). X: https://x.com/arclawapp
+Live: https://arclaw.app (devnet). X: https://x.com/arclawapp
 
 ## Stack
 
 | | |
 |---|---|
 | Web | Next 16 (App Router), React 19, Tailwind v4, GSAP and Lenis, Vercel (with Web Analytics) |
-| Wallets | ConnectKit on wagmi (MetaMask, Coinbase, WalletConnect) |
-| Backend | Convex (leaderboard indexer, keeper cron), Telegram bot (`app/api/telegram`) |
-| Contracts | Solidity 0.8.28, Foundry, in `contracts/` |
-| Randomness | D20DAO VRF on Arc (`contracts/src/vrf`) |
-| Stocks | Astock tokens, desk and oracle on Arc mainnet; mocks on testnet |
+| Wallets | Solana wallet adapter (every Wallet Standard wallet) and Mobile Wallet Adapter on Android |
+| Program | Anchor 1.2, in `solana/` |
+| Real time | MagicBlock ephemeral rollups: each claw round is delegated, moves are gasless, then committed back |
+| Randomness | MagicBlock VRF, on the rollup |
+| Money | Circle USDC (devnet USDC from faucet.circle.com) |
+| Stocks | xStocks (Token-2022) on mainnet, test mints on devnet |
+| Backend | Convex (leaderboard indexer), Telegram bot (`app/api/telegram`) |
 
 ## Layout
 
 ```
 app/              routes: landing (/), the app (/app/*), claim, pull share pages, whitepaper and legal, api
 components/       landing, app, claw machine, motion, wallet, pack, seo
-lib/              arc config, contract client and ABIs (lib/abi), machines and odds, keeper, share signing
-convex/           schema, leaderboard indexer, keeper crons
-contracts/        src, script (deploy), test (unit, invariant, audit1 to audit6 findings), lib
-scripts/          dev (screenshots, profiling), assets (logos, cabinet art), ops (telegram), mainnet (keys, safes, deploy), keeper
+lib/solana/       network config, program client (instructions, accounts, events), rounds, reads
+lib/              machines and odds, share signing, og images, prices
+convex/           schema and the leaderboard indexer
+solana/           the Anchor program, its IDL
+scripts/          solana (devnet setup), dev (screenshots, profiling), assets (logos, cabinet art), ops (telegram)
 public/           logos, cabinet art (generated), video, sfx
 brand/            logo sources and the launch video source
-docs/             tokenomics, security, deployment, operations
-e2e/              local end to end checks against a deployed contract
+docs/             architecture, tokenomics, security, deployment
 proxy.ts          region gate (451 for restricted countries on /app and /claim)
 ```
 
@@ -42,12 +46,13 @@ pnpm dev                        # http://localhost:3000
 pnpm typecheck && pnpm lint && pnpm build
 ```
 
-Contracts:
+Program and client:
 
 ```sh
-cd contracts
-forge build && forge test       # unit, invariant and audit tests
-node script/export-abi.mjs      # regenerate lib/abi after a contract change
+cd solana && cargo test --lib  # table rules and the draw
+anchor build                    # the SBF binary (Solana toolchain + anchor-cli 1.2.2)
+pnpm test                       # the TypeScript client against solana/idl/arclaw.json
+pnpm solana:setup               # devnet: stocks, vault, machines and tables (solana/README.md)
 ```
 
 Generated assets: `pnpm cabinet` rewrites `public/cabinet/*.svg` after the cabinet art or `claw.css` changes (needs a local
@@ -59,25 +64,25 @@ See [`.env.example`](.env.example). The ones that matter:
 
 | Variable | Where | What |
 |---|---|---|
-| `NEXT_PUBLIC_ARC_NETWORK` | Vercel | `testnet` (default) or `mainnet` |
-| `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` | Vercel | WalletConnect project; without it only browser wallets show |
+| `NEXT_PUBLIC_SOLANA_NETWORK` | Vercel | `devnet` (default) or `mainnet` |
+| `NEXT_PUBLIC_SOLANA_RPC_URL` | Vercel | Solana RPC; use a private one in production |
+| `NEXT_PUBLIC_MAGICBLOCK_RPC_URL`, `NEXT_PUBLIC_MAGICBLOCK_VALIDATOR` | Vercel | the rollup region (optional, must match) |
 | `NEXT_PUBLIC_CONVEX_URL` | Vercel | the Convex deployment for the leaderboard |
 | `APP_ORIGIN` | Vercel | public origin for metadata and share cards |
 | `SHARE_SECRET` | Vercel | signs shared-pull links (`openssl rand -hex 32`), server only |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET` | Vercel | the bot |
 | `BLOCKED_COUNTRIES` | Vercel | optional, replaces the default region list in `proxy.ts` |
-| `KEEPER_PRIVATE_KEY`, `ALERT_TELEGRAM_CHAT_ID` | Convex | the keeper bot (a hot key that only holds gas) |
 
 ## Docs
 
-- [`docs/TOKENOMICS.md`](docs/TOKENOMICS.md): machines, odds, treasury rules, the ARCLAW token.
-- [`docs/SECURITY.md`](docs/SECURITY.md): threat model, roles and keys, what was reviewed, what is still open.
-- [`docs/DEPLOY.md`](docs/DEPLOY.md): the mainnet runbook, testnet deploys, Convex and Vercel.
-- [`docs/OPERATIONS.md`](docs/OPERATIONS.md): the keeper, alerts, runbooks.
+- [`docs/SOLANA.md`](docs/SOLANA.md): how a round runs across Solana and MagicBlock, the program rules, the trust model.
+- [`docs/TOKENOMICS.md`](docs/TOKENOMICS.md): machines, odds, treasury rules.
+- [`docs/SECURITY.md`](docs/SECURITY.md): roles, what to review, what is still open.
+- [`docs/DEPLOY.md`](docs/DEPLOY.md) and [`solana/README.md`](solana/README.md): devnet deploy, Vercel, Convex.
 - The whitepaper is a page of the site: `/whitepaper` (`app/(legal)/whitepaper`).
 
 ## Conventions
 
 Commits are `type: subject`, no body. The design rules (no em dashes, one accent colour per screen, no gradients or glow)
-are in [`DESIGN.md`](DESIGN.md) and [`CLAUDE.md`](CLAUDE.md). Every contract change gets two independent reviews and green
+are in [`DESIGN.md`](DESIGN.md) and [`CLAUDE.md`](CLAUDE.md). Every program change gets two independent reviews and green
 tests before any deploy.

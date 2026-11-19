@@ -1,10 +1,10 @@
 # arclaw
 
-Pay USDC on Arc, play a 3D claw machine, win a sealed box. Box opens into a pack of 3 cards, every card is a real tokenized stock (Astock `.arc` ERC-20s).
+Pay Circle USDC on Solana, steer a claw live on a MagicBlock ephemeral rollup, win a sealed box. Box opens into a pack of 3 cards, every card is a real tokenized stock (xStocks on mainnet, test mints on devnet). Built for the Solana x MagicBlock "claw machine" idea. Moved from Arc to Solana on 2026-11-19 (branch `magicblock`); the Arc contracts live in git history.
 
 ## Product rules (decided 2026-10-17)
 
-- Every play wins a box. The claw is theatre; the contract decides the contents. There is no "miss".
+- Every play wins a box. The claw is theatre; the program decides the contents (MagicBlock VRF + the weighted table). There is no "miss".
 - Three machines: 1, 5 and 10 USDC per play. 1 play = 1 box = 1 pack = 3 cards. Each card pays a stock amount (e.g. 0.10 USDC of NVDA).
 - Economics (updated 2026-10-17): a box's outcome is drawn from its machine's weighted outcome table. Every outcome is a full pack (3 cards). On-chain rules per machine:
   - floor: every outcome is worth at least 50% of the play price (nobody leaves with less than half back),
@@ -12,39 +12,40 @@ Pay USDC on Arc, play a 3D claw machine, win a sealed box. Box opens into a pack
   - expected return (RTP) within a band, default 75 to 85%, so the house edge is 15 to 25%,
   - weights are steeply unequal: small outcomes common, big ones rare.
 - Single source of truth for the tables: `lib/machines.json` (read by the deploy script and the site's odds section).
-- Prizes are paid from pre-bought `.arc` inventory held by the contract. Operator refills via the Astock desk (`buy(stock,minOut,to)`). Pool short for a card: refund that card's value in USDC, the lower of its value when the table was set and its current price.
-- Randomness: D20DAO VRF behind a small interface so it can be swapped.
-- Boxes are giftable: to an address, or via claim link (ephemeral key signs the recipient, no front-running).
-- Wallets: Circle passkey smart wallet (mimir `lib/arc/*`) AND injected wallets via wagmi.
+- Prizes are paid from pre-filled stock inventory held by the program's vault (config PDA token accounts). Operator refills it (mainnet: buy xStocks on Jupiter). Vault short for a card: refund that card's table value in USDC, or record it as owed.
+- Randomness: MagicBlock VRF (`drop_claw` requests on the rollup queue, `reveal_round` is the callback).
+- Real time: each round is a Round PDA delegated to a MagicBlock ephemeral rollup. Claw moves are rollup transactions signed by a session key the browser holds (no prompt, no fee). Two wallet signatures per round: start (+delegate) and settle.
+- Boxes are giftable: to an address, or via claim link (the link key co-signs the recipient's claim transaction, no front-running).
+- Wallets: Solana wallet adapter (Wallet Standard wallets) AND Mobile Wallet Adapter, so it plays from a phone.
 - Landing (`/`) is marketing only: nothing is played there; every Play CTA links into the app.
-- The app lives under `/app`: play, the user's collection (every card pulled, current holdings and live value), and selling stocks back to USDC (Astock desk `sell(stock, sharesIn, minUsdcOut, to)` after approve; testnet uses the mock desk).
-- App flow (user spec 2026-10-17): `/app/play` is a marketplace with the three machines side by side. Tap a machine to enter it. Inside, a control panel handles the transactions (connect, choose boxes, pay, open). The machine runs its claw sequence and drops the box. The box goes full screen; tap to open it and a pack comes out; tap the pack to tear it; each tap deals one face-down card (3 total); once all three are out, tap any card to flip it.
-- Security: every contract change gets two independent audits plus green tests before any deploy.
-- Treasury (2026-10-17): box revenue funds payouts. When inventory is short at reveal, the contract buys the stock on the desk just in time; only a small float is kept for 2x+ hits. Refund only if the buy fails.
-- ARCLAW token (minted later on Arguspad, address set by owner): locked holders get a luck boost of 0 to 1%. The payout band checks include the max boost. Flash-loaned or freshly bought tokens must not count.
-- Leaderboard in the app, fed by a Convex indexer of contract events.
+- The app lives under `/app`: play, the user's collection (every card pulled, current holdings and live value), and selling stocks back to USDC (mainnet: a Jupiter swap; devnet test stocks have no market).
+- App flow (user spec 2026-10-17): `/app/play` is a marketplace with the three machines side by side. Tap a machine to enter it. Inside, a control panel handles the transactions (connect, choose boxes, pay, grab). Grab starts a round: the player steers the claw with a joystick on the rollup, drops it, the machine runs its claw sequence and drops the box. The box goes full screen; tap to open it and a pack comes out; tap the pack to tear it; each tap deals one face-down card (3 total); once all three are out, tap any card to flip it.
+- Security: every program change gets two independent audits plus green tests before any mainnet deploy. The Solana program is not audited yet.
+- Treasury: box revenue funds payouts; the price of every unsettled box and every owed refund is reserved. No just in time buys on Solana (see docs/SOLANA.md).
+- ARCLAW token luck boost: not ported to Solana.
+- Leaderboard in the app, fed by a Convex indexer of the program's events (`Played`, `RoundSettled`).
 - Telegram bot with designed message images; on first /start it plays the launch video.
 - Launch video built with `../ft-motion`: a big claw comes down in the middle, pulls a box up from below the frame, the box opens. Sound effects throughout, and in the site/app.
 - X: https://x.com/arclawapp. Legal pages: `/disclaimer`, `/privacy`.
 
 ## Chain facts
 
-| | Mainnet | Testnet |
+| | Mainnet | Devnet |
 |---|---|---|
-| chainId | 5042 | 5042002 |
-| RPC | https://rpc.mainnet.arc.io | https://rpc.testnet.arc.io |
-| Explorer | https://explorer.arc.io | https://explorer.testnet.arc.io |
-| USDC ERC-20 (6 dec) | 0x3600000000000000000000000000000000000000 | same |
-| D20 VRF coordinator | 0xd20da057469C45928912d983F45790C41e290571 | 0xd20DA0FF9087d053f0291524Eac12abA1ADBd945 |
+| Solana RPC | https://api.mainnet-beta.solana.com (use a private one) | https://api.devnet.solana.com |
+| USDC (Circle, 6 dec) | EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v | 4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU (faucet.circle.com) |
+| MagicBlock rollup | https://as.magicblock.app | https://devnet-as.magicblock.app (validator MAS1Dt9qreoRMQ14YQuhg8UTZMMzDdKhmkZMECCzk57) |
+| Explorer | https://explorer.solana.com | same, `?cluster=devnet` |
 
-- Native gas is USDC with **18 decimals** (`msg.value`); the ERC-20 view has 6. Never mix them.
-- `PREVRANDAO` is always 0. Value to `address(0)` reverts. `maxFeePerGas` under 20 gwei is dropped.
-- Astock exists on **mainnet only**. Testnet uses mock `.arc` tokens + mock price source.
-- Astock v2 addresses: desk `0x3ac68fc2ad55599fa528fefa1f05cc1c1df26d69`, oracle `0x77905f095fa62fc472e56f17bdc039dc764c1595` (`getPrice(underlying)` USD 6 dec). Token list: `pandock/web/src/config.ts`. Ignore `/api/deployment` (stale v1).
+- Program ids: delegation `DELeGGvXpWV2fqJUhqcF5ZSYMS4JTLjteaAMARRSaeSh`, magic `Magic11111111111111111111111111111111111111`, VRF `Vrf1RNUjXmQGjmQrQLvJHs9SNkvDJEsRVFPkfSQUwGz` (queues in `solana/README.md`).
+- Use real Circle USDC on devnet, never a mock USDC (user decision 2026-11-19). Stocks are test mints on devnet.
+- Fees are SOL. Program amounts are USDC 6 dp (`u64`). xStocks are Token-2022; the program accepts both token programs.
+- The app builds instructions by hand (`lib/solana/program.ts`); after changing the program, regenerate `solana/idl/arclaw.json` and run `pnpm test`.
+- A Solana transaction is at most 1232 bytes: a table of 6 outcomes fits one `set_table`, 12 would not.
 
 ## Stack
 
-Next 16 + React 19 + Tailwind v4 (`@theme` in `app/globals.css`), Convex, Vercel. Foundry in `contracts/`. Base patterns copied from `../snipadfun` (providers, SmoothScroll, `lib/og`), motion engine ideas from `../mimir-solana/lib/motion.ts`.
+Next 16 + React 19 + Tailwind v4 (`@theme` in `app/globals.css`), Convex, Vercel. Anchor 1.2 + MagicBlock SDK 0.20 in `solana/`; `@solana/web3.js` 1.x + wallet adapter in the app. Base patterns copied from `../snipadfun` (providers, SmoothScroll, `lib/og`), motion engine ideas from `../mimir-solana/lib/motion.ts`.
 
 ## Design rules (hard)
 

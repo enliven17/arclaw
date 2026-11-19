@@ -1,5 +1,5 @@
 /**
- * Server only: merges lib/machines.resolved.json (exact cards per tier, written by the deploy tooling) into the
+ * Server only: merges lib/machines.resolved.json (exact cards per tier, written by scripts/solana/setup.ts) into the
  * machines when the file exists. The file is optional and its shape is checked loosely; anything that does not
  * parse is ignored and the examples from lib/machines.ts stay.
  *
@@ -8,7 +8,7 @@
 import "server-only";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { ARC } from "./arc/config";
+import { SOLANA } from "./solana/config";
 import { MACHINES, type Machine } from "./machines";
 import { stockOf, type PullCard } from "./stocks";
 
@@ -25,7 +25,7 @@ function cardOf(c: unknown): PullCard | null {
 }
 
 export function withResolved(): Machine[] {
-  const file = join(process.cwd(), ARC.network === "mainnet" ? "lib/machines.resolved.mainnet.json" : "lib/machines.resolved.json");
+  const file = join(process.cwd(), SOLANA.network === "mainnet" ? "lib/machines.resolved.mainnet.json" : "lib/machines.resolved.json");
   if (!existsSync(file)) return [...MACHINES];
   try {
     const json: unknown = JSON.parse(readFileSync(file, "utf8"));

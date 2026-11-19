@@ -3,27 +3,28 @@
 /**
  * Gifts: send sealed boxes you hold, to an address or as a claim link, with a preview of what your friend sees.
  *
- *   address  one ERC-1155 transfer of n boxes (safeTransferFrom)
- *   link     a fresh key is made in this browser; n boxes move into ArclawLinks with (linkKey, expiresAt) as data.
- *            Once that is confirmed the link is shown: /claim?m=<machine>&n=<boxes>&note=<note>#<key>&<linkId>.
+ *   address  gift: n sealed boxes move to the recipient's Player account
+ *   link     a fresh keypair is made in this browser; n boxes move into a Link account named by its public key.
+ *            Once that is confirmed the link is shown: /claim?m=<machine>&n=<boxes>&note=<note>#<secret key>.
  *            The key sits after the #, so it never reaches a server; the query only drives the preview card.
  *   My gifts links you made from this browser (kept locally), with their state and a reclaim after expiry.
  */
 /* eslint-disable @next/next/no-img-element -- the preview is our own generated PNG */
 import { useCallback, useEffect, useId, useState } from "react";
-import { isAddress, type Address, type Hex } from "viem";
-import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
+import { Keypair, PublicKey, Transaction } from "@solana/web3.js";
+import bs58 from "bs58";
 import { useWallet } from "@/components/wallet/WalletProvider";
 import { MachineSwitch } from "@/components/landing/MachineSwitch";
-import { arcClient } from "@/lib/arc/chain";
-import { LINKS, createLinkCall, giftCall, linkFromLogs, readBoxes, readLink, reclaimLinkCall, revertText } from "@/lib/arclaw/contract";
+import { baseConnection, errorText, readBoxes } from "@/lib/solana/client";
+import { isAddress } from "@/lib/solana/events";
+import { createLinkIx, giftIx, linkPda, reclaimLinkIx } from "@/lib/solana/program";
 import type { Machine } from "@/lib/machines";
 import { usdc } from "@/lib/stocks";
 import { cn } from "@/lib/cn";
 
 type Mode = "link" | "address";
 type Lite = Pick<Machine, "id" | "name" | "slug" | "priceUsdc">;
-type SavedLink = { linkId: string; url: string; machineId: number; boxes: number; expiresAt: number };
+type SavedLink = { linkKey: string; url: string; machineId: number; boxes: number; expiresAt: number };
 
 const MAX_NOTE = 80;
 const DAYS = 7;
@@ -51,7 +52,7 @@ export function GiftComposer({ machines, initial }: { machines: Lite[]; initial?
   const w = useWallet();
   const [machineId, setMachineId] = useState(machines.find((m) => m.slug === initial)?.id ?? machines[0]!.id);
   const [count, setCount] = useState(1);
-  const [mode, setMode] = useState<Mode>(LINKS ? "link" : "address");
+  const [mode, setMode] = useState<Mode>("link");
   const [address, setAddress] = useState("");
   const [note, setNote] = useState("");
   const [held, setHeld] = useState<Record<number, number> | null>(null);
@@ -61,9 +62,9 @@ export function GiftComposer({ machines, initial }: { machines: Lite[]; initial?
   const machine = machines.find((m) => m.id === machineId) ?? machines[0]!;
 
   const refresh = useCallback(async () => {
-    if (!w.address) return setHeld(null);
-    setHeld(await readBoxes(arcClient(), w.address).catch(() => null));
-  }, [w.address]);
+    if (!w.publicKey) return setHeld(null);
+    setHeld(await readBoxes(w.publicKey).catch(() => null));
+  }, [w.publicKey]);
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- reads the chain for the connected wallet
     void refresh();
@@ -73,37 +74,32 @@ export function GiftComposer({ machines, initial }: { machines: Lite[]; initial?
   const addressOk = mode === "link" || isAddress(address.trim());
   const addressError = mode === "address" && address.trim().length > 0 && !isAddress(address.trim());
   const preview = useDebounced(`/api/og/gift?machine=${machine.slug}&n=${count}${note.trim() ? `&note=${encodeURIComponent(note.trim())}` : ""}`, 350);
-  const linksOff = mode === "link" && !LINKS;
 
   const send = async () => {
-    if (!w.address) return w.openConnect();
-    if (!addressOk || count > have || linksOff) return;
+    if (!w.sender) return w.openConnect();
+    if (!addressOk || count > have) return;
     setBusy(true);
     setStatus(null);
     setMade(null);
     try {
       if (mode === "address") {
-        await w.send([giftCall(w.address, address.trim() as Address, machine.id, count)]);
+        await w.sender.send(new Transaction().add(giftIx(w.sender.publicKey, new PublicKey(address.trim()), machine.id, count)));
         setStatus(`${count === 1 ? "The box is" : `${count} boxes are`} on the way to ${address.trim().slice(0, 6)}...${address.trim().slice(-4)}.`);
       } else {
-        const key = generatePrivateKey();
-        const linkKey = privateKeyToAccount(key).address;
+        const key = Keypair.generate();
         const expiresAt = Math.floor(Date.now() / 1000) + DAYS * 86_400;
-        const hash: Hex = await w.send([createLinkCall(w.address, linkKey, machine.id, count, expiresAt)]);
-        const receipt = await arcClient().getTransactionReceipt({ hash });
-        const link = linkFromLogs(receipt.logs);
-        if (!link) throw new Error("The boxes moved but the link was not found. Check My gifts.");
+        await w.sender.send(new Transaction().add(createLinkIx(w.sender.publicKey, key.publicKey, machine.id, count, expiresAt)));
         // Only now, with the escrow confirmed, is the link safe to share.
         const q = new URLSearchParams({ m: machine.slug, n: String(count), ...(note.trim() ? { note: note.trim() } : {}) });
-        const url = `${window.location.origin}/claim?${q.toString()}#${key}&${link.linkId}`;
-        const saved = [{ linkId: String(link.linkId), url, machineId: machine.id, boxes: count, expiresAt }, ...loadSaved()].slice(0, 50);
+        const url = `${window.location.origin}/claim?${q.toString()}#${bs58.encode(key.secretKey)}`;
+        const saved = [{ linkKey: key.publicKey.toBase58(), url, machineId: machine.id, boxes: count, expiresAt }, ...loadSaved()].slice(0, 50);
         localStorage.setItem(SAVED, JSON.stringify(saved));
         setMade(url);
         setStatus("Your link is ready. Anyone with it can claim the boxes, so send it only to your friend.");
       }
       await refresh();
     } catch (e) {
-      setStatus(revertText(e));
+      setStatus(errorText(e));
     } finally {
       setBusy(false);
     }
@@ -183,16 +179,14 @@ export function GiftComposer({ machines, initial }: { machines: Lite[]; initial?
                 <label htmlFor={`${ids}-addr`} className="sr-only">
                   Recipient address
                 </label>
-                <input id={`${ids}-addr`} className={cn("input money", addressError && "!border-cream")} placeholder="0x recipient on Arc" spellCheck={false} autoComplete="off" value={address} onChange={(e) => setAddress(e.target.value)} aria-invalid={addressError || undefined} aria-describedby={`${ids}-addr-help`} />
+                <input id={`${ids}-addr`} className={cn("input money", addressError && "!border-cream")} placeholder="Recipient Solana address" spellCheck={false} autoComplete="off" value={address} onChange={(e) => setAddress(e.target.value)} aria-invalid={addressError || undefined} aria-describedby={`${ids}-addr-help`} />
                 <p id={`${ids}-addr-help`} className="mt-2 text-[14px] text-muted">
-                  {addressError ? "That is not an Arc address. It should be 0x and 40 hex characters." : "The boxes are theirs as soon as the transfer settles."}
+                  {addressError ? "That is not a Solana address." : "The boxes are theirs as soon as the transfer settles."}
                 </p>
               </div>
             ) : (
               <p className="mt-4 text-[14px] leading-relaxed text-muted">
-                {LINKS
-                  ? "The link carries a one-time key: claiming signs your friend's own address with it, so nobody who sees the link first can take the box. Unclaimed after 7 days, you can take the boxes back."
-                  : "Claim links open after the next contract update. Send to an address for now."}
+                The link carries a one-time key that co-signs your friend&apos;s claim, so nobody who sees the link first can redirect the box. Unclaimed after 7 days, you can take the boxes back.
               </p>
             )}
           </fieldset>
@@ -210,7 +204,7 @@ export function GiftComposer({ machines, initial }: { machines: Lite[]; initial?
           ) : null}
 
           <div className="flex flex-col gap-3 border-t border-line pt-6">
-            <button type="submit" className="btn self-start" disabled={busy || (!!w.address && (!addressOk || count > have || have === 0 || linksOff))}>
+            <button type="submit" className="btn self-start" disabled={busy || (!!w.address && (!addressOk || count > have || have === 0))}>
               {!w.address ? "Connect to send" : busy ? "Sending" : mode === "link" ? "Create claim link" : `Send ${count === 1 ? "the box" : `${count} boxes`}`}
             </button>
             {made ? (
@@ -241,7 +235,7 @@ export function GiftComposer({ machines, initial }: { machines: Lite[]; initial?
   );
 }
 
-const STATE = ["", "Waiting to be claimed", "Claimed", "Taken back"];
+const STATE = ["", "Waiting to be claimed", "Claimed or taken back"];
 
 function MyGifts() {
   const w = useWallet();
@@ -250,11 +244,9 @@ function MyGifts() {
   const [now, setNow] = useState(0);
 
   const load = useCallback(async () => {
-    if (!LINKS) return setLinks([]);
-    const saved = loadSaved();
-    const client = arcClient();
-    const out = [];
-    for (const l of saved) out.push({ ...l, status: (await readLink(client, BigInt(l.linkId)).catch(() => null))?.status ?? 0 });
+    const saved = loadSaved().filter((l) => l.linkKey);
+    const infos = saved.length ? await baseConnection().getMultipleAccountsInfo(saved.map((l) => linkPda(new PublicKey(l.linkKey)))).catch(() => saved.map(() => undefined)) : [];
+    const out = saved.map((l, i) => ({ ...l, status: infos[i] === undefined ? 0 : infos[i] ? 1 : 2 }));
     setLinks(out);
     setNow(Date.now() / 1000);
   }, []);
@@ -263,7 +255,7 @@ function MyGifts() {
     void load();
   }, [load]);
 
-  if (!LINKS || !links?.length) return null;
+  if (!links?.length) return null;
   return (
     <section aria-labelledby="my-gifts" className="rounded-[18px] border border-line bg-panel p-6 md:p-8">
       <h2 id="my-gifts" className="text-[18px]">
@@ -271,7 +263,7 @@ function MyGifts() {
       </h2>
       <ul className="mt-4 grid gap-2">
         {links.map((l) => (
-          <li key={l.linkId} className="flex flex-wrap items-center justify-between gap-3 rounded-[12px] border border-line bg-panel-2 p-3 text-[14px]">
+          <li key={l.linkKey} className="flex flex-wrap items-center justify-between gap-3 rounded-[12px] border border-line bg-panel-2 p-3 text-[14px]">
             <span>
               <span className="money text-cream">{l.boxes}</span> {["", "Single", "Stack", "Vault"][l.machineId]} <span className="text-muted">{STATE[l.status] ?? ""}</span>
             </span>
@@ -280,10 +272,9 @@ function MyGifts() {
                 type="button"
                 className="btn-ghost !min-h-[34px] !px-3 !py-1.5 text-[13px]"
                 onClick={() =>
-                  void w
-                    .send([reclaimLinkCall(BigInt(l.linkId))])
-                    .then(() => (setMsg("The boxes are back in your wallet."), load()))
-                    .catch((e: unknown) => setMsg(revertText(e)))
+                  void (w.sender ? w.sender.send(new Transaction().add(reclaimLinkIx(w.sender.publicKey, new PublicKey(l.linkKey)))) : Promise.reject(new Error("Connect a wallet first.")))
+                    .then(() => (setMsg("The boxes are back with your sealed boxes."), load()))
+                    .catch((e: unknown) => setMsg(errorText(e)))
                 }
               >
                 Take back

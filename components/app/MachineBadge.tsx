@@ -4,7 +4,7 @@
 import { useMachineStatus } from "./useMachineStatus";
 
 export function MachineBadge({ machineId }: { machineId: number }) {
-  const state = useMachineStatus(machineId, { wake: false, poll: false });
+  const state = useMachineStatus(machineId, { poll: false });
   if (state !== "off" && state !== "paused") return null;
   return (
     <span className="rounded-[8px] border border-line-strong px-2 py-1 text-[13px] text-muted">{state === "off" ? "Opens soon" : "Paused"}</span>

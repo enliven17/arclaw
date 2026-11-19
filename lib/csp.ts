@@ -8,23 +8,25 @@
  *                                   gift keys live, so an injected script there has nothing to run with.
  *
  * Everything else is shared: nobody can frame the site, no plugins, no base-tag or form hijacking. connect-src is an
- * allowlist (an injected script could otherwise post keys anywhere): this site, the Arc RPCs, Convex, and the wallet
- * SDKs' own services, measured by walking every page and wallet flow in a browser (2026-10-19). A wallet that adds a
- * new host shows up as a "Refused to connect" in the console: add its vendor domain here. Images stay open to https
+ * allowlist (an injected script could otherwise post keys anywhere): this site, Solana RPCs, MagicBlock's rollups,
+ * Convex and Solana Mobile's reflector. A wallet or RPC that adds a new host shows up as a "Refused to connect" in the
+ * console: add it here. Images stay open to https
  * (stock logos, wallet icons).
  */
 
-/** Wallet SDK services, by vendor (WalletConnect/Reown relays and APIs, Coinbase Wallet and walletlink, MetaMask SDK). */
-const WALLET_HOSTS = [
-  "https://*.walletconnect.com", "wss://*.walletconnect.com", "https://*.walletconnect.org", "wss://*.walletconnect.org",
-  "https://*.reown.com", "wss://*.reown.com",
-  "https://*.coinbase.com", "wss://*.coinbase.com", "https://www.walletlink.org", "wss://www.walletlink.org",
-  "https://*.metamask.io", "wss://*.metamask.io",
+/** Solana wallets talk to the page through Wallet Standard (in-page, no network); Mobile Wallet Adapter's remote
+ *  association uses Solana Mobile's reflector. */
+const WALLET_HOSTS = ["https://*.solanamobile.com", "wss://*.solanamobile.com"];
+
+/** Solana RPCs and MagicBlock's rollups (each has a websocket twin), plus any RPC this build is configured with. */
+const CHAIN_HOSTS = [
+  "https://*.solana.com", "wss://*.solana.com",
+  "https://*.magicblock.app", "wss://*.magicblock.app",
 ];
 
-/** Origins (and their websocket twins) of any extra RPCs this build is configured with (NEXT_PUBLIC_ARC_RPC_URL). */
 function envOrigins(): string[] {
-  return (process.env.NEXT_PUBLIC_ARC_RPC_URL ?? "").split(",").flatMap((u) => {
+  return [process.env.NEXT_PUBLIC_SOLANA_RPC_URL, process.env.NEXT_PUBLIC_MAGICBLOCK_RPC_URL].flatMap((u) => {
+    if (!u?.trim()) return [];
     try {
       const { origin, host } = new URL(u.trim());
       return [origin, `wss://${host}`];
@@ -34,7 +36,7 @@ function envOrigins(): string[] {
   });
 }
 
-const CONNECT_SRC = [...new Set(["'self'", "https://*.arc.io", "wss://*.arc.io", "https://*.convex.cloud", "wss://*.convex.cloud", ...envOrigins(), ...WALLET_HOSTS])].join(" ");
+const CONNECT_SRC = [...new Set(["'self'", ...CHAIN_HOSTS, "https://*.convex.cloud", "wss://*.convex.cloud", ...envOrigins(), ...WALLET_HOSTS])].join(" ");
 
 /** Before first paint: mark JS so reveal targets start hidden (no-JS keeps them visible), and decide the splash (first
  *  visit per tab session, never under reduced motion) so it never flashes for a returning visitor. */
@@ -51,7 +53,7 @@ export const policy = (scriptSrc: string) =>
     "font-src 'self' data:",
     "media-src 'self' blob:",
     `connect-src ${CONNECT_SRC}`,
-    "frame-src https://verify.walletconnect.com https://verify.walletconnect.org",
+    "frame-src 'none'",
     "worker-src 'self' blob:",
     "manifest-src 'self'",
     "object-src 'none'",

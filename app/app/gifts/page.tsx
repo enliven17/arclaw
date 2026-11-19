@@ -4,7 +4,7 @@ import { MACHINES } from "@/lib/machines";
 
 export const metadata: Metadata = {
   title: "Gifts",
-  description: "Send sealed arclaw boxes to an Arc address or create a claim link for a friend.",
+  description: "Send sealed arclaw boxes to any Solana address or create a claim link for a friend.",
   alternates: { canonical: "/app/gifts" },
   robots: { index: false, follow: true },
 };

@@ -96,8 +96,7 @@ export function StocksMarquee({ quotes }: { quotes: Record<string, Quote> }) {
       <div className="wrap grid gap-8 md:grid-cols-[minmax(0,8fr)_minmax(0,4fr)] md:items-end">
         <SplitHeading as="h2" id="stocks-title" onScroll className="h-section" lines={["Real names.", "Real shares."]} />
         <p className="lede max-w-[26em] md:justify-self-end" data-reveal>
-          Every card is a tokenized stock from Astock on Arc, an ERC&#8209;20 you hold in your own wallet. Keep it, send it
-          or sell it.{live ? " Prices update every few minutes." : null}
+          Every card is a tokenized stock on Solana, a token you hold in your own wallet. Keep it, send it or sell it.{live ? " Prices update every few minutes." : null}
         </p>
       </div>
       <div className="mt-16">

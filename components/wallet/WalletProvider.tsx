@@ -1,29 +1,30 @@
 "use client";
 
 /**
- * One wallet for the app: the user's own (MetaMask, Rabby, Coinbase, WalletConnect), connected through Family's
- * ConnectKit on wagmi. wagmi reconnects the last wallet on reload, so the address never changes behind the user.
+ * One wallet for the app: any Solana wallet the browser has (Phantom, Solflare, Backpack and every other Wallet
+ * Standard wallet are detected on their own), and on Android the Mobile Wallet Adapter, so the claw plays from a phone
+ * with the wallet app the player already uses. The adapter reconnects the last wallet on reload.
  *
- * `useWallet()` gives the address, `openConnect()` (opens ConnectKit's modal), disconnect, and `send(calls)`, which
- * sends the calls one by one on Arc (switching first) and resolves with the last transaction hash once mined.
- * Gas is native USDC from the wallet's own balance; there is no paymaster.
+ * `useWallet()` gives the address, `openConnect()` (our own picker, styled like the rest of the app), disconnect, and
+ * `sender`: sends a transaction on Solana and resolves once it is confirmed, or signs one for the rollup. Fees are SOL
+ * from the wallet; boxes are paid in Circle's USDC.
  */
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { ConnectKitProvider, getDefaultConfig, useModal } from "connectkit";
-import { createConfig, useAccount, useConfig, useDisconnect, WagmiProvider } from "wagmi";
-import { getWalletClient, switchChain } from "wagmi/actions";
-import { getAddress, type Address, type Hex } from "viem";
-import { ARC_CHAIN, arcClient, arcTransport, type Call } from "@/lib/arc/chain";
+/* eslint-disable @next/next/no-img-element -- wallet icons are data URIs from the wallets themselves */
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { ConnectionProvider, WalletProvider as AdapterProvider, useConnection, useWallet as useAdapter } from "@solana/wallet-adapter-react";
+import { WalletReadyState, type WalletName } from "@solana/wallet-adapter-base";
+import { Transaction, type Keypair, type PublicKey } from "@solana/web3.js";
+import { createDefaultAuthorizationCache, createDefaultChainSelector, createDefaultWalletNotFoundHandler, registerMwa } from "@solana-mobile/wallet-standard-mobile";
+import { SOLANA } from "@/lib/solana/config";
+import type { Sender } from "@/lib/solana/round";
 import { getLenis } from "@/lib/motion";
 
-const WALLETCONNECT_PROJECT_ID = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID ?? "";
-
 type WalletState = {
-  address: Address | null;
+  address: string | null;
+  publicKey: PublicKey | null;
+  /** Sends and signs; null until a wallet is connected. */
+  sender: Sender | null;
   disconnect(): void;
-  send(calls: Call[]): Promise<Hex>;
-  /** Opens ConnectKit's modal. */
   openConnect(): void;
 };
 
@@ -35,90 +36,153 @@ export function useWallet(): WalletState {
   return v;
 }
 
-function Inner({ children }: { children: ReactNode }) {
-  const config = useConfig();
-  // Connect stays clickable whatever wagmi's status: a connection the user abandons (a closed QR) can sit in
-  // "connecting" for good, and a disabled button would leave no way to try again without a reload.
-  const { address } = useAccount();
-  const { disconnect } = useDisconnect();
-  const { open, setOpen } = useModal();
+let mwaRegistered = false;
+function registerMobile() {
+  if (mwaRegistered || typeof window === "undefined") return;
+  mwaRegistered = true;
+  registerMwa({
+    appIdentity: { name: "arclaw", uri: window.location.origin, icon: "/icon.svg" },
+    authorizationCache: createDefaultAuthorizationCache(),
+    chains: [SOLANA.network === "mainnet" ? "solana:mainnet" : "solana:devnet"],
+    chainSelector: createDefaultChainSelector(),
+    onWalletNotFound: createDefaultWalletNotFoundHandler(),
+  });
+}
 
-  // ConnectKit's modal is not ours: stop the smooth scroller behind it while it is open.
-  useEffect(() => {
-    if (open) getLenis()?.stop();
-    else getLenis()?.start();
-  }, [open]);
+function Inner({ children }: { children: ReactNode }) {
+  const { connection } = useConnection();
+  const a = useAdapter();
+  const [picker, setPicker] = useState(false);
 
   const send = useCallback(
-    async (calls: Call[]): Promise<Hex> => {
-      if (!address) throw new Error("Connect a wallet first.");
-      await switchChain(config, { chainId: ARC_CHAIN.id }).catch(() => undefined);
-      const client = await getWalletClient(config, { chainId: ARC_CHAIN.id });
-      const account = getAddress(address);
-      const pub = arcClient();
-      let last: Hex = "0x";
-      for (const call of calls) {
-        const tx = { to: call.to, data: call.data, value: call.value ?? 0n };
-        // Gas and fees come from our own RPCs: a wallet whose saved Arc RPC is rate-limited then only has to sign.
-        const [gas, fees] = await Promise.all([pub.estimateGas({ account, ...tx }), pub.estimateFeesPerGas()]);
-        const hash = await client.sendTransaction({ ...tx, account, chain: ARC_CHAIN, gas: (gas * 12n) / 10n, maxFeePerGas: fees.maxFeePerGas, maxPriorityFeePerGas: fees.maxPriorityFeePerGas });
-        const receipt = await pub.waitForTransactionReceipt({ hash });
-        if (receipt.status !== "success") throw new Error("The transaction reverted.");
-        last = hash;
-      }
-      return last;
+    async (tx: Transaction, signers: Keypair[] = []) => {
+      if (!a.publicKey) throw new Error("Connect a wallet first.");
+      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash("confirmed");
+      tx.feePayer = a.publicKey;
+      tx.recentBlockhash = blockhash;
+      const signature = await a.sendTransaction(tx, connection, { signers, preflightCommitment: "confirmed" });
+      const res = await connection.confirmTransaction({ signature, blockhash, lastValidBlockHeight }, "confirmed");
+      if (res.value.err) throw Object.assign(new Error(`Transaction failed: ${JSON.stringify(res.value.err)}`), { signature });
+      return signature;
     },
-    [address, config],
+    [a, connection],
+  );
+
+  const sign = useCallback(
+    async (tx: Transaction) => {
+      if (!a.signTransaction) throw new Error("This wallet cannot sign transactions.");
+      return a.signTransaction(tx);
+    },
+    [a],
   );
 
   const value = useMemo<WalletState>(
     () => ({
-      address: address ? getAddress(address) : null,
-      disconnect: () => disconnect(),
-      send,
-      openConnect: () => setOpen(true),
+      address: a.publicKey?.toBase58() ?? null,
+      publicKey: a.publicKey,
+      sender: a.publicKey ? { publicKey: a.publicKey, send, sign } : null,
+      disconnect: () => void a.disconnect(),
+      openConnect: () => setPicker(true),
     }),
-    [address, disconnect, send, setOpen],
+    [a, send, sign],
   );
 
-  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+  return (
+    <Ctx.Provider value={value}>
+      {children}
+      <Picker open={picker} onClose={() => setPicker(false)} />
+    </Ctx.Provider>
+  );
 }
 
-// These mirror --color-panel, --color-cream and --color-ink in app/globals.css.
-const THEME = {
-  "--ck-font-family": "inherit",
-  "--ck-body-background": "#141417",
-  "--ck-body-color": "#ece6da",
-  "--ck-primary-button-color": "#ece6da",
-  "--ck-primary-button-border-radius": "12px",
-  "--ck-border-radius": "18px",
-  "--ck-overlay-background": "rgba(10,10,12,0.7)",
-};
+/** The wallet picker: installed wallets first, then the ones that can be installed. */
+function Picker({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const a = useAdapter();
+  const ref = useRef<HTMLDialogElement>(null);
+  const want = useRef<WalletName | null>(null);
+
+  useEffect(() => {
+    const d = ref.current;
+    if (!d) return;
+    if (open && !d.open) {
+      d.showModal();
+      getLenis()?.stop();
+    } else if (!open && d.open) d.close();
+  }, [open]);
+
+  // Connect once the selection has landed in the adapter (select is async in effect).
+  useEffect(() => {
+    if (!want.current || a.wallet?.adapter.name !== want.current) return;
+    want.current = null;
+    void a.connect().then(onClose, () => undefined);
+  }, [a, onClose]);
+
+  const ready = a.wallets.filter((x) => x.readyState === WalletReadyState.Installed || x.readyState === WalletReadyState.Loadable);
+  const others = a.wallets.filter((x) => x.readyState === WalletReadyState.NotDetected).slice(0, 4);
+
+  return (
+    <dialog
+      ref={ref}
+      onClose={() => {
+        getLenis()?.start();
+        onClose();
+      }}
+      aria-labelledby="wallet-title"
+      className="m-auto w-[min(400px,calc(100vw-32px))] rounded-[18px] border border-line bg-panel p-0 text-cream backdrop:bg-ink/80 backdrop:backdrop-blur-sm"
+    >
+      <div className="p-6">
+        <div className="flex items-start justify-between gap-4">
+          <h2 id="wallet-title" className="text-[26px] leading-tight tracking-[-0.02em]">
+            Connect a wallet
+          </h2>
+          <button type="button" className="btn-ghost !min-h-[36px] !px-3 !py-2 text-[14px]" onClick={() => ref.current?.close()}>
+            Close
+          </button>
+        </div>
+        <p className="mt-2 text-[14px] text-muted">Any Solana wallet works. On a phone, your wallet app opens to approve.</p>
+        <ul className="mt-5 grid gap-2">
+          {ready.map((x) => (
+            <li key={x.adapter.name}>
+              <button
+                type="button"
+                className="flex w-full items-center gap-3 rounded-[12px] border border-line bg-panel-2 px-4 py-3 text-left text-[16px] hover:border-line-strong"
+                onClick={() => {
+                  want.current = x.adapter.name;
+                  a.select(x.adapter.name);
+                }}
+              >
+                <img src={x.adapter.icon} alt="" width={28} height={28} className="size-7 rounded-[6px]" />
+                {x.adapter.name}
+              </button>
+            </li>
+          ))}
+          {ready.length === 0 ? <li className="text-[15px] text-muted">No Solana wallet found in this browser.</li> : null}
+        </ul>
+        {others.length ? (
+          <p className="mt-5 text-[14px] text-muted">
+            Get one:{" "}
+            {others.map((x, i) => (
+              <span key={x.adapter.name}>
+                {i ? ", " : ""}
+                <a className="text-cream underline underline-offset-4" href={x.adapter.url} target="_blank" rel="noreferrer">
+                  {x.adapter.name}
+                </a>
+              </span>
+            ))}
+          </p>
+        ) : null}
+      </div>
+    </dialog>
+  );
+}
 
 export function WalletProvider({ children }: { children: ReactNode }) {
-  const [state] = useState(() => ({
-    query: new QueryClient(),
-    wagmi: createConfig(
-      getDefaultConfig({
-        appName: "arclaw",
-        appDescription: "Pay USDC on Arc, play a claw machine, win real stocks.",
-        appIcon: "/brand/lockup.svg",
-        // WalletConnect needs indexedDB, so it only starts in the browser, never during prerender.
-        walletConnectProjectId: typeof window === "undefined" ? "" : WALLETCONNECT_PROJECT_ID,
-        enableAaveAccount: false,
-        chains: [ARC_CHAIN],
-        transports: { [ARC_CHAIN.id]: arcTransport() },
-        ssr: true,
-      }),
-    ),
-  }));
+  registerMobile();
   return (
-    <WagmiProvider config={state.wagmi}>
-      <QueryClientProvider client={state.query}>
-        <ConnectKitProvider theme="midnight" customTheme={THEME} options={{ initialChainId: ARC_CHAIN.id, enforceSupportedChains: true }}>
-          <Inner>{children}</Inner>
-        </ConnectKitProvider>
-      </QueryClientProvider>
-    </WagmiProvider>
+    <ConnectionProvider endpoint={SOLANA.rpc} config={{ commitment: "confirmed" }}>
+      <AdapterProvider wallets={[]} autoConnect>
+        <Inner>{children}</Inner>
+      </AdapterProvider>
+    </ConnectionProvider>
   );
 }

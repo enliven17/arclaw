@@ -1,6 +1,6 @@
 "use client";
 
-/** The header's wallet button: Connect (opens ConnectKit's modal), or the address with a small menu. */
+/** The header's wallet button: Connect (opens the wallet picker), or the address with a small menu. */
 import { useState } from "react";
 import { cn } from "@/lib/cn";
 import { useWallet } from "./WalletProvider";

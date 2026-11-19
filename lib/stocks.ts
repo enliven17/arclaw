@@ -1,6 +1,6 @@
 /**
- * Display data for the landing and share cards: the Astock v2 list (astock.fi/api/v2/stocks), with a price
- * snapshot taken 2026-10-17 as the fallback when live quotes are unavailable. Nothing here decides what a box
+ * Display data for the landing and share cards: a list of well known tokenized stocks, with a price snapshot taken
+ * 2026-10-17 as the fallback when live quotes are unavailable. Nothing here decides what a box
  * holds; the contract and lib/machines.json do.
  */
 export type Stock = { ticker: string; name: string; kind: "stock" | "etf"; price: number };

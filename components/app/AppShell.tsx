@@ -12,7 +12,7 @@ import { SoundToggle } from "@/components/SoundToggle";
 import { AgeGate } from "@/components/app/AgeGate";
 import { WalletButton } from "@/components/wallet/WalletButton";
 import { WalletProvider } from "@/components/wallet/WalletProvider";
-import { ARC } from "@/lib/arc/config";
+import { SOLANA, explorerAddress } from "@/lib/solana/config";
 import { cn } from "@/lib/cn";
 import { ClawLink } from "@/components/motion/PageTransitions";
 
@@ -48,7 +48,7 @@ function Header() {
           </nav>
         </div>
         <div className="flex items-center gap-2">
-          {ARC.network === "testnet" ? <span className="hidden text-[13px] text-muted sm:inline">Testnet</span> : null}
+          {SOLANA.network === "devnet" ? <span className="hidden text-[13px] text-muted sm:inline">Devnet</span> : null}
           <SoundToggle />
           <WalletButton />
         </div>
@@ -89,7 +89,7 @@ function Footer() {
             </a>
           </li>
           <li>
-            <a className="hover:text-cream" href={ARC.chain.explorer} rel="noopener noreferrer" target="_blank">
+            <a className="hover:text-cream" href={SOLANA.deployment ? explorerAddress(SOLANA.deployment.programId) : SOLANA.explorer} rel="noopener noreferrer" target="_blank">
               Explorer
             </a>
           </li>

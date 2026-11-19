@@ -1,6 +1,6 @@
 /**
- * Quotes for the stocks section, from Astock's public price feed. Server only, cached for five minutes, with a
- * short timeout; any failure falls back to the snapshot in lib/stocks.ts so the page never waits on it.
+ * Quotes for the stocks section, from a public stock price feed (astock.fi), for display only: nothing on chain reads
+ * it. Server only, cached for five minutes, with a short timeout; any failure falls back to the snapshot in lib/stocks.ts so the page never waits on it.
  */
 import "server-only";
 import { STOCKS } from "./stocks";

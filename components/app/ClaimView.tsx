@@ -1,35 +1,38 @@
 "use client";
 
 /**
- * Claim a gift link: /claim?m=<machine>&n=<boxes>&note=<note>#<key>&<linkId>.
+ * Claim a gift link: /claim?m=<machine>&n=<boxes>&note=<note>#<link key>.
  *
- * The key after the # never leaves this browser. It signs claimDigest(linkId, yourAddress) here, and your wallet sends
- * claimLink(linkId, yourAddress, signature): a copy of the link seen by anyone else can only ever deliver the boxes to
- * the address the key signed.
+ * The key after the # never leaves this browser. It co-signs the claim transaction your wallet sends, and a Solana
+ * signature covers every account in the transaction, recipient included: a copy of the link seen by anyone else can
+ * only ever deliver the boxes to the wallet that signed with it first.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Address, Hex } from "viem";
-import { privateKeyToAccount } from "viem/accounts";
+import { Keypair, Transaction } from "@solana/web3.js";
+import bs58 from "bs58";
 import { useWallet } from "@/components/wallet/WalletProvider";
 import { SealedBox } from "@/components/pack/SealedBox";
 import { variantOf } from "@/components/claw/view";
-import { arcClient } from "@/lib/arc/chain";
-import { LINKS, claimDigest, claimLinkCall, readLink, revertText, type LinkState } from "@/lib/arclaw/contract";
+import { SOLANA } from "@/lib/solana/config";
+import { baseConnection, errorText } from "@/lib/solana/client";
+import { claimLinkIx, decodeLink, linkPda, type LinkAccount } from "@/lib/solana/program";
 import { MACHINES } from "@/lib/machines";
 
-type Parsed = { key: Hex; linkId: bigint } | null;
-
-function parseHash(): Parsed {
-  const [key, id] = window.location.hash.slice(1).split("&");
-  if (!key || !/^0x[0-9a-fA-F]{64}$/.test(key) || !id || !/^\d+$/.test(id)) return null;
-  return { key: key as Hex, linkId: BigInt(id) };
+function parseHash(): Keypair | null {
+  const key = window.location.hash.slice(1);
+  try {
+    return Keypair.fromSecretKey(bs58.decode(key));
+  } catch {
+    return null;
+  }
 }
 
 export function ClaimView({ machineSlug, boxes, note }: { machineSlug: string; boxes: number; note: string | null }) {
   const w = useWallet();
-  const [link, setLink] = useState<Parsed | undefined>(undefined);
-  const parsed = useRef<Parsed | undefined>(undefined);
-  const [state, setState] = useState<LinkState | null>(null);
+  const [link, setLink] = useState<Keypair | null | undefined>(undefined);
+  const parsed = useRef<Keypair | null | undefined>(undefined);
+  /** undefined while reading, null once the link account is gone (claimed or taken back). */
+  const [state, setState] = useState<LinkAccount | null | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [done, setDone] = useState(false);
@@ -44,8 +47,9 @@ export function ClaimView({ machineSlug, boxes, note }: { machineSlug: string; b
   }, []);
 
   const load = useCallback(async () => {
-    if (!link || !LINKS) return;
-    setState(await readLink(arcClient(), link.linkId).catch(() => null));
+    if (!link || !SOLANA.deployment) return;
+    const info = await baseConnection().getAccountInfo(linkPda(link.publicKey)).catch(() => null);
+    setState(info ? decodeLink(info.data) : null);
     setNow(Date.now() / 1000);
   }, [link]);
   useEffect(() => {
@@ -58,18 +62,16 @@ export function ClaimView({ machineSlug, boxes, note }: { machineSlug: string; b
   const expired = state && now ? now > state.expiresAt : false;
 
   const claim = async () => {
-    if (!link) return;
-    if (!w.address) return w.openConnect();
+    if (!link || !state) return;
+    if (!w.sender) return w.openConnect();
     setBusy(true);
     setStatus(null);
     try {
-      const digest = await claimDigest(arcClient(), link.linkId, w.address as Address);
-      const signature = await privateKeyToAccount(link.key).sign({ hash: digest });
-      await w.send([claimLinkCall(link.linkId, w.address as Address, signature)]);
+      await w.sender.send(new Transaction().add(claimLinkIx(w.sender.publicKey, link.publicKey, state.sender)), [link]);
       setDone(true);
-      void load();
     } catch (e) {
-      setStatus(revertText(e));
+      setStatus(errorText(e));
+      void load();
     } finally {
       setBusy(false);
     }
@@ -80,15 +82,13 @@ export function ClaimView({ machineSlug, boxes, note }: { machineSlug: string; b
   let body: React.ReactNode;
   if (link === undefined) body = null;
   else if (!link) body = <p className="lede">This link is not complete. Ask your friend to send it again.</p>;
-  else if (!LINKS) body = <p className="lede">Claim links open after the next contract update. Keep this link; it will work then.</p>;
   else if (done)
     body = (
       <a className="btn" href={`/app/play/${machine.slug}`}>
-        Open it
+        Grab it with the claw
       </a>
     );
-  else if (state && state.status === 2) body = <p className="lede">This gift was already claimed.</p>;
-  else if (state && state.status === 3) body = <p className="lede">The sender took these boxes back.</p>;
+  else if (state === null) body = <p className="lede">This gift was already claimed, or the sender took it back.</p>;
   else if (expired) body = <p className="lede">This link has expired. Ask your friend for a new one.</p>;
   else
     body = (
@@ -96,7 +96,7 @@ export function ClaimView({ machineSlug, boxes, note }: { machineSlug: string; b
         <button type="button" className="btn" disabled={busy || (!!w.address && !state)} onClick={() => void claim()}>
           {!w.address ? "Connect to claim" : busy ? "Claiming" : count === 1 ? "Claim the box" : `Claim ${count} boxes`}
         </button>
-        <p className="max-w-[30em] text-[14px] leading-relaxed text-muted">Claiming signs your own address with the link&apos;s key, so nobody else can take the box on the way.</p>
+        <p className="max-w-[30em] text-[14px] leading-relaxed text-muted">The link&apos;s key signs your claim together with your wallet, so nobody else can take the box on the way.</p>
       </div>
     );
 

@@ -8,7 +8,7 @@ import { variantOf, type Variant } from "@/components/claw/view";
 import { Logo } from "@/components/Logo";
 import { SplitHeading } from "@/components/motion/SmoothScroll";
 import type { Machine } from "@/lib/machines";
-import { ARC } from "@/lib/arc/config";
+import { SOLANA, explorerAddress } from "@/lib/solana/config";
 import { ClawLink } from "@/components/motion/PageTransitions";
 
 const LINKS = [
@@ -58,8 +58,8 @@ export function Footer({ art, machines }: { art: Record<Variant, ClawArt>; machi
                 </li>
               ))}
               <li>
-                <a className="transition-colors hover:text-cream" href={ARC.chain.explorer} rel="noopener noreferrer" target="_blank">
-                  Arc explorer
+                <a className="transition-colors hover:text-cream" href={SOLANA.deployment ? explorerAddress(SOLANA.deployment.programId) : SOLANA.explorer} rel="noopener noreferrer" target="_blank">
+                  Solana explorer
                 </a>
               </li>
             </ul>

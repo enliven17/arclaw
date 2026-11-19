@@ -11,6 +11,7 @@
  *   seek(seconds)     shows the pose at a time; used by the landing's scroll scrub
  *   seekProgress(p)   the same, 0..1
  *   reset()           back to rest
+ *   aim(x, y)         steer the gantry at rest (the player's joystick, mirrored from the rollup)
  *
  * At rest it idles still; a fine pointer over it nudges the gantry, which then settles and stops. Reduced motion:
  * play() jumps to the final frame, no pointer nudge.
@@ -37,6 +38,8 @@ export type ClawHandle = {
   seek: (seconds: number) => void;
   seekProgress: (progress: number) => void;
   reset: () => void;
+  /** Steer the claw at rest: a gantry offset from home in world units (the live round on the rollup drives it). */
+  aim: (x: number, y: number) => void;
   readonly duration: number;
 };
 
@@ -79,6 +82,7 @@ export function ClawMachine({ art, ref, label = "A claw machine: a glass cabinet
   const phase = useRef<Phase>("ready");
   const playing = useRef<Promise<void> | null>(null);
   const nudge = useRef({ x: 0, y: 0, tx: 0, ty: 0, vx: 0, vy: 0, raf: 0, last: 0 });
+  const kickRef = useRef<() => void>(() => undefined);
   const onPhaseRef = useRef(onPhase);
   const soundRef = useRef(sound);
   useEffect(() => {
@@ -159,6 +163,18 @@ export function ClawMachine({ art, ref, label = "A claw machine: a glass cabinet
         t.current = 0;
         render();
       },
+      aim(x: number, y: number) {
+        const n = nudge.current;
+        n.tx = x;
+        n.ty = y;
+        if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+          n.x = x;
+          n.y = y;
+          if (!playing.current && t.current <= 0) render();
+          return;
+        }
+        kickRef.current();
+      },
       run(from: number, to: number) {
         const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
         const start = Math.max(0, Math.min(DURATION, from));
@@ -227,7 +243,6 @@ export function ClawMachine({ art, ref, label = "A claw machine: a glass cabinet
   useEffect(() => {
     const svg = root.current;
     if (!svg) return;
-    if (!window.matchMedia("(hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference)").matches) return;
     const n = nudge.current;
     const step = (now: number) => {
       const dt = n.last ? Math.min(0.05, (now - n.last) / 1000) : 1 / 60;
@@ -255,6 +270,14 @@ export function ClawMachine({ art, ref, label = "A claw machine: a glass cabinet
     const kick = () => {
       if (!n.raf) n.raf = requestAnimationFrame(step);
     };
+    kickRef.current = kick;
+    // The pointer nudge is for a fine pointer only; aim() works everywhere.
+    if (!window.matchMedia("(hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference)").matches) {
+      return () => {
+        cancelAnimationFrame(n.raf);
+        n.raf = 0;
+      };
+    }
     const onMove = (e: PointerEvent) => {
       if (e.pointerType !== "mouse") return;
       const r = svg.getBoundingClientRect();

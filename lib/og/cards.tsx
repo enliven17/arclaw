@@ -55,7 +55,7 @@ export function SiteCard() {
   const pack = [examplePack(m, tiers[1]!, 1)[0]!, examplePack(m, tiers[tiers.length - 1]!)[0]!, examplePack(m, tiers[2]!, 2)[0]!];
   const names = [tiers[1]!.name, tiers[tiers.length - 1]!.name, tiers[2]!.name];
   return (
-    <OgFrame eyebrow="Claw machines on Arc" footer={`Three machines: ${MACHINES.map((x) => `${x.priceUsdc} USDC`).join(", ")}`}>
+    <OgFrame eyebrow="Claw machines on Solana" footer={`Three machines: ${MACHINES.map((x) => `${x.priceUsdc} USDC`).join(", ")}`}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
         <div style={{ display: "flex", flexDirection: "column", width: 560 }}>
           <Headline lines={["Grab a box.", "Pull real stocks."]} />
