@@ -15,7 +15,7 @@
 //! The claw is theatre: where it drops changes nothing, the VRF decides the pack. A round that never draws (abandoned,
 //! timed out, or drawn against a table replaced in the meantime) is void and its box goes back to the player.
 //!
-//! Treasury rules carried over from the Arc contract: every table obeys the machine's floor, cap and RTP band; the
+//! Treasury rules: every table obeys the machine's floor, cap and RTP band; the
 //! price of every unsettled box is reserved and cannot be withdrawn; a card the vault cannot cover is refunded at its
 //! table value, from free USDC, or recorded as owed.
 

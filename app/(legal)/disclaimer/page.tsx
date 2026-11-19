@@ -15,6 +15,7 @@ export default function Disclaimer() {
       <Breadcrumbs className="mb-10" items={[{ label: "Home", href: "/" }, { label: "Risk disclaimer", href: "/disclaimer" }]} />
       <h1>Risk disclaimer</h1>
       <p className="lede">Last updated {UPDATED}. Please read this before you play.</p>
+      <p>The current app runs on Solana devnet with MagicBlock. Devnet USDC, SOL and stock tokens are test assets with no monetary value.</p>
 
       <h2>What a play is</h2>
       <p>
@@ -39,7 +40,8 @@ export default function Disclaimer() {
         backed by the underlying held in reserve. Holding them does not make you a shareholder of the company: you do not
         get voting rights, and you rely on the issuer, its reserves and its custodians to keep each token redeemable.
         Their value moves with the market and can fall. On devnet, prizes are test tokens with no value. Prices shown on
-        arclaw come from third parties and may be delayed or wrong. arclaw does not issue, custody or redeem these tokens.
+        arclaw are display snapshots and may be delayed or wrong. Devnet stock mints are issued for testing by the project;
+        they are not xStocks. arclaw does not issue or redeem mainnet xStocks.
       </p>
 
       <h2>Randomness and smart contracts</h2>
@@ -47,7 +49,8 @@ export default function Disclaimer() {
         Outcomes use a third party randomness service (MagicBlock VRF), and each round runs on a MagicBlock ephemeral
         rollup before it is committed back to Solana. Programs, rollups, randomness providers, wallets and the Solana
         network can fail, be attacked, be paused or behave unexpectedly. Transactions on a blockchain are final; arclaw
-        cannot reverse them. If a draw does not arrive within two minutes, the round is void and your box comes back.
+        cannot reverse them. If a draw does not arrive within two minutes, the round can be voided. Finish and settle it
+        to return its sealed box to your account.
       </p>
 
       <h2>Eligibility</h2>

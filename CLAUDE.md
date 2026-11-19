@@ -1,6 +1,6 @@
 # arclaw
 
-Pay Circle USDC on Solana, steer a claw live on a MagicBlock ephemeral rollup, win a sealed box. Box opens into a pack of 3 cards, every card is a real tokenized stock (xStocks on mainnet, test mints on devnet). Built for the Solana x MagicBlock "claw machine" idea. Moved from Arc to Solana on 2026-11-19 (branch `magicblock`); the Arc contracts live in git history.
+Pay Circle USDC on Solana, steer a claw live on a MagicBlock ephemeral rollup, win a sealed box. Box opens into a pack of 3 cards, every card is a real tokenized stock (xStocks on mainnet, test mints on devnet). Built for the Solana x MagicBlock "claw machine" idea. Solana devnet deployment on branch `magicblock`, verified on 2026-11-19.
 
 ## Product rules (decided 2026-10-17)
 

@@ -31,7 +31,7 @@ Copy `.env.example` to `.env.local`, set `SOLANA_KEYPAIR` and `NEXT_PUBLIC_SOLAN
 Single box is already held, and a little devnet SOL. Program / buffer keypairs stay outside the repository.
 
 Vercel production uses the production Convex URL and `NEXT_PUBLIC_SOLANA_NETWORK=devnet`. Both Convex deployments and
-Vercel use a configured Helius devnet RPC; its API key is kept in environment variables. The obsolete Arc, Privy and
+Vercel use a configured Helius devnet RPC; its API key is kept in environment variables. The obsolete legacy-chain, Privy and
 WalletConnect production settings have been removed. `.vercelignore` excludes private env files, program builds,
 keypairs and the legacy contracts while retaining `lib/brand` and `public/brand`.
 

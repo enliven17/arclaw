@@ -33,7 +33,7 @@ has not landed 120 s after the drop (anyone), or when the machine's table was re
 rounds can be sent home by anyone (so a keeper can finish what a closed tab left), and anyone can settle; the cards and
 rent always go to the player.
 
-## Program rules (same as the Arc version)
+## Program rules
 
 - Each outcome is a full pack of three cards. Every table is checked when it is set: each pack worth at least
   `floor_bps` (never under 50%) and at most `cap_bps` of the price, the weighted expected value inside
@@ -51,14 +51,14 @@ rent always go to the player.
 - **Prize stock is not reserved.** The admin can `sweep` stock out of the vault. A drawn card the vault no longer holds
   is refunded at table value, so the player gets the money but not the stock. Keep the admin key in a multisig
   (Squads) on mainnet.
-- **No live price check.** The Arc contract re-checked every card against an oracle at open. Here values are set by the
+- **No live price check.** Card values are set by the
   admin or operator with the table, and `max_table_age` bounds how stale they can get. Adding a Pyth check in
   `start_round` is the next step for mainnet.
-- **No just in time buys.** The Arc contract bought a missing card on the Astock desk at reveal. On Solana the vault is
+- **No just in time buys.** The prize vault is
   pre-filled (on mainnet: xStocks bought on Jupiter by the operator) and a short card is refunded.
 - **Not ported:** the ARCLAW luck boost, the VRF miss breaker, `refund_sealed` for a machine switched off for days, the
   keeper (table repricing on a schedule) and the admin panel.
-- **Not audited.** The Arc contract went through several audit rounds; this program has had none yet. The CLAUDE.md
+- **Not audited.** This program has not had an independent audit yet. The CLAUDE.md
   rule holds: two independent audits and green tests before any mainnet deploy.
 
 ## Tokens

@@ -52,7 +52,7 @@ export const hubTop = (s: Pose): Point3 => [s.gx + s.sx, s.gy + s.sy, s.hub];
 /** Cable from the trolley's sheave to the hub's collar. */
 export const cablePath = (s: Pose) => pathOf([at([s.gx, s.gy, TROLLEY_BOTTOM]), at([s.gx + s.sx, s.gy + s.sy, s.hub + 4])]);
 
-/** The coin's arc into the slot. */
+/** The coin's curved path into the slot. */
 export function coinShift(s: Pose) {
   const u = s.coin;
   const from: Point3 = [SLOT.x + 34, 150, SLOT.z + 26];

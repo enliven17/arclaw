@@ -11,8 +11,8 @@ export const metadata: Metadata = {
   alternates: { canonical: "/whitepaper" },
 };
 
-const VERSION = "2.0";
-const UPDATED = "November 2026";
+const VERSION = "2.1";
+const UPDATED = "19 November 2026";
 
 const TOC = [
   ["summary", "Summary"],
@@ -53,8 +53,15 @@ export default function Whitepaper() {
 
       <h2 id="summary">1. Summary</h2>
       <p>
+        The current deployment runs on Solana devnet with MagicBlock ephemeral rollups and VRF. Circle devnet USDC,
+        devnet SOL and the test stock tokens have no monetary value. Test stock tokens do not represent company shares.
+        Get test USDC from <a href="https://faucet.circle.com" target="_blank" rel="noreferrer">Circle&apos;s faucet</a> and
+        devnet SOL from <a href="https://faucet.solana.com" target="_blank" rel="noreferrer">Solana&apos;s faucet</a>.
+      </p>
+      <p>
         arclaw is a claw machine on Solana. You pay USDC, steer a claw live, grab a sealed box, and open it into a pack of
-        three cards. Every card is a real tokenized stock paid straight to your wallet. Every play wins a box: the claw is
+        three cards. Every card pays a stock token straight to your wallet, using test mints on devnet and xStocks for a
+        future mainnet deployment. Every play wins a box: the claw is
         theatre, and an on-chain program decides what is inside, using verifiable randomness.
       </p>
       <p>
@@ -105,7 +112,8 @@ export default function Whitepaper() {
       </p>
       <p>
         Boxes can be gifted to any Solana address or through a claim link. A claim link carries a one-time key that
-        co-signs the recipient&apos;s claim transaction, so nobody who sees the link first can redirect the box. If a link
+        co-signs the recipient&apos;s claim transaction. Anyone holding the complete link can claim its boxes, so keep it
+        private until it reaches the intended recipient. The signature prevents changing the recipient of a submitted claim. If a link
         is not claimed within 7 days, the sender can take the boxes back.
       </p>
 
@@ -186,7 +194,7 @@ export default function Whitepaper() {
       </p>
       <p>
         A round can never end on an outcome it was not entitled to. If the draw does not arrive within 120 seconds, the
-        round is void and your box comes back. The same happens if you abandon a round before the drop, or if the
+        round can be voided. Finish and settle the round to recover its sealed box. The same recovery path applies if you abandon a round before the drop, or if the
         machine&apos;s table was replaced while your round was waiting.
       </p>
       <p>
@@ -221,7 +229,8 @@ export default function Whitepaper() {
 
       <h2 id="security">6. Security model</h2>
       <p>
-        Prizes are real money, so the program was built to be boring and to be attacked before anyone plays it.
+        Devnet uses test assets. The program still enforces payment, ownership and treasury rules on chain; mainnet
+        deployment requires independent audits.
       </p>
       <ul>
         <li>
@@ -242,7 +251,8 @@ export default function Whitepaper() {
         </li>
         <li>
           <strong>Session keys.</strong> The key in your browser can only steer and drop the claw in a round it was named
-          for. Paying for boxes and receiving cards always takes your wallet&apos;s signature.
+          for. It cannot spend tokens in your wallet. Paying for boxes takes your wallet&apos;s signature. Settlement can
+          be submitted by anyone, but its cards and account rent always go to the player recorded in the round.
         </li>
         <li>
           <strong>On the website.</strong> A strict content policy, no framing, signed share links that only show packs read
@@ -332,7 +342,7 @@ export default function Whitepaper() {
       <p>
         Source and tests are in the project repository. The chain is <a href="https://solana.com">Solana</a>, the real time
         claw and the randomness run on <a href="https://www.magicblock.gg">MagicBlock</a> (ephemeral rollups and VRF), USDC is
-        Circle&apos;s and the stocks are <a href="https://xstocks.com">xStocks</a>.
+        Circle&apos;s. Devnet prizes are test mints; future mainnet prizes are intended to use <a href="https://xstocks.com">xStocks</a>.
       </p>
     </>
   );

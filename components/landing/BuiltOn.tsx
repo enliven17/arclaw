@@ -28,7 +28,7 @@ const PARTNERS: { name: string; role: string; note: string; href: string; mark?:
     href: "https://www.magicblock.gg",
   },
   { name: "Circle", role: "The money", note: "Every play is paid in Circle's USDC, and refunds come back in it.", href: "https://www.circle.com", mark: CIRCLE },
-  { name: "xStocks", role: "The stocks", note: "Tokenized equities on Solana. Every card is a token you hold in your own wallet.", href: "https://xstocks.com" },
+  { name: "xStocks", role: "Mainnet stocks", note: "Tokenized equities on Solana for the future mainnet release. Devnet currently pays test stock tokens.", href: "https://xstocks.com" },
 ];
 
 export function BuiltOn() {

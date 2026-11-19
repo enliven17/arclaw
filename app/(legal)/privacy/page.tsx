@@ -38,7 +38,8 @@ export default function Privacy() {
         </li>
         <li>
           <strong>Settings on your device.</strong> We store small preferences in your browser (sound on or off, whether
-          you have seen the intro). These never leave your device.
+          you have seen the intro). A round also keeps its limited session key in your browser so it can be resumed.
+          These keys and preferences are not sent to our servers.
         </li>
       </ul>
 
@@ -66,7 +67,7 @@ export default function Privacy() {
           Solana RPC providers relay your transactions and our reads of the chain. MagicBlock runs the ephemeral rollup
           your claw rounds play on and provides randomness.
         </li>
-        <li>Circle issues USDC. Backed issues the xStocks prizes on mainnet. A third party price feed supplies display prices.</li>
+        <li>Circle issues USDC. Devnet stock tokens are project test mints. Future mainnet prizes are intended to use xStocks. Display prices currently use stored snapshots.</li>
         <li>Jupiter, if you sell a card from the app.</li>
         <li>Telegram, if you use the bot.</li>
       </ul>

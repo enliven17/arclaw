@@ -38,26 +38,9 @@ Net margin per box opened alone: about 23% (Single), 19% (Stack), 14.5% (Vault).
 4. **Fresh tables.** A table records when it was set; `start_round` refuses one older than `max_table_age` (off on devnet, whose prices are a snapshot).
 5. **No re-rolls.** One VRF request per round. A draw that never lands voids the round after 120 s and the box comes back; the word itself is never seen before the callback writes the pack.
 
-## ARCLAW holders (not ported)
+## Token plans
 
-The Arc version planned an ARCLAW token with a luck boost. It is not part of the Solana program; the notes below are kept for reference.
-
-Two separate things. Only the first is code.
-
-**1. Luck boost (on-chain, LuckVault).** ARCLAW locked in the vault for at least 24 hours (minAge) gives a boost between 0 and 1% (100 bps). With probability boost/10,000 a box draws a second pack from an independent random stream and keeps the better one. The stake tiers and their boosts (for example 1k, 10k and 100k ARCLAW for 0.25%, 0.5% and 1%) are set by the owner after the token exists; until then boosts are off. Flash-loaned or freshly bought tokens earn nothing, and unstaking is instant.
-
-What it is worth at the top tier: about 0.16 percentage points of return (about 1.6 USDC per 1,000 USDC played; 0.16 cent per Single box, 0.8 cent per Stack box, 1.6 cent per Vault box). It is a small perk, by design: every table is checked on-chain at the maximum boost, so the house edge cannot be bent by it.
-
-**2. Buyback and holder distribution (off-chain, run by the team).** Not in any contract and not enforced on-chain. The team's policy, each month from the net profit of the month (after VRF fees, swap spread and the other costs above):
-
-| Share of monthly net profit | What happens |
-|---|---|
-| 25% | Buyback: the team buys ARCLAW on the market |
-| 10% | Distribution to ARCLAW holders (the team picks the snapshot and the method) |
-
-The two are separate, so 35% of the month's net profit goes to the token in total and 65% stays with the project. The percentages are the team's current policy, not a contract term: the team can raise them as profit grows (larger buybacks and distributions are the plan), and changing them needs no audit because the contracts know nothing about it. It is not a guaranteed yield; if there is no net profit in a month there is nothing to buy or distribute.
-
-Not decided yet and not written anywhere: ARCLAW total supply, allocation and launch plan (it is minted later on Arguspad; the owner sets its address in the vault).
+The Solana program has no project-token staking, luck boost or holder distribution. Current devnet play uses Circle test USDC and test stock mints only.
 
 ## Not legal advice
 

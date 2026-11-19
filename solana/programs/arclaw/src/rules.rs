@@ -1,6 +1,6 @@
 //! Pure table rules and the weighted draw. No Anchor types here, so they are unit tested on the host.
 //!
-//! The same rules as the Arc contract (contracts/src/Arclaw.sol, ArclawRules):
+//! On-chain prize table rules:
 //!   floor  every outcome is worth at least floor_bps of the play price,
 //!   cap    no outcome is worth more than cap_bps of the price,
 //!   rtp    the weighted expected value sits inside [rtp_min_bps, rtp_max_bps] of the price.

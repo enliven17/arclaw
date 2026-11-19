@@ -1,8 +1,7 @@
 # Security
 
-The Solana program (`solana/programs/arclaw`) has **not been audited**. The Arc contract it replaces went through
-several audit and pentest rounds (see this file and `docs/PENTEST.md` in the git history before the Solana port); those
-findings do not carry over. Rule from CLAUDE.md: two independent audits and green tests before any mainnet deploy.
+The Solana program (`solana/programs/arclaw`) has **not been externally audited**. Unit tests, client checks and a
+live devnet round have passed; these checks are not an independent audit. Rule from CLAUDE.md: two independent audits and green tests before any mainnet deploy.
 
 ## Roles
 
