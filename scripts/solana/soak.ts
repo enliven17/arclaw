@@ -14,7 +14,7 @@ import { createAssociatedTokenAccountIdempotentInstruction, createCloseAccountIn
 import bs58 from "bs58";
 import { SOLANA, USDC_MINT } from "../../lib/solana/config";
 import { baseConnection, boxFromSettle, readPlayer, readRound, STOCK_MINTS } from "../../lib/solana/client";
-import { configPda, decodeConfig, decodeMachine, machinePda, playIx, programId, treasuryAta, usdcMint } from "../../lib/solana/program";
+import { configPda, decodeConfig, decodeMachine, decodePlayer, machinePda, playerPda, playIx, programId, roundPda, treasuryAta, usdcMint } from "../../lib/solana/program";
 import { ClawDriver, dropAndDraw, finishRound, pendingRound, settle, startRound, voidOnBase, waitForDraw, waitOnRollup, type Sender, type RoundHandle } from "../../lib/solana/round";
 import { stockOf } from "../../lib/stocks";
 import { loadWallets, quoteStock, withdrawIx } from "./soak-utils";
@@ -25,6 +25,7 @@ const { values } = parseArgs({ options: {
   passes: { type: "string", default: "1" }, machines: { type: "string", default: "1" },
   run: { type: "string", default: "kondora-200" }, audit: { type: "boolean", default: false },
   "cleanup-only": { type: "boolean", default: false },
+  "recycle-only": { type: "boolean", default: false },
 } });
 function integer(value: string, max: number) {
   const n = Number(value);
@@ -191,6 +192,27 @@ async function sellStocks(wallet: Keypair, progress: Progress) {
     }
   });
 }
+/** Recycle this run's unreserved box revenue into reusable wallet USDC. Initial treasury funds stay in place. */
+async function recycleUsdc() {
+  const cfg = decodeConfig((await conn.getAccountInfo(configPda()))!.data);
+  const free = (await amount(treasuryAta())) - cfg.sealedReserve - cfg.owedTotal - BigInt(state.initial!.treasury);
+  const each = free / BigInt(wallets.length);
+  if (each <= 0n) return;
+  for (let i = 0; i < wallets.length; i += 8) {
+    const group = wallets.slice(i, i + 8);
+    const signature = await send(new Transaction().add(...group.map((w) => withdrawIx(admin.publicKey, ata(w.publicKey), each))), []);
+    log("recycle-usdc", undefined, { signature, wallets: group.length, eachMicroUsdc: `${each}` });
+  }
+}
+async function pendingWallets(): Promise<string[]> {
+  const players = await infos(wallets.map((w) => playerPda(w.publicKey)));
+  const rounds = players.flatMap((p, i) => {
+    const player = p ? decodePlayer(p.data) : null;
+    return player && player.nextRound > 0n ? [{ wallet: wallets[i].publicKey.toBase58(), address: roundPda(wallets[i].publicKey, player.nextRound - 1n) }] : [];
+  });
+  const accounts = await infos(rounds.map((r) => r.address));
+  return rounds.filter((_, i) => accounts[i] !== null).map((r) => r.wallet);
+}
 async function move(h: RoundHandle) {
   const driver = new ClawDriver(h); driver.start();
   try {
@@ -263,7 +285,7 @@ async function main() {
   const before = await inventory();
   if (!state.initial) state.initial = before;
   json(join(root, values.audit ? "audit.json" : "before.json"), before);
-  log("inventory", undefined, { wallets: wallets.length, walletMicroUsdc: `${before.wallets.reduce((a, r) => a + BigInt(r.usdc), 0n)}`, treasuryMicroUsdc: before.treasury, adminSol: before.adminLamports / 1e9, mode: values.audit ? "audit" : values["cleanup-only"] ? "cleanup" : "soak" });
+  log("inventory", undefined, { wallets: wallets.length, walletMicroUsdc: `${before.wallets.reduce((a, r) => a + BigInt(r.usdc), 0n)}`, treasuryMicroUsdc: before.treasury, adminSol: before.adminLamports / 1e9, mode: values.audit ? "audit" : values["recycle-only"] ? "recycle" : values["cleanup-only"] ? "cleanup" : "soak" });
   if (values.audit) return;
   const lockPath = join(root, "lock.json");
   if (existsSync(lockPath)) {
@@ -299,20 +321,22 @@ async function main() {
         active.delete(key);
       }
     };
-    await Promise.all(Array.from({ length: concurrency }, worker));
+    if (!values["recycle-only"]) await Promise.all(Array.from({ length: concurrency }, worker));
     // Always attempt stock cleanup, including wallets whose round encountered an error.
-    for (const wallet of wallets) {
+    for (const wallet of values["recycle-only"] ? [] : wallets) {
       const p = state.rows[wallet.publicKey.toBase58()] ??= { completed: 0, attempts: 0, voids: 0 };
       try { await sellStocks(wallet, p); } catch (e) { p.error = clean(e); save(); log("cleanup-error", wallet, { error: p.error }); }
     }
+    const pending = await pendingWallets();
+    if (pending.length === 0 && !stopping && wallets.every((w) => {
+      const p = state.rows[w.publicKey.toBase58()]; return p && !p.error && p.completed >= passes && !p.sale;
+    })) await recycleUsdc();
     const after = await inventory();
-    const pending: string[] = [];
-    for (const wallet of wallets) if (await pendingRound(wallet.publicKey)) pending.push(wallet.publicKey.toBase58());
     const failed = wallets.filter((w) => { const p = state.rows[w.publicKey.toBase58()]; return p.error || (!values["cleanup-only"] && p.completed < passes); }).map((w) => w.publicKey.toBase58());
     const stocksRemaining = after.wallets.filter((r) => Object.values(r.stocks).some((v) => BigInt(v) !== 0n)).map((r) => r.wallet);
     const totalUsdc = (i: Inventory) => i.wallets.reduce((a, r) => a + BigInt(r.usdc), BigInt(i.treasury) + BigInt(i.adminUsdc));
     const usdcConserved = totalUsdc(state.initial!) === totalUsdc(after);
-    const report = { run: values.run, mode: values["cleanup-only"] ? "cleanup" : "soak", startedAt: state.startedAt, finishedAt: new Date().toISOString(), interrupted: stopping, wallets: wallets.length, passes, completedRounds: Object.values(state.rows).reduce((a, p) => a + p.completed, 0), voids: Object.values(state.rows).reduce((a, p) => a + p.voids, 0), failed, pending, stocksRemaining, usdcConserved, before: state.initial, after };
+    const report = { run: values.run, mode: values["recycle-only"] ? "recycle" : values["cleanup-only"] ? "cleanup" : "soak", startedAt: state.startedAt, finishedAt: new Date().toISOString(), interrupted: stopping, wallets: wallets.length, passes, completedRounds: Object.values(state.rows).reduce((a, p) => a + p.completed, 0), voids: Object.values(state.rows).reduce((a, p) => a + p.voids, 0), failed, pending, stocksRemaining, usdcConserved, before: state.initial, after };
     json(join(root, "summary.json"), report);
     state.finishedAt = report.finishedAt; save();
     log("summary", undefined, { completedRounds: report.completedRounds, failed: failed.length, pending: pending.length, stocksRemaining: stocksRemaining.length, usdcConserved, walletMicroUsdc: `${after.wallets.reduce((a, r) => a + BigInt(r.usdc), 0n)}`, report: join(root, "summary.json") });

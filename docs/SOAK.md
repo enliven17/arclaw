@@ -32,9 +32,13 @@ owed-refund reserves. If free treasury liquidity is insufficient, the harness
 first rotates existing test USDC into the treasury.
 
 USDC is rotated between input wallets as needed; donors keep at least 0.01 USDC.
+After every wallet finishes and all rounds close, this run's free treasury revenue
+is distributed equally to the input wallets so the funds can be reused in other
+projects. The starting treasury balance and all protected reserves stay in place.
+`--recycle-only` performs this final distribution without playing again.
 The admin sponsors transaction fees and tops wallets below 0.025 SOL up to 0.04
-devnet SOL. Wins and ordinary game losses still affect aggregate wallet USDC.
-USDC balances are therefore not guaranteed to equal the starting balances.
+devnet SOL. Individual wallet balances change with wins, funding rotations and the
+final distribution; they are not guaranteed to equal their starting balances.
 Other mints, Kondora deposits and open positions are untouched. The final report
 also verifies that total Circle USDC across the input wallets, admin and treasury
 equals the initial total; all stock buybacks and funding transfers conserve it.
