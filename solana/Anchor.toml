@@ -6,10 +6,10 @@ resolution = true
 skip-lint = false
 
 [programs.localnet]
-arclaw = "66SUbtvATDc22btwfEcgNnb3uuoEJTYkmgTWfaTnSXpF"
+arclaw = "DJMcHeBR4sSN2e7kx56fennhEdQpbAV7nmxLTAYS7WeW"
 
 [programs.devnet]
-arclaw = "66SUbtvATDc22btwfEcgNnb3uuoEJTYkmgTWfaTnSXpF"
+arclaw = "DJMcHeBR4sSN2e7kx56fennhEdQpbAV7nmxLTAYS7WeW"
 
 [provider]
 cluster = "devnet"

@@ -35,7 +35,7 @@ pub mod state;
 use errors::ArclawError;
 use state::*;
 
-declare_id!("66SUbtvATDc22btwfEcgNnb3uuoEJTYkmgTWfaTnSXpF");
+declare_id!("DJMcHeBR4sSN2e7kx56fennhEdQpbAV7nmxLTAYS7WeW");
 
 const SLOT_HASHES_ID: Pubkey = pubkey!("SysvarS1otHashes111111111111111111111111111");
 const PROGRAM_IDENTITY: Pubkey = vrf_sdk::consts::program_identity_pubkey(&crate::ID);
@@ -821,13 +821,13 @@ pub struct SettleRound<'info> {
     #[account(mut, address = round.player)]
     pub player: UncheckedAccount<'info>,
     #[account(mut, seeds = [PLAYER_SEED, round.player.as_ref()], bump = player_state.bump)]
-    pub player_state: Account<'info, Player>,
+    pub player_state: Box<Account<'info, Player>>,
     #[account(mut, seeds = [ROUND_SEED, round.player.as_ref(), &round.round_id.to_le_bytes()], bump = round.bump, close = player)]
-    pub round: Account<'info, Round>,
+    pub round: Box<Account<'info, Round>>,
     #[account(mut, seeds = [CONFIG_SEED], bump = config.bump, has_one = usdc_mint)]
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
     #[account(seeds = [MACHINE_SEED, &[round.machine_id]], bump = machine.bump)]
-    pub machine: Account<'info, Machine>,
+    pub machine: Box<Account<'info, Machine>>,
     pub usdc_mint: InterfaceAccount<'info, Mint>,
     #[account(mut, associated_token::mint = usdc_mint, associated_token::authority = config, associated_token::token_program = token_program)]
     pub treasury: InterfaceAccount<'info, TokenAccount>,
