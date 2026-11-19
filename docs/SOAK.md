@@ -35,7 +35,9 @@ USDC is rotated between input wallets as needed; donors keep at least 0.01 USDC.
 The admin sponsors transaction fees and tops wallets below 0.025 SOL up to 0.04
 devnet SOL. Wins and ordinary game losses still affect aggregate wallet USDC.
 USDC balances are therefore not guaranteed to equal the starting balances.
-Other mints, Kondora deposits and open positions are untouched.
+Other mints, Kondora deposits and open positions are untouched. The final report
+also verifies that total Circle USDC across the input wallets, admin and treasury
+equals the initial total; all stock buybacks and funding transfers conserve it.
 
 All run state stays under the ignored and deployment-excluded directory
 `.cache/solana-soak/<run>/`:

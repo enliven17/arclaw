@@ -310,11 +310,13 @@ async function main() {
     for (const wallet of wallets) if (await pendingRound(wallet.publicKey)) pending.push(wallet.publicKey.toBase58());
     const failed = wallets.filter((w) => { const p = state.rows[w.publicKey.toBase58()]; return p.error || (!values["cleanup-only"] && p.completed < passes); }).map((w) => w.publicKey.toBase58());
     const stocksRemaining = after.wallets.filter((r) => Object.values(r.stocks).some((v) => BigInt(v) !== 0n)).map((r) => r.wallet);
-    const report = { run: values.run, startedAt: state.startedAt, finishedAt: new Date().toISOString(), interrupted: stopping, wallets: wallets.length, passes, completedRounds: Object.values(state.rows).reduce((a, p) => a + p.completed, 0), voids: Object.values(state.rows).reduce((a, p) => a + p.voids, 0), failed, pending, stocksRemaining, before: state.initial, after };
+    const totalUsdc = (i: Inventory) => i.wallets.reduce((a, r) => a + BigInt(r.usdc), BigInt(i.treasury) + BigInt(i.adminUsdc));
+    const usdcConserved = totalUsdc(state.initial!) === totalUsdc(after);
+    const report = { run: values.run, mode: values["cleanup-only"] ? "cleanup" : "soak", startedAt: state.startedAt, finishedAt: new Date().toISOString(), interrupted: stopping, wallets: wallets.length, passes, completedRounds: Object.values(state.rows).reduce((a, p) => a + p.completed, 0), voids: Object.values(state.rows).reduce((a, p) => a + p.voids, 0), failed, pending, stocksRemaining, usdcConserved, before: state.initial, after };
     json(join(root, "summary.json"), report);
     state.finishedAt = report.finishedAt; save();
-    log("summary", undefined, { completedRounds: report.completedRounds, failed: failed.length, pending: pending.length, stocksRemaining: stocksRemaining.length, walletMicroUsdc: `${after.wallets.reduce((a, r) => a + BigInt(r.usdc), 0n)}`, report: join(root, "summary.json") });
-    if (failed.length || pending.length || stocksRemaining.length || stopping) process.exitCode = 1;
+    log("summary", undefined, { completedRounds: report.completedRounds, failed: failed.length, pending: pending.length, stocksRemaining: stocksRemaining.length, usdcConserved, walletMicroUsdc: `${after.wallets.reduce((a, r) => a + BigInt(r.usdc), 0n)}`, report: join(root, "summary.json") });
+    if (failed.length || pending.length || stocksRemaining.length || stopping || !usdcConserved) process.exitCode = 1;
   } finally { unlinkSync(lockPath); }
 }
 main().then(() => process.exit(process.exitCode ?? 0), (error: unknown) => { console.error(clean(error)); process.exit(1); });
