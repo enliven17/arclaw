@@ -11,8 +11,8 @@
  *
  * The session key is kept in localStorage per round, so a reload can pick a round up where it was left.
  */
-import type { Buffer } from "buffer";
-import { Keypair, PublicKey, SystemProgram, Transaction, type TransactionInstruction } from "@solana/web3.js";
+import { Buffer } from "buffer";
+import { Keypair, PublicKey, SystemProgram, Transaction, TransactionInstruction, type Connection } from "@solana/web3.js";
 import { createAssociatedTokenAccountIdempotentInstruction, getAssociatedTokenAddressSync } from "@solana/spl-token";
 import bs58 from "bs58";
 import { SOLANA } from "./config";
@@ -61,6 +61,7 @@ function forgetDriver(round: PublicKey) {
 /** Burns one sealed box into a round on the rollup. */
 export async function startRound(wallet: Sender, machineId: number): Promise<RoundHandle> {
   const player = wallet.publicKey;
+  if (await pendingRound(player)) throw new Error("Finish your current round before starting another box.");
   const roundId = (await readPlayer(player))?.nextRound ?? 0n;
   const round = roundPda(player, roundId);
   const driver = Keypair.generate();
@@ -101,7 +102,15 @@ async function sendEr(ixs: TransactionInstruction[], signer: Keypair | Sender): 
   } else {
     raw = (await signer.sign(tx)).serialize();
   }
-  return conn.sendRawTransaction(raw, { skipPreflight: true });
+  const signature = await conn.sendRawTransaction(raw, { skipPreflight: true });
+  const end = Date.now() + 15_000;
+  while (Date.now() < end) {
+    const status = (await conn.getSignatureStatuses([signature])).value[0];
+    if (status?.err) throw new Error(`Rollup transaction failed: ${JSON.stringify(status.err)}`);
+    if (status) return signature;
+    await sleep(100);
+  }
+  throw new Error("The rollup has not confirmed the transaction. Resume your round to try again.");
 }
 
 /** Waits until the rollup has the delegated round (it clones on first touch). */
@@ -124,8 +133,10 @@ export class ClawDriver {
   private dz = 0;
   private timer: ReturnType<typeof setInterval> | null = null;
   private hash: { blockhash: string; at: number } | null = null;
+  private sequence = 0;
+  private flushing = false;
 
-  constructor(private h: RoundHandle) {}
+  constructor(private h: RoundHandle, private connection: Connection = erConnection()) {}
 
   start() {
     this.timer ??= setInterval(() => void this.flush(), 80);
@@ -141,17 +152,29 @@ export class ClawDriver {
 
   private async flush() {
     const driver = this.h.driver;
-    if (!driver || (this.dx === 0 && this.dz === 0)) return;
+    if (!driver || this.flushing || (this.dx === 0 && this.dz === 0)) return;
+    this.flushing = true;
     const clamp = (v: number) => Math.max(-120, Math.min(120, Math.round(v)));
     const dx = clamp(this.dx);
     const dz = clamp(this.dz);
     this.dx -= dx;
     this.dz -= dz;
-    const conn = erConnection();
-    if (!this.hash || Date.now() - this.hash.at > 20_000) this.hash = { blockhash: (await conn.getLatestBlockhash()).blockhash, at: Date.now() };
-    const tx = new Transaction({ feePayer: driver.publicKey, recentBlockhash: this.hash.blockhash }).add(moveClawIx(driver.publicKey, this.h.round, dx, dz));
-    tx.sign(driver);
-    void conn.sendRawTransaction(tx.serialize(), { skipPreflight: true }).catch(() => undefined);
+    try {
+      const conn = this.connection;
+      if (!this.hash || Date.now() - this.hash.at > 20_000) this.hash = { blockhash: (await conn.getLatestBlockhash()).blockhash, at: Date.now() };
+      const tx = new Transaction({ feePayer: driver.publicKey, recentBlockhash: this.hash.blockhash }).add(
+        moveClawIx(driver.publicKey, this.h.round, dx, dz),
+        // Repeated directions with a cached blockhash otherwise produce the same signature and get deduplicated.
+        new TransactionInstruction({ programId: new PublicKey("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr"), keys: [], data: Buffer.from(`${this.sequence++}`) }),
+      );
+      tx.sign(driver);
+      await conn.sendRawTransaction(tx.serialize(), { skipPreflight: true });
+    } catch {
+      this.dx += dx;
+      this.dz += dz;
+    } finally {
+      this.flushing = false;
+    }
   }
 }
 
@@ -165,7 +188,10 @@ export async function dropAndDraw(h: RoundHandle, onStatus?: (s: string) => void
   for (;;) {
     const r = await readRound(h.round, "er").catch(() => null);
     if (r && (r.round.status === "drawn" || r.round.status === "void")) return r.round;
-    if (Date.now() > end) return (r?.round ?? null) as RoundAccount;
+    if (Date.now() > end) {
+      if (r?.round.status === "requested") return r.round;
+      throw new Error("The draw could not be read. Resume your round to try again.");
+    }
     await sleep(r?.round.status === "requested" ? 400 : 700);
   }
 }
