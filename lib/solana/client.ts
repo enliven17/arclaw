@@ -136,7 +136,7 @@ export function boxFromEvent(e: RoundSettledEvent, signature?: string): DrawnBox
 
 /** The pack a settle transaction paid, read back from its logs. */
 export async function boxFromSettle(signature: string): Promise<DrawnBox | null> {
-  const tx = await baseConnection().getTransaction(signature, { commitment: "confirmed", maxSupportedTransactionVersion: 0 });
+  const tx = await baseConnection().getTransaction(signature, { commitment: "confirmed", maxSupportedTransactionVersion: 1 });
   if (!tx?.meta || tx.meta.err) return null;
   const e = eventsFromLogs(tx?.meta?.logMessages).find((x): x is RoundSettledEvent => x.kind === "RoundSettled" && !x.void);
   return e ? boxFromEvent(e, signature) : null;
@@ -151,7 +151,7 @@ export async function pullsOf(wallet: PublicKey): Promise<Pull[]> {
   const ok = sigs.filter((s) => !s.err).map((s) => s.signature);
   const out: Pull[] = [];
   for (let i = 0; i < ok.length; i += 25) {
-    const txs = await conn.getTransactions(ok.slice(i, i + 25), { commitment: "confirmed", maxSupportedTransactionVersion: 0 });
+    const txs = await conn.getTransactions(ok.slice(i, i + 25), { commitment: "confirmed", maxSupportedTransactionVersion: 1 });
     txs.forEach((tx, j) => {
       for (const e of eventsFromLogs(tx?.meta?.logMessages)) {
         if (e.kind !== "RoundSettled" || e.void || !e.player.equals(wallet)) continue;

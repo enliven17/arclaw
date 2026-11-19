@@ -38,7 +38,7 @@ export async function readSince(conn: Connection, until: string | null, max = 40
     const chunk = batch.slice(i, i + 25);
     const txs = await conn.getTransactions(
       chunk.map((s) => s.signature),
-      { commitment: "confirmed", maxSupportedTransactionVersion: 0 },
+      { commitment: "confirmed", maxSupportedTransactionVersion: 1 },
     );
     txs.forEach((tx, j) => {
       const { signature, slot } = chunk[j]!;

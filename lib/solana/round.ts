@@ -183,12 +183,18 @@ export async function dropAndDraw(h: RoundHandle, onStatus?: (s: string) => void
   if (!h.driver) throw new Error("This round's session key is gone; finish it from your wallet.");
   const seed = crypto.getRandomValues(new Uint8Array(32));
   await sendEr([dropClawIx(h.driver.publicKey, h.round, h.machineId, seed)], h.driver);
+  return waitForDraw(h, onStatus);
+}
+
+/** Also used when resuming a tab whose drop was already submitted. Never requests a second draw. */
+export async function waitForDraw(h: RoundHandle, onStatus?: (s: string) => void): Promise<RoundAccount> {
   onStatus?.("Drawing your pack");
   const end = Date.now() + VRF_TIMEOUT_MS;
   for (;;) {
     const r = await readRound(h.round, "er").catch(() => null);
     if (r && (r.round.status === "drawn" || r.round.status === "void")) return r.round;
-    if (Date.now() > end) {
+    const deadline = r?.round.status === "requested" ? Math.min(end, Number(r.round.requestedAt) * 1000 + VRF_TIMEOUT_MS) : end;
+    if (Date.now() > deadline) {
       if (r?.round.status === "requested") return r.round;
       throw new Error("The draw could not be read. Resume your round to try again.");
     }

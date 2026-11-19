@@ -15,7 +15,10 @@ function connection(count: number, transaction: (sig: string) => unknown = () =>
       const end = options.until ? Number(options.until.slice(4)) : 0;
       return Array.from({ length: Math.min(options.limit, Math.max(0, start - end)) }, (_, n) => ({ signature: signature(start - n), slot, err: null }));
     },
-    async getTransactions(signatures: string[]) { return signatures.map(transaction); },
+    async getTransactions(signatures: string[], options: { maxSupportedTransactionVersion: number }) {
+      assert.equal(options.maxSupportedTransactionVersion, 1, "support Solana v1 transactions in the live program history");
+      return signatures.map(transaction);
+    },
   } as unknown as Connection;
 }
 

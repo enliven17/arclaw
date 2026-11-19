@@ -24,7 +24,7 @@ import { CabinetMorph } from "@/components/motion/PageTransitions";
 import { explorerTx } from "@/lib/solana/config";
 import { erConnection, errorText, readBoxes, type DrawnBox } from "@/lib/solana/client";
 import { decodeRound, playIx } from "@/lib/solana/program";
-import { ClawDriver, dropAndDraw, finishRound, pendingRound, settle, startRound, voidOnBase, waitOnRollup, type RoundHandle } from "@/lib/solana/round";
+import { ClawDriver, dropAndDraw, finishRound, pendingRound, settle, startRound, voidOnBase, waitForDraw, waitOnRollup, type RoundHandle } from "@/lib/solana/round";
 import { fmtMultiplier, fmtPct, type Machine } from "@/lib/machines";
 import { useMachineStatus } from "./useMachineStatus";
 import { usdc } from "@/lib/stocks";
@@ -112,6 +112,10 @@ export function MachineRoom({ art, machine }: { art: ClawArt; machine: Machine }
   }, [phase]);
 
   const stick = useRef({ x: 0, z: 0, raf: 0, last: 0 });
+  useEffect(() => () => {
+    driver.current?.stop();
+    cancelAnimationFrame(stick.current.raf);
+  }, []);
   const steer = useCallback((vx: number, vz: number) => {
     const s = stick.current;
     s.x = vx;
@@ -295,9 +299,10 @@ export function MachineRoom({ art, machine }: { art: ClawArt; machine: Machine }
         return setPhase("idle");
       }
       if (p.state?.status === "armed" && p.driver) return void (await beginAiming(p, { x: p.state.clawX, z: p.state.clawZ }));
-      if (p.state?.status === "requested" && p.driver) {
+      if (p.state?.status === "requested") {
         setPhase("drawing");
         handle.current = p;
+        await waitForDraw(p);
       }
       await complete(p, true);
     } catch (e) {
