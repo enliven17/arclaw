@@ -32,9 +32,9 @@ owed-refund reserves. If free treasury liquidity is insufficient, the harness
 first rotates existing test USDC into the treasury.
 
 USDC is rotated between input wallets as needed; donors keep at least 0.01 USDC.
-After every wallet finishes and all rounds close, this run's free treasury revenue
+After every wallet finishes and all rounds close, free devnet treasury USDC
 is distributed equally to the input wallets so the funds can be reused in other
-projects. The starting treasury balance and all protected reserves stay in place.
+projects. The program protects all sealed-box and owed-refund reserves.
 `--recycle-only` performs this final distribution without playing again.
 The admin sponsors transaction fees and tops wallets below 0.025 SOL up to 0.04
 devnet SOL. Individual wallet balances change with wins, funding rotations and the

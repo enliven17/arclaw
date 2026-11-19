@@ -192,11 +192,11 @@ async function sellStocks(wallet: Keypair, progress: Progress) {
     }
   });
 }
-/** Recycle this run's unreserved box revenue into reusable wallet USDC. Initial treasury funds stay in place. */
+/** Return free devnet treasury USDC to reusable test wallets; on-chain reserves stay protected. */
 async function recycleUsdc() {
   if (!state.recycle) {
     const cfg = decodeConfig((await conn.getAccountInfo(configPda()))!.data);
-    const free = (await amount(treasuryAta())) - cfg.sealedReserve - cfg.owedTotal - BigInt(state.initial!.treasury);
+    const free = (await amount(treasuryAta())) - cfg.sealedReserve - cfg.owedTotal;
     const each = free / BigInt(wallets.length);
     if (each <= 0n) return;
     state.recycle = { each: `${each}`, paid: 0 }; save();
