@@ -62,6 +62,7 @@ async function main() {
     if (!stocks[ticker]) {
       const mint = await createMint(conn, admin, admin.publicKey, null, DECIMALS);
       stocks[ticker] = { mint: mint.toBase58(), decimals: DECIMALS, program: "token" };
+      writeFileSync(DEPLOYMENT, `${JSON.stringify({ ...dep, stocks }, null, 2)}\n`);
       console.log(`mint ${ticker} ${mint.toBase58()}`);
     }
     const mint = new PublicKey(stocks[ticker]!.mint);

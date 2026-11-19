@@ -137,6 +137,7 @@ export function boxFromEvent(e: RoundSettledEvent, signature?: string): DrawnBox
 /** The pack a settle transaction paid, read back from its logs. */
 export async function boxFromSettle(signature: string): Promise<DrawnBox | null> {
   const tx = await baseConnection().getTransaction(signature, { commitment: "confirmed", maxSupportedTransactionVersion: 0 });
+  if (!tx?.meta || tx.meta.err) return null;
   const e = eventsFromLogs(tx?.meta?.logMessages).find((x): x is RoundSettledEvent => x.kind === "RoundSettled" && !x.void);
   return e ? boxFromEvent(e, signature) : null;
 }

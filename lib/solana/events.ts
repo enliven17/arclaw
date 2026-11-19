@@ -9,6 +9,7 @@
 import { PublicKey, type Connection } from "@solana/web3.js";
 import { eventsFromLogs, programId } from "./program";
 import { tierName, toUsdc } from "./client";
+import { SOLANA } from "./config";
 
 export type PullRecord = { id: string; roundId: string; machineId: number; player: string; tier: number; tierName: string; valueUsdc: number; slot: number; signature: string };
 export type PlayRecord = { id: string; player: string; machineId: number; boxes: number; paidUsdc: number; slot: number };
@@ -20,14 +21,17 @@ export type PlayRecord = { id: string; player: string; machineId: number; boxes:
 export async function readSince(conn: Connection, until: string | null, max = 400): Promise<{ plays: PlayRecord[]; pulls: PullRecord[]; cursor: string | null }> {
   const sigs: { signature: string; slot: number }[] = [];
   let before: string | undefined;
-  while (sigs.length < max) {
+  for (;;) {
     const page = await conn.getSignaturesForAddress(programId(), { before, until: until ?? undefined, limit: 100 }, "confirmed");
-    sigs.push(...page.filter((s) => !s.err).map((s) => ({ signature: s.signature, slot: s.slot })));
-    if (page.length < 100) break;
+    sigs.push(...page.filter((s) => s.slot >= (SOLANA.deployment?.deploySlot ?? 0)).map((s) => ({ signature: s.signature, slot: s.slot })));
+    // Retain the oldest batch while paging all the way back to the cursor. Stopping after `max` newest signatures
+    // would silently skip a backlog larger than one sync can ingest.
+    if (sigs.length > max) sigs.splice(0, sigs.length - max);
+    if (page.length < 100 || page.at(-1)!.slot < (SOLANA.deployment?.deploySlot ?? 0)) break;
     before = page[page.length - 1]!.signature;
   }
   // getSignaturesForAddress pages newest first; take the oldest `max` so the cursor never skips anything.
-  const batch = sigs.reverse().slice(0, max);
+  const batch = sigs.reverse();
   const plays: PlayRecord[] = [];
   const pulls: PullRecord[] = [];
   for (let i = 0; i < batch.length; i += 25) {
@@ -38,7 +42,9 @@ export async function readSince(conn: Connection, until: string | null, max = 40
     );
     txs.forEach((tx, j) => {
       const { signature, slot } = chunk[j]!;
-      eventsFromLogs(tx?.meta?.logMessages).forEach((e, k) => {
+      if (!tx?.meta) throw new Error(`Transaction ${signature} is not available yet; retry without advancing the cursor.`);
+      if (tx.meta.err) return;
+      eventsFromLogs(tx.meta.logMessages).forEach((e, k) => {
         if (e.kind === "Played") {
           plays.push({ id: `${signature}-${k}`, player: e.player.toBase58(), machineId: e.machineId, boxes: e.boxes, paidUsdc: toUsdc(e.paid), slot });
         } else if (e.kind === "RoundSettled" && !e.void) {
